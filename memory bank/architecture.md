@@ -19,14 +19,13 @@ Root
 └── lib
     └── three.min.js
 
-
     Explanation of the Structure
 Root: The top-level directory containing essential project files:
 index.html: The main HTML file that serves as the entry point for your application or game.
 
 package.json: (Optional) A file for managing project dependencies if you're using Node.js or a package manager like npm.
 
-README.md: A Markdown file for project documentation, instructions, or notes.
+README.md: A Markdown file for project documentation, instructions, and notes.
 
 assets/: A folder for all static resources:
 images/: Stores image files like textures, icons, or sprites.
@@ -41,7 +40,7 @@ styles.css: The primary CSS file for styling your UI, HUD, or other visual eleme
 js/: A folder for all JavaScript files, each serving a specific purpose:
 main.js: The core script that initializes the project (e.g., sets up the scene or game loop).
 
-controls.js: Handles user input and controls (e.g., keyboard or mouse events).
+controls.js: Handles user input and controls (e.g., keyboard or mouse events). Includes robust fallback mechanisms for browser API compatibility.
 
 player.js: Manages player-related logic (e.g., movement, health).
 
@@ -56,3 +55,8 @@ gameModes.js: Defines different game modes or rules.
 lib/: A folder for external libraries:
 three.min.js: The minified Three.js library for 3D rendering (you can add other libraries here as needed).
 
+memory bank/: A folder for documentation and development notes:
+implementation plan: Detailed steps for implementing the game features.
+progress.md: Tracks completed steps and progress notes.
+RULES.md: Contains development guidelines and best practices.
+architecture.md: This file - describing the project structure.

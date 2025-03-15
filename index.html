@@ -9,10 +9,22 @@
 <body>
     <canvas id="game-canvas"></canvas>
     
+    <div id="controls-info" class="overlay">
+        <h2>Numberblocks Game</h2>
+        <p>Click anywhere to enable controls</p>
+        <ul>
+            <li>Move: WASD or Arrow Keys</li>
+            <li>Jump: Space</li>
+            <li>Look: Mouse</li>
+        </ul>
+    </div>
+    
     <!-- Three.js library via CDN -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
     
-    <!-- Main JavaScript file -->
+    <!-- Game JavaScript files -->
+    <script src="js/controls.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

@@ -27,6 +27,13 @@
 - Always implement window resize handling for responsive design (update camera aspect ratio and renderer size)
 - For better performance, set renderer.setPixelRatio to match the device's pixel ratio
 
+## Browser API Considerations
+
+- The Pointer Lock API (used by PointerLockControls) may not work in some environments, especially in embedded preview browsers or when served through certain proxies
+- Always implement a fallback mechanism for critical browser APIs in case they fail
+- Use try-catch blocks around browser API calls that might not be supported in all environments
+- Check browser console for API-related errors when testing in different environments
+
 ## Git Workflow
 
 - Always update the progress.md file after completing each implementation step

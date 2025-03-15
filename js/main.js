@@ -4,6 +4,8 @@ console.log('Numberblocks game initializing...');
 // Global variables
 let scene, camera, renderer;
 let ground;
+let controls;
+let clock;
 
 // Initialize the Three.js scene
 function init() {
@@ -21,7 +23,6 @@ function init() {
     
     // Position the camera above the ground
     camera.position.y = 2;
-    camera.position.z = 5;
     
     // Create the renderer
     renderer = new THREE.WebGLRenderer({ 
@@ -42,6 +43,13 @@ function init() {
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(10, 20, 10);
     scene.add(directionalLight);
+    
+    // Initialize first-person controls
+    controls = initControls(camera, renderer.domElement);
+    scene.add(controls.getObject());
+    
+    // Initialize clock for frame-rate independent movement
+    clock = new THREE.Clock();
     
     // Handle window resize
     window.addEventListener('resize', onWindowResize);
@@ -75,6 +83,15 @@ function onWindowResize() {
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
+    
+    // Calculate time delta for smooth movement
+    const delta = clock.getDelta();
+    
+    // Update controls if they exist
+    if (controls) {
+        updateControls(controls, delta);
+    }
+    
     renderer.render(scene, camera);
 }
 
