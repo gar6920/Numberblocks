@@ -3,6 +3,701 @@ NUMBERBLOCKS GAME - COMPLETE CODE COMPILATION
 ===================================================== 
  
 ===================================================== 
+SECTION: MEMORY BANK 
+===================================================== 
+ 
+----------------------------------------------------- 
+FILE: memory bank\architecture.md 
+----------------------------------------------------- 
+ 
+Root
+├── index.html
+├── package.json
+├── README.md
+├── assets
+│   ├── images
+│   ├── models
+│   └── sounds
+├── css
+│   └── styles.css
+├── js
+│   ├── main.js
+│   ├── controls.js
+│   ├── numberblock.js
+│   ├── player.js
+│   ├── operators.js
+│   ├── network.js
+│   ├── hud.js
+│   └── gameModes.js
+└── lib
+    └── three.min.js
+
+    Explanation of the Structure
+Root: The top-level directory containing essential project files:
+index.html: The main HTML file that serves as the entry point for your application or game.
+
+package.json: (Optional) A file for managing project dependencies if you're using Node.js or a package manager like npm.
+
+README.md: A Markdown file for project documentation, instructions, and notes.
+
+assets/: A folder for all static resources:
+images/: Stores image files like textures, icons, or sprites.
+
+models/: Holds 3D model files (if applicable, e.g., for a 3D game).
+
+sounds/: Contains audio files such as sound effects or background music.
+
+css/: A folder for styling:
+styles.css: The primary CSS file for styling your UI, HUD, or other visual elements.
+
+js/: A folder for all JavaScript files, each serving a specific purpose:
+main.js: The core script that initializes the project (e.g., sets up the scene or game loop).
+
+controls.js: Handles user input and controls (e.g., keyboard or mouse events). Features:
+  - Robust fallback mechanisms for browser API compatibility
+  - First-person camera controls with parent-child hierarchy for proper rotation
+  - Separated yaw and pitch rotations for natural camera movement
+  - Mouse locking within the game window with proper cursor disengagement
+  - Event handler management for clean switching between locked/unlocked states
+  - Support for WASD/Arrow keys movement and spacebar jumping
+
+numberblock.js: Implements the Numberblock class for creating and managing Numberblock entities. Features:
+  - Dynamic creation of block stacks based on numeric value
+  - Face rendering with eyes and mouth on the top block
+  - Arms with hands on the sides of blocks
+  - Feet on the bottom block
+  - Number tag display on top of the stack
+  - Color mapping based on Numberblocks TV show aesthetics
+  - HTML/CSS overlay for number display
+  - Methods for updating and animating Numberblocks
+
+player.js: Manages player-related logic (e.g., movement, health).
+
+operators.js: Contains logic for operators or game entities (e.g., enemies, NPCs).
+
+network.js: Implements networking features (e.g., multiplayer via WebSockets).
+
+hud.js: Updates the heads-up display (e.g., score, health bar).
+
+gameModes.js: Defines different game modes or rules.
+
+lib/: A folder for external libraries:
+three.min.js: The minified Three.js library for 3D rendering (you can add other libraries here as needed).
+
+memory bank/: A folder for documentation and development notes:
+implementation plan: Detailed steps for implementing the game features.
+progress.md: Tracks completed steps and progress notes.
+RULES.md: Contains development guidelines and best practices.
+architecture.md: This file - describing the project structure.
+ 
+ 
+----------------------------------------------------- 
+FILE: memory bank\game design document.md 
+----------------------------------------------------- 
+ 
+Numberblocks FPS Game Design Document
+Introduction
+This document outlines the design for a multiplayer, browser-based, first-person perspective game inspired by the Numberblocks TV show. Players take on the role of Numberblocks, collect mathematical operators, and interact with other players to change their numerical values, aiming to achieve specific objectives in a fun and engaging way.
+Overview
+In this game, players navigate a colorful 3D world as Numberblocks, each representing a number. By collecting floating plus (+) and minus (-) operators and bumping into other players, they can add or subtract the other player's number from their own, altering their value. The game offers various modes, such as reaching a target number or eliminating opponents by reducing them to zero.
+Core Mechanics
+Player Movement
+Players move in a first-person perspective with standard FPS controls:
+WASD or arrow keys: Move forward, backward, left, and right.
+
+Mouse: Look around.
+
+Spacebar: Jump 
+
+Operator Collection
+Plus (+) and minus (-) operators spawn randomly across the game world.
+
+Players collect an operator by running into it and can hold only one at a time.
+
+Operators are visually distinct (e.g., a glowing "+" or "−") and float slightly above the ground.
+
+Bumping Interaction
+When a player with an operator bumps into another player, the operator is applied:
+Plus Operator (+): The initiating player's number becomes their current number plus the other player's number (e.g., 3 + 2 = 5).
+
+Minus Operator (-): The initiating player's number becomes their current number minus the other player's number (e.g., 3 - 2 = 1).
+
+The other player's number remains unchanged.
+
+The operator is consumed after use, requiring the player to collect a new one.
+
+Number Changes
+As a player's number changes, their character model updates:
+Larger numbers grow in size (e.g., a Numberblock of 10 is bigger than one of 1).  The player's avatar is blocks that amount to their number.
+
+Optional balancing: Larger numbers move slower but resist displacement, while smaller numbers are faster but more vulnerable.
+
+Game World
+Visual Style
+The environment is bright, blocky, and inspired by the Numberblocks aesthetic.
+
+Features include platforms, ramps, hiding spots, and open areas for player interaction.
+
+Maps
+Multiple themed maps:
+Number Forest: Trees and terrain shaped like numbers.
+
+Block City: A city of colorful block buildings.
+
+Mathematical Playground: A playful area with slides and obstacles.
+
+Maps encourage exploration and strategic positioning.
+
+Interactive Elements
+Some areas may require a specific number to access (e.g., a gate that opens only for players ≥ 10).
+
+Player Characters
+Appearance
+Players are Numberblocks, with a block count matching their current number.  Their shape may be straight up, or rows of several blocks, or even arms and legs as the numbers get bigger.  But they are always made of blocks and their number is always visible.
+
+The model dynamically adjusts as the number changes (e.g., growing from 1 block to 10 blocks).
+
+Size and Speed (Optional)
+Larger Numbers: Slower movement speed, harder to push.
+
+Smaller Numbers: Faster movement, easier to displace.
+
+This adds a layer of strategy to growing or shrinking.
+
+Operators
+Spawning
+Operators appear at random intervals and locations on the map.
+
+Spawn rates are balanced to ensure availability without overwhelming players.
+
+Collection
+Players collect an operator by touching it.
+
+Collecting a new operator replaces the current one if the player is already holding one.
+
+Usage
+Operators activate automatically upon bumping into another player.
+
+After use, the operator is consumed.
+
+Game Objectives
+The game supports multiple modes:
+1. Target Number Mode
+Objective: Reach a specific number (e.g., 100) by adding to your value.
+
+The first player to hit the target wins.
+
+2. Elimination Mode
+Objective: Reduce other players to zero or below using the minus operator.
+
+Players at zero or negative are eliminated; the last one standing wins.
+
+3. Score-Based Mode
+Objective: Earn points for each operation performed (e.g., +1 point per addition/subtraction).
+
+The player with the most points at the end wins, tracked via a leaderboard.
+
+Multiplayer Features
+Real-Time Interaction
+Multiple players inhabit the same world, interacting in real time.
+
+Players can see each other's numbers and operators for strategic planning.
+
+Teams (Optional)
+Team modes allow collaboration, such as achieving the highest combined team number.
+
+Handling Edge Cases
+Zero or Negative Numbers
+If a player's number reaches zero or below:
+Respawn Option: They are out for 10 seconds, then return as 1.
+
+Elimination Option: They are removed from the round (used in Elimination Mode).
+
+Maximum Number Limit
+A cap (e.g., 100) prevents excessive growth.
+
+Optional: Larger numbers face rarer plus operators to slow their progress.
+
+User Interface (UI)
+Heads-Up Display (HUD)
+Shows:
+Player's current number.
+
+Held operator (if any).
+
+Optional: Score or mini-map.
+
+Menus
+Main Menu: Choose game mode, map, and settings.
+
+Lobby: Join or create multiplayer matches.
+
+Controls
+Movement: WASD or arrow keys.
+
+Look: Mouse.
+
+Jump: Spacebar (if implemented).
+
+Interact: Automatic via bumping.
+
+Audio
+Background Music: Upbeat, Numberblocks-inspired tunes.
+
+Sound Effects:
+Operator collection (e.g., a cheerful "ding").
+
+Bumping (e.g., a soft "thud").
+
+Number change (e.g., a growing/shrinking sound).
+
+Technical Considerations
+Platform
+Browser-based, using WebGL for 3D rendering (e.g., Three.js).
+
+Networking
+Real-time multiplayer requires server-side syncing of:
+Player positions. 
+
+Numbers.
+
+Operator states and spawns.
+
+Optimization
+Must run smoothly on various devices/browsers.
+
+Efficient collision detection is key for bumping mechanics.
+
+Future Features
+Power-Ups: Shields (block operators) or speed boosts.
+
+Advanced Operators: Multiplication/division for complexity (optional).
+
+Customization: Unlockable colors or accessories for Numberblocks.
+
+Educational Mode: Single-player math puzzles for kids.
+
+Conclusion
+This game combines the playful, educational charm of Numberblocks with dynamic FPS gameplay. Its simple mechanics make it accessible to children, while strategic depth and multiplayer fun appeal to all ages. With proper balancing and optimization, it can become an entertaining and educational browser-based experience.
+
+ 
+ 
+----------------------------------------------------- 
+FILE: memory bank\implementation plan.md 
+----------------------------------------------------- 
+ 
+Step 1: Set up the basic project structure
+Task: Create a new project and set up the files needed for a Three.js-based game.
+
+Details: 
+Create an index.html file with a canvas element.
+
+Add a styles.css file for basic styling (e.g., full-screen canvas).
+
+Create a main.js file for JavaScript code.
+
+Include the Three.js library via a CDN (e.g., <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>).
+
+Test: 
+Open the project in a browser.
+
+Check that there are no console errors and a blank canvas appears.
+
+Step 2: Create a basic 3D scene
+Task: Set up a simple 3D scene with a ground plane and a camera.
+
+Details: 
+In main.js, create a Three.js scene, camera, and renderer.
+
+Add a flat plane (e.g., a large box) as the ground.
+
+Position the camera above the ground and render the scene.
+
+Test: 
+Open the project in a browser.
+
+See the ground plane rendered from the camera’s perspective.
+
+Step 3: Implement first-person camera controls
+Task: Add first-person movement controls to the camera.
+
+Details: 
+Use Three.js’s FirstPersonControls or a custom controller.
+
+Enable WASD keys for movement and mouse for looking around.
+
+Test: 
+Use WASD keys to move and the mouse to look around.
+
+Confirm the controls are smooth and responsive.
+
+Step 4: Create a basic Numberblock model
+Task: Add a simple Numberblock model to the scene.
+
+Details: 
+Create a single cube to represent a Numberblock with the number 1.
+
+Position it slightly above the ground in the scene.
+
+Test: 
+Open the project and see the cube in the scene.
+
+Ensure it’s correctly positioned relative to the ground.
+
+Step 5: Implement player movement
+Task: Attach the Numberblock model to the camera and add basic movement.
+
+Details: 
+Link the cube’s position to the camera so it moves with it.
+
+Add jumping (spacebar) and gravity to prevent falling through the ground.
+
+Test: 
+Move with WASD keys and see the cube move.
+
+Press spacebar to jump and watch the cube rise and fall back to the ground.
+
+Step 6: Add operator spawning
+Task: Create and spawn plus (+) and minus (-) operators in the scene.
+
+Details: 
+Make simple 3D models (e.g., spheres) for operators, colored differently (e.g., green for +, red for -).
+
+Write a function to spawn them randomly on the ground every few seconds.
+
+Test: 
+See operators appear over time at different spots.
+
+Verify they sit on the ground, not floating or underground.
+
+Step 7: Implement operator collection
+Task: Allow the player to collect operators by touching them.
+
+Details: 
+Detect when the player’s Numberblock collides with an operator.
+
+Remove the operator from the scene and store it as the player’s held operator (limit to one).
+
+Test: 
+Walk into an operator and see it disappear.
+
+Confirm the player holds it (e.g., log it to the console or show it on-screen).
+
+Step 8: Implement bumping interaction
+Task: Enable bumping into another Numberblock to apply the operator.
+
+Details: 
+Add a second, static Numberblock with a fixed number (e.g., 2).
+
+Detect collision with it; if the player has an operator, apply it (e.g., 1 + 2 = 3).
+
+Remove the operator after use.
+
+Test: 
+Bump into the static Numberblock with an operator.
+
+Check that the player’s number updates (e.g., from 1 to 3) and the operator is consumed.
+
+Step 9: Update Numberblock model based on number
+Task: Change the Numberblock model when its number changes.
+
+Details: 
+Write a function to stack cubes vertically based on the player’s number (e.g., 3 cubes for 3).
+
+Update the model after a number change.
+
+Test: 
+After bumping and changing the number, see the model update (e.g., from 1 cube to 3).
+
+Ensure it doesn’t clip through the ground.
+
+Step 10: Implement basic HUD
+Task: Add a heads-up display showing the player’s number and operator.
+
+Details: 
+Use HTML elements (e.g., <div>) overlayed on the canvas.
+
+Update the HUD whenever the number or operator changes.
+
+Test: 
+See the player’s current number and held operator on-screen.
+
+Verify it updates in real-time after changes.
+
+Step 11: Add multiple players (multiplayer)
+Task: Enable basic multiplayer functionality.
+
+Details: 
+Use WebSockets or Socket.io for networking.
+
+Allow multiple players to join and see each other’s Numberblocks.
+
+Sync positions and numbers across clients.
+
+Test: 
+Open two browser tabs as different players.
+
+See each Numberblock move and confirm numbers sync when changed.
+
+Step 12: Implement game objectives
+Task: Add the Target Number Mode.
+
+Details: 
+Set a target number (e.g., 10).
+
+Display a win message when a player reaches it.
+
+Test: 
+Play and reach the target number.
+
+See a win message appear when achieved.
+
+Step 13: Add more game modes
+Task: Implement Elimination Mode and Score-Based Mode.
+
+Details: 
+Elimination Mode: Remove players whose number reaches zero or below.
+
+Score-Based Mode: Award points for each operation, shown on a leaderboard.
+
+Test: 
+Test Elimination Mode: Reach zero and get removed or respawn.
+
+Test Score-Based Mode: Perform operations and see points increase.
+
+Step 14: Polish and optimize
+Task: Enhance visuals, add audio, and improve performance.
+
+Details: 
+Add basic textures or colors to models.
+
+Include sound effects (e.g., “ding” for collecting operators).
+
+Optimize rendering for smooth gameplay.
+
+Test: 
+Play and ensure no lag or glitches.
+
+Hear sound effects and see improved visuals.
+
+Step 15: Add advanced features (optional)
+Task: Introduce power-ups or advanced operators.
+
+Details: 
+Add a power-up (e.g., speed boost) that spawns like operators.
+
+Optionally, include multiplication operators (e.g., ×2).
+
+Test: 
+Collect a power-up and see its effect (e.g., faster movement).
+
+Use an advanced operator and verify the number change.
+
+Conclusion
+This implementation plan provides a clear, step-by-step roadmap to develop the Numberblocks FPS game. Each step is simple enough to be handled with a single prompt in the Windsurf IDE, and the accompanying tests ensure that each feature works before moving forward. By following this plan, you can progressively build a fully functional browser-based multiplayer game that aligns with the game design document’s vision.
+
+ 
+ 
+----------------------------------------------------- 
+FILE: memory bank\progress.md 
+----------------------------------------------------- 
+ 
+# Numberblocks Game - Progress Log
+
+## March 15, 2025
+- Completed Step 1 of implementation plan: Set up basic project structure
+  - Created index.html with canvas element
+  - Added styles.css for basic styling (full-screen canvas)
+  - Created main.js for JavaScript code
+  - Included Three.js library via CDN
+  - Created directory structure following the architecture document
+  - Verified that the project loads in browser with no console errors
+- Created comprehensive README.md file
+- Set up Git repository and GitHub remote
+- Added .gitignore file for the project
+- Completed Step 2 of implementation plan: Created a basic 3D scene
+  - Implemented Three.js scene, camera, and renderer in main.js
+  - Added a flat green plane as the ground
+  - Positioned the camera above the ground
+  - Added proper lighting (ambient and directional)
+  - Implemented window resize handling
+  - Set up the animation loop
+- Completed Step 3 of implementation plan: Implemented first-person camera controls
+  - Created controls.js for camera movement functionality
+  - Implemented Three.js PointerLockControls for first-person view
+  - Added WASD and arrow key movement
+  - Implemented jumping with spacebar
+  - Added controls info overlay for user guidance
+  - Added appropriate styles for the overlay UI
+  - Implemented robust fallback mechanism for environments where Pointer Lock API is unavailable
+  - Added error handling with try-catch blocks for browser API compatibility
+  - Created mockControls object that mimics the PointerLockControls interface for seamless operation
+  - Enhanced FPS camera controls:
+    - Added parent-child object hierarchy for proper camera rotation
+    - Separated yaw (horizontal) and pitch (vertical) rotations for natural camera movement
+    - Implemented pitch clamping to prevent camera flipping
+    - Added mouse locking within the game window using CSS and event handling
+    - Ensured proper cursor disengagement when ESC key is pressed
+    - Implemented proper event listener cleanup for complete mouse control disengagement
+  - Updated RULES.md with browser API considerations based on implementation experience
+- Completed Step 4 of implementation plan: Created a basic Numberblock model
+  - Implemented Numberblock class in numberblock.js with all required features:
+    - Created a stack of blocks representing the Numberblock's value
+    - Added face with eyes and mouth to the top block
+    - Added arms on the sides (positioned based on number of blocks)
+    - Added feet to the bottom block
+    - Added a number tag on top showing the Numberblock's value
+  - Used appropriate colors matching the Numberblocks TV show aesthetic
+  - Integrated the Numberblock model with the main game:
+    - Added the Numberblock to follow the player's movement
+    - Positioned it in front of the camera for a first-person view
+    - Implemented smooth interpolation for natural movement
+    - Added HTML/CSS-based number display that follows the 3D model
+  - Added helper functions for creating and updating Numberblocks
+  - Added proper resource cleanup methods to prevent memory leaks
+- Completed Step 5 of implementation plan: Implemented player movement (partial collision)
+  - Added getHeight method to Numberblock class for accurate height calculation
+  - Improved jumping mechanics with physically accurate jump formula
+  - Implemented basic ground collision detection to prevent falling through the ground
+  - Created true first-person view where camera positioned from Numberblock's perspective
+  - Ensured perfect synchronization between camera and Numberblock during all movements
+  - Implemented two-way position binding to maintain consistent camera-Numberblock relationship
+  - Note: Full collision system with other objects not implemented yet
+- Completed Step 6 of implementation plan: Added operator spawning
+  - Created Operator and OperatorManager classes
+  - Implemented operator spawning system
+  - Added proper positioning and rotation
+  - Integrated with player controls
+  - Fixed movement controls after operator integration
+  - Ensured proper initialization order
+
+## Next Steps
+- Step 7: Implement collision system
+- Step 8: Implement number operations 
+ 
+----------------------------------------------------- 
+FILE: memory bank\RULES.md 
+----------------------------------------------------- 
+ 
+# Development Rules and Notes
+
+## PowerShell Command Issues
+
+### Directory Creation
+- When creating multiple directories at once with PowerShell's `mkdir` command, you must use quotes when specifying paths with spaces or multiple directories:
+  ```
+  # INCORRECT (will fail):
+  mkdir css js assets assets\images assets\models assets\sounds
+  
+  # CORRECT (individual commands):
+  mkdir css
+  mkdir js
+  mkdir assets
+  mkdir "assets\images"
+  mkdir "assets\models"
+  mkdir "assets\sounds"
+  ```
+
+- PowerShell's `mkdir` doesn't support multiple directory arguments like in Linux/macOS. Create directories one by one or use a loop.
+
+## Server Management and Development Workflow
+
+### Restarting the Development Server
+- When making changes to JavaScript files, use the following process to restart the server for clean testing:
+  ```powershell
+  # 1. Kill any running Node.js server instances (prevents port conflicts)
+  taskkill /f /im node.exe
+  
+  # 2. Start the http-server with cache disabled
+  npx http-server -c-1
+  ```
+- The `-c-1` flag disables caching, ensuring that file changes are immediately visible
+- Always kill previous instances of the server to avoid potential port conflicts
+- Using `taskkill /f /im node.exe` is more reliable than Ctrl+C which sometimes leaves orphaned processes
+
+## Three.js Implementation Notes
+
+- Always include the Three.js library before your own JavaScript files in the HTML
+- When testing, make sure to run a local HTTP server rather than opening the HTML file directly due to CORS restrictions with resource loading
+- Use a thin BoxGeometry instead of PlaneGeometry for the ground to ensure proper lighting on both sides
+- Always implement window resize handling for responsive design (update camera aspect ratio and renderer size)
+- For better performance, set renderer.setPixelRatio to match the device's pixel ratio
+
+## Browser API Considerations
+
+- The Pointer Lock API (used by PointerLockControls) may not work in some environments, especially in embedded preview browsers or when served through certain proxies
+- Always implement a fallback mechanism for critical browser APIs in case they fail
+- Use try-catch blocks around browser API calls that might not be supported in all environments
+- Check browser console for API-related errors when testing in different environments
+- When implementing mouse controls:
+  - Proper event listener management is essential (add/remove listeners appropriately)
+  - Always provide visual feedback when controls are locked/unlocked
+  - Ensure complete disengagement of controls when user presses ESC
+
+## JavaScript Considerations
+
+- When using event handlers, store references to them for proper removal later to prevent memory leaks
+- For event-based systems (like controls), implement a proper event dispatcher mechanism
+- Use class-based or module patterns for complex components to keep code organized
+- When dealing with 3D rotations:
+  - Separate axes of rotation (yaw, pitch, roll) to prevent gimbal lock issues
+  - Always clamp vertical rotation (pitch) to prevent camera flipping
+
+## Git Workflow
+
+- Always update the progress.md file after completing each implementation step
+- Keep commit messages descriptive and related to the implementation plan steps
+
+## Project Structure
+
+- Follow the architecture document precisely to ensure consistency
+- New JavaScript files should be placed in the js/ directory and then linked in index.html as needed 
+ 
+----------------------------------------------------- 
+FILE: memory bank\tech stack.md 
+----------------------------------------------------- 
+ 
+Tech Stack
+Front-End
+HTML5: Provides the structure for the game, including the canvas element for 3D rendering and UI components like the heads-up display (HUD) and menus.
+
+CSS3: Styles the UI elements, such as the HUD, player stats, and overlays, ensuring they look polished and are positioned correctly over the game canvas.
+
+JavaScript (ES6+): Drives the game logic, handling player movement, operator collection, real-time updates, and interactions between Numberblocks.
+
+Three.js: A JavaScript library that simplifies WebGL for 3D rendering, used to create the game world, dynamic Numberblock models (e.g., stacks of cubes), and themed maps like Number Forest or Block City.
+
+Web Audio API: Manages audio, including sound effects for actions like bumping into players or collecting operators, and optional background music for immersion.
+
+Back-End
+Node.js: Acts as the server-side runtime, serving static files (HTML, CSS, JavaScript) and managing game logic for multiplayer sessions, such as validating player actions and maintaining game state authority.
+
+Socket.io: Facilitates real-time, bidirectional communication between players, syncing positions, numbers, and operator states for a seamless multiplayer experience.
+
+Development Tools
+Git: Version control system to track changes, collaborate with others (if applicable), and manage the project’s codebase effectively.
+
+Local Server: A simple server like http-server or Node.js’s built-in http module for testing the game locally during development, simulating both single-player and multiplayer scenarios.
+
+Jest (Optional): A JavaScript testing framework to verify game logic (e.g., operator interactions, collision detection), which can be added as the project scales.
+
+Hosting
+Heroku (or similar platforms like AWS, DigitalOcean): Hosts the Node.js application, serving both the front-end assets and WebSocket connections for multiplayer functionality, offering a straightforward deployment solution.
+
+Why This Stack?
+Front-End: HTML, CSS, and JavaScript are core web technologies, making them essential for a browser-based game. Three.js provides an accessible way to render 3D graphics, while the Web Audio API ensures robust audio support.
+
+Back-End: Node.js integrates seamlessly with JavaScript and Socket.io, offering a lightweight yet powerful solution for real-time multiplayer features like position syncing and player interactions.
+
+Development Tools: Git is a standard for version control, and a local server simplifies testing. Jest is optional but recommended for ensuring reliability as complexity grows.
+
+Hosting: Heroku supports Node.js and WebSocket applications out of the box, making it an ideal choice for deploying the full game (front-end and back-end) in one place.
+
+This tech stack aligns with your project’s needs: a browser-based, multiplayer 3D FPS game with dynamic Numberblock characters, real-time interactions, and themed environments. It’s lightweight, scalable, and leverages widely-used web technologies. Let me know if you’d like more details on any component!
+
+ 
+ 
+===================================================== 
 FILE: debug-test.html 
 ===================================================== 
  
@@ -198,6 +893,7 @@ FILE: index.html
     <!-- Game JavaScript files -->
     <script src="js/controls.js"></script>
     <script src="js/numberblock.js"></script>
+    <script src="js/operator.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
@@ -263,6 +959,223 @@ body, html {
  
  
 ===================================================== 
+FILE: js\collision.js 
+===================================================== 
+ 
+/**
+ * Numberblocks AABB Collision System
+ * Uses Axis-Aligned Bounding Boxes for efficient collision detection
+ */
+
+// Collection of collidable objects
+let collidableObjects = [];
+let debugMode = true; // Set to true to see debug logging
+
+// Initialize collision system and collect collidable objects from the scene
+function initCollisionSystem(scene) {
+    console.log("Initializing collision system...");
+    collidableObjects = [];
+    
+    // Traverse the scene to find all collidable objects
+    scene.traverse((object) => {
+        if (object.isMesh && object.userData && object.userData.collidable === true) {
+            collidableObjects.push(object);
+            if (debugMode) console.log(`Added collidable object: ${object.name || 'unnamed object'}`);
+        }
+    });
+    
+    console.log(`Collision system initialized with ${collidableObjects.length} collidable objects`);
+    return collidableObjects.length;
+}
+
+// Add a single object to the collidable objects list
+function addCollidableObject(object) {
+    if (!object || !(object.isMesh || object.isGroup)) return;
+    
+    // Mark the object as collidable
+    object.userData = object.userData || {};
+    object.userData.collidable = true;
+    
+    // Add a name if it doesn't have one for easier debugging
+    if (!object.name) {
+        object.name = `collidable_${collidableObjects.length}`;
+    }
+    
+    // Only add if not already in the list
+    if (!collidableObjects.includes(object)) {
+        collidableObjects.push(object);
+        if (debugMode) console.log(`Added collidable object: ${object.name}`);
+        
+        // If it's a group, also make all children collidable
+        if (object.isGroup && object.children) {
+            object.children.forEach(child => {
+                if (child.isMesh) {
+                    child.userData = child.userData || {};
+                    child.userData.collidable = true;
+                    collidableObjects.push(child);
+                    if (debugMode) console.log(`Added child collidable object: ${child.name || 'unnamed child'}`);
+                }
+            });
+        }
+    }
+}
+
+// Create or update a bounding box for a mesh
+function updateAABB(mesh) {
+    if (!mesh) return null;
+    
+    // Use Three.js Box3 to create a bounding box from the mesh
+    const box = new THREE.Box3().setFromObject(mesh);
+    return box;
+}
+
+// Check if two bounding boxes intersect
+function checkCollision(boxA, boxB) {
+    if (!boxA || !boxB) return false;
+    return boxA.intersectsBox(boxB);
+}
+
+// Get the minimum translation vector to resolve a collision
+function getCollisionResponse(boxA, boxB) {
+    // Create a box that represents the intersection
+    const intersection = new THREE.Box3();
+    intersection.copy(boxA).intersect(boxB);
+    
+    // Get the size of the intersection
+    const size = intersection.getSize(new THREE.Vector3());
+    
+    // Find the minimum penetration axis (x, y, or z)
+    let axis, minSize;
+    
+    if (size.x <= size.y && size.x <= size.z) {
+        axis = 'x';
+        minSize = size.x;
+    } else if (size.y <= size.x && size.y <= size.z) {
+        axis = 'y';
+        minSize = size.y;
+    } else {
+        axis = 'z';
+        minSize = size.z;
+    }
+    
+    // Return the direction and amount to move
+    const response = {
+        axis: axis,
+        depth: minSize,
+        direction: new THREE.Vector3()
+    };
+    
+    // Calculate the direction to move (away from the obstacle)
+    const centerA = boxA.getCenter(new THREE.Vector3());
+    const centerB = boxB.getCenter(new THREE.Vector3());
+    
+    if (axis === 'x') {
+        response.direction.x = centerA.x < centerB.x ? -1 : 1;
+    } else if (axis === 'y') {
+        response.direction.y = centerA.y < centerB.y ? -1 : 1;
+    } else {
+        response.direction.z = centerA.z < centerB.z ? -1 : 1;
+    }
+    
+    return response;
+}
+
+// Check collisions for the player against all collidable objects
+function checkPlayerCollisions(playerMesh, controlsObject) {
+    if (!playerMesh || !controlsObject || collidableObjects.length === 0) {
+        return { collision: false, grounded: false };
+    }
+    
+    // Update player bounding box
+    const playerBox = updateAABB(playerMesh);
+    let hasCollision = false;
+    let isGrounded = false;
+    
+    // Check against all collidable objects
+    for (const obstacle of collidableObjects) {
+        // Skip player's own mesh
+        if (obstacle === playerMesh) continue;
+        
+        const obstacleBox = updateAABB(obstacle);
+        if (checkCollision(playerBox, obstacleBox)) {
+            hasCollision = true;
+            if (debugMode) console.log(`Collision detected with ${obstacle.name || 'unnamed object'}`);
+            
+            // Handle the collision and check if we're standing on something
+            const collisionResult = handleCollision(playerBox, obstacleBox, controlsObject);
+            if (collisionResult.landedOnTop) {
+                isGrounded = true;
+            }
+        }
+    }
+    
+    return { collision: hasCollision, grounded: isGrounded };
+}
+
+// Apply collision response and return collision info
+function handleCollision(playerBox, obstacleBox, controlsObject) {
+    const response = getCollisionResponse(playerBox, obstacleBox);
+    
+    // Apply a small buffer to prevent getting stuck
+    const buffer = 0.1;
+    let landedOnTop = false;
+    
+    // Apply the collision response to the controls object
+    if (response.axis === 'x') {
+        controlsObject.position.x += (response.depth + buffer) * response.direction.x;
+    } else if (response.axis === 'y') {
+        // For Y-axis collisions, we need to determine if we landed on top
+        if (response.direction.y > 0) {
+            // We hit the bottom of something
+            controlsObject.position.y += (response.depth + buffer) * response.direction.y;
+        } else {
+            // We landed on top of something
+            controlsObject.position.y += (response.depth + buffer) * response.direction.y;
+            landedOnTop = true;
+            
+            // Stop any downward velocity if we're using physics
+            if (controlsObject.userData && controlsObject.userData.velocity) {
+                controlsObject.userData.velocity.y = 0;
+            }
+        }
+    } else {
+        controlsObject.position.z += (response.depth + buffer) * response.direction.z;
+    }
+    
+    return { landedOnTop };
+}
+
+// Mark objects in the scene as collidable
+function markAllObjectsAsCollidable(scene) {
+    scene.traverse(object => {
+        // Skip the player, camera, lights, and ground
+        if (object.name === 'ground' || 
+            object.name === 'player' || 
+            object.isLight || 
+            object.isCamera) {
+            return;
+        }
+        
+        // Mark all meshes that aren't the player, lights, or ground as collidable
+        if (object.isMesh) {
+            object.userData = object.userData || {};
+            object.userData.collidable = true;
+            
+            // Add it to our collidable objects array if not already there
+            if (!collidableObjects.includes(object)) {
+                collidableObjects.push(object);
+                if (debugMode) console.log(`Auto-marked as collidable: ${object.name || 'unnamed mesh'}`);
+            }
+        }
+    });
+    
+    console.log(`Total collidable objects after auto-marking: ${collidableObjects.length}`);
+}
+
+// No modules export - functions are accessible globally for traditional script inclusion
+ 
+ 
+===================================================== 
 FILE: js\controls.js 
 ===================================================== 
  
@@ -291,8 +1204,11 @@ const forceFallbackControls = false;
 
 // Initialize controls for the camera
 function initControls(camera, domElement) {
+    console.log("Initializing controls...");
+    
     // Always use fallback controls in browser preview environments
     if (forceFallbackControls) {
+        console.log("Using fallback controls (forced)");
         return createFallbackControls(camera, domElement);
     }
     
@@ -302,29 +1218,43 @@ function initControls(camera, domElement) {
         if (!document.pointerLockElement && 
             !document.mozPointerLockElement && 
             !document.webkitPointerLockElement) {
+            console.log("Pointer Lock API not supported, using fallback");
             return createFallbackControls(camera, domElement);
         }
+        
+        console.log("Using PointerLockControls");
         
         // Create PointerLockControls
         const controls = new THREE.PointerLockControls(camera, domElement);
         
         // Set up click event
         domElement.addEventListener('click', () => {
+            console.log("Canvas clicked, requesting pointer lock");
             controls.lock();
         });
         
         // Event listeners for controls state
         controls.addEventListener('lock', () => {
+            console.log("PointerLock controls LOCKED");
             document.getElementById('controls-info').style.display = 'none';
         });
         
         controls.addEventListener('unlock', () => {
+            console.log("PointerLock UNLOCKED");
             document.getElementById('controls-info').style.display = 'block';
         });
         
-        // Add keyboard controls
+        // Add keyboard controls with debug logging
         document.addEventListener('keydown', onKeyDown);
         document.addEventListener('keyup', onKeyUp);
+        
+        // Store controls object for movement functions
+        controls.moveState = {
+            moveForward: () => controls.moveForward(moveSpeed * clock.getDelta()),
+            moveBackward: () => controls.moveForward(-moveSpeed * clock.getDelta()),
+            moveLeft: () => controls.moveRight(-moveSpeed * clock.getDelta()),
+            moveRight: () => controls.moveRight(moveSpeed * clock.getDelta())
+        };
         
         return controls;
     } catch (e) {
@@ -604,34 +1534,37 @@ function onKeyUp(event) {
 
 // Update controls - call this in the animation loop
 function updateControls(controls, delta) {
-    // Only update if controls are locked
-    if (controls.isLocked === false) return;
-    
-    // Apply gravity and handle jumping
-    velocity.y -= gravity * delta;
-    
-    // Calculate movement direction
-    direction.z = Number(moveForward) - Number(moveBackward);
-    direction.x = Number(moveRight) - Number(moveLeft);
-    direction.normalize(); // Normalize for consistent movement speed
-    
-    // Apply movement
-    if (moveForward || moveBackward) {
-        controls.moveForward(direction.z * moveSpeed * delta);
+    if (!controls) {
+        console.warn("Controls not initialized");
+        return;
     }
-    
-    if (moveLeft || moveRight) {
-        controls.moveRight(direction.x * moveSpeed * delta);
+
+    // If using PointerLockControls and not locked, return
+    if (controls.isLocked === false && !forceFallbackControls) {
+        return;
     }
-    
-    // Apply gravity
-    controls.getObject().position.y += velocity.y * delta;
-    
-    // Check if we're on ground
-    if (controls.getObject().position.y < playerHeight) {
-        velocity.y = 0;
-        controls.getObject().position.y = playerHeight;
-        canJump = true;
+
+    // Update velocity
+    velocity.x -= velocity.x * 10.0 * delta;
+    velocity.z -= velocity.z * 10.0 * delta;
+    velocity.y -= gravity * delta; // Apply gravity
+
+    // Apply movement based on key states - fixed direction
+    if (moveForward) controls.moveForward(moveSpeed * delta);
+    if (moveBackward) controls.moveForward(-moveSpeed * delta);
+    if (moveLeft) controls.moveRight(-moveSpeed * delta);
+    if (moveRight) controls.moveRight(moveSpeed * delta);
+
+    // Update Y position with gravity
+    if (controls.getObject) {
+        controls.getObject().position.y += velocity.y * delta;
+
+        // Ground collision
+        if (controls.getObject().position.y < playerHeight) {
+            velocity.y = 0;
+            controls.getObject().position.y = playerHeight;
+            canJump = true;
+        }
     }
 }
  
@@ -649,6 +1582,7 @@ let ground;
 let controls;
 let clock;
 let playerNumberblock; // Player's Numberblock
+let operatorManager; // Operator system manager
 
 // Initialize the Three.js scene
 function init() {
@@ -683,6 +1617,10 @@ function init() {
     
     // Create player's Numberblock
     playerNumberblock = createPlayerNumberblock(scene, 1);
+
+    // Initialize operator system
+    window.camera = camera; // Make camera available for operator billboarding
+    operatorManager = new OperatorManager(scene);
 
     controls = initControls(camera, renderer.domElement);
 
@@ -859,9 +1797,9 @@ function animate() {
     // Update the playerNumberblock position to follow the camera
     updatePlayerPosition();
     
-    // Update the HTML number tag position in 2D space
-    if (playerNumberblock && typeof playerNumberblock.updateNumberTagPosition === 'function') {
-        playerNumberblock.updateNumberTagPosition(camera, renderer);
+    // Update operator system
+    if (operatorManager) {
+        operatorManager.update(delta);
     }
     
     // Render the scene
@@ -1277,4 +2215,284 @@ if (typeof module !== 'undefined') {
         createPlayerNumberblock
     };
 } 
+ 
+===================================================== 
+FILE: js\operator.js 
+===================================================== 
+ 
+// Numberblocks game - Operator implementation
+
+// Class to represent mathematical operators (+ and -)
+class Operator {
+    constructor(type, scene) {
+        this.type = type; // 'plus' or 'minus'
+        this.scene = scene;
+        this.mesh = this.createOperatorMesh();
+        
+        // Add the operator to the scene
+        scene.add(this.mesh);
+        
+        // Set the radius for collision detection
+        this.collisionRadius = 0.5;
+    }
+    
+    // Create the 3D mesh for the operator
+    createOperatorMesh() {
+        const operatorGroup = new THREE.Group();
+        
+        // Create a semi-transparent white sphere as the base
+        const sphereGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+        const sphereMaterial = new THREE.MeshStandardMaterial({
+            color: 0xFFFFFF, // White sphere
+            roughness: 0.3,
+            metalness: 0.2,
+            transparent: true, // Make it transparent
+            opacity: 0.6 // 60% opacity
+        });
+        
+        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        operatorGroup.add(sphere);
+        
+        // Create the symbol geometry (+ or -) and place it in the center
+        const symbolColor = 0x000000; // Black symbol
+        const symbolMaterial = new THREE.MeshBasicMaterial({ color: symbolColor });
+        
+        if (this.type === 'plus') {
+            // Create a plus sign (+) using two cylinders
+            // Horizontal bar
+            const horizontalGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.7, 16);
+            horizontalGeometry.rotateZ(Math.PI / 2); // Rotate to make it horizontal
+            const horizontalBar = new THREE.Mesh(horizontalGeometry, symbolMaterial);
+            
+            // Vertical bar
+            const verticalGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.7, 16);
+            const verticalBar = new THREE.Mesh(verticalGeometry, symbolMaterial);
+            
+            operatorGroup.add(horizontalBar);
+            operatorGroup.add(verticalBar);
+        } else {
+            // Create a minus sign (-) using a single cylinder
+            const minusGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.7, 16);
+            minusGeometry.rotateZ(Math.PI / 2); // Rotate to make it horizontal
+            const minusBar = new THREE.Mesh(minusGeometry, symbolMaterial);
+            
+            operatorGroup.add(minusBar);
+        }
+        
+        // Add a soft glow effect
+        const glowGeometry = new THREE.SphereGeometry(0.6, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0xFFFFFF, // White glow
+            transparent: true,
+            opacity: 0.2
+        });
+        
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        operatorGroup.add(glow);
+        
+        // Add rotation animation that ensures the symbol stays visible
+        this.animate = (deltaTime) => {
+            // Instead of rotating around Y-axis, make the operator face the camera
+            if (window.camera) {
+                // Get direction to camera
+                const direction = new THREE.Vector3();
+                direction.subVectors(window.camera.position, operatorGroup.position).normalize();
+                
+                // Create a temporary up vector (world up)
+                const up = new THREE.Vector3(0, 1, 0);
+                
+                // Create a look-at matrix
+                const lookMatrix = new THREE.Matrix4();
+                lookMatrix.lookAt(operatorGroup.position, 
+                                  operatorGroup.position.clone().add(direction), 
+                                  up);
+                
+                // Convert to quaternion and apply
+                operatorGroup.quaternion.setFromRotationMatrix(lookMatrix);
+            } else {
+                // Default rotation if no camera
+                operatorGroup.rotation.y += deltaTime * 1.5;
+            }
+            
+            // Add a subtle floating animation
+            operatorGroup.position.y = Math.sin(Date.now() * 0.002) * 0.1 + 0.6; // Float between 0.5 and 0.7
+        };
+        
+        return operatorGroup;
+    }
+    
+    // Position the operator in the scene
+    setPosition(x, y, z) {
+        this.mesh.position.set(x, y, z);
+    }
+    
+    // Remove the operator from the scene
+    remove() {
+        this.scene.remove(this.mesh);
+        
+        // Clean up geometries and materials to prevent memory leaks
+        this.mesh.traverse((child) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(material => material.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
+    }
+    
+    // Create a smaller version of the operator for holding
+    createHeldOperatorMesh() {
+        // Create a smaller version of the operator for holding
+        const scale = 0.4; // Smaller scale for held operator
+        const heldMesh = this.createOperatorMesh();
+        heldMesh.scale.set(scale, scale, scale);
+        
+        return heldMesh;
+    }
+}
+
+// Class to manage all operators in the game
+class OperatorManager {
+    constructor(scene) {
+        this.scene = scene;
+        this.operators = [];
+        this.spawnTimer = 0;
+        this.spawnInterval = this.getRandomSpawnInterval();
+        this.maxOperators = 10; // Maximum number of operators allowed at once
+        this.groundY = 0; // Y position of the ground
+        this.mapSize = 40; // Size of the playable area (40x40)
+        
+        // Player's held operator
+        this.heldOperator = null;
+        this.heldOperatorMesh = null;
+        
+        // Debug message to check initialization
+        console.log("OperatorManager initialized");
+    }
+    
+    // Get a random spawn interval between 5-10 seconds
+    getRandomSpawnInterval() {
+        return 5 + Math.random() * 5; // 5-10 seconds
+    }
+    
+    // Update function to be called in animation loop
+    update(deltaTime) {
+        // Update existing operators
+        this.operators.forEach(operator => {
+            operator.animate(deltaTime);
+        });
+        
+        // Check if it's time to spawn a new operator
+        this.spawnTimer += deltaTime;
+        if (this.spawnTimer >= this.spawnInterval && this.operators.length < this.maxOperators) {
+            this.spawnOperator();
+            this.spawnTimer = 0;
+            this.spawnInterval = this.getRandomSpawnInterval();
+        }
+    }
+    
+    // Spawn a new operator at a random position
+    spawnOperator() {
+        // Randomly choose between plus and minus
+        const type = Math.random() > 0.5 ? 'plus' : 'minus';
+        
+        // Create the operator
+        const operator = new Operator(type, this.scene);
+        
+        // Set a random position on the ground
+        const posX = (Math.random() * this.mapSize) - (this.mapSize / 2);
+        const posZ = (Math.random() * this.mapSize) - (this.mapSize / 2);
+        
+        // Set the Y position slightly above the ground to prevent z-fighting
+        operator.setPosition(posX, this.groundY + 0.6, posZ);
+        
+        // Add to the array of active operators
+        this.operators.push(operator);
+        
+        console.log(`Spawned ${type} operator at (${posX.toFixed(2)}, ${this.groundY + 0.6}, ${posZ.toFixed(2)})`);
+        
+        return operator;
+    }
+    
+    // Remove an operator from the scene and the operators array
+    removeOperator(operator) {
+        const index = this.operators.indexOf(operator);
+        if (index !== -1) {
+            operator.remove();
+            this.operators.splice(index, 1);
+        }
+    }
+    
+    // Set the currently held operator
+    setHeldOperator(operator) {
+        // Clear any previously held operator
+        this.clearHeldOperator();
+        
+        // Store the operator type
+        this.heldOperator = operator.type;
+        
+        // Create a smaller version of the operator for holding
+        this.heldOperatorMesh = operator.createHeldOperatorMesh();
+        
+        // Add to the scene
+        this.scene.add(this.heldOperatorMesh);
+        
+        // Remove the original operator from the scene
+        this.removeOperator(operator);
+        
+        console.log(`Holding ${this.heldOperator} operator`);
+        return this.heldOperator;
+    }
+    
+    // Clear the currently held operator
+    clearHeldOperator() {
+        if (this.heldOperatorMesh) {
+            this.scene.remove(this.heldOperatorMesh);
+            this.heldOperatorMesh = null;
+        }
+        this.heldOperator = null;
+    }
+    
+    // Get the currently held operator type
+    getHeldOperator() {
+        return this.heldOperator;
+    }
+    
+    // Clear all operators
+    clearAll() {
+        while (this.operators.length > 0) {
+            this.removeOperator(this.operators[0]);
+        }
+        this.clearHeldOperator();
+    }
+    
+    // Get all operators for collision checking
+    getOperators() {
+        return this.operators;
+    }
+    
+    // Attach the held operator to a Numberblock
+    attachOperatorToNumberblock(numberblock) {
+        if (this.heldOperatorMesh && numberblock) {
+            // The numberblock will handle the positioning
+            return {
+                type: this.heldOperator,
+                mesh: this.heldOperatorMesh
+            };
+        }
+        return null;
+    }
+}
+
+// Export for use in other modules
+if (typeof module !== 'undefined') {
+    module.exports = {
+        Operator,
+        OperatorManager
+    };
+}
+ 
  

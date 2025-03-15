@@ -7,6 +7,7 @@ let ground;
 let controls;
 let clock;
 let playerNumberblock; // Player's Numberblock
+let operatorManager; // Operator system manager
 
 // Initialize the Three.js scene
 function init() {
@@ -41,6 +42,10 @@ function init() {
     
     // Create player's Numberblock
     playerNumberblock = createPlayerNumberblock(scene, 1);
+
+    // Initialize operator system
+    window.camera = camera; // Make camera available for operator billboarding
+    operatorManager = new OperatorManager(scene);
 
     controls = initControls(camera, renderer.domElement);
 
@@ -217,9 +222,9 @@ function animate() {
     // Update the playerNumberblock position to follow the camera
     updatePlayerPosition();
     
-    // Update the HTML number tag position in 2D space
-    if (playerNumberblock && typeof playerNumberblock.updateNumberTagPosition === 'function') {
-        playerNumberblock.updateNumberTagPosition(camera, renderer);
+    // Update operator system
+    if (operatorManager) {
+        operatorManager.update(delta);
     }
     
     // Render the scene

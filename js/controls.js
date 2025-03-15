@@ -23,8 +23,11 @@ const forceFallbackControls = false;
 
 // Initialize controls for the camera
 function initControls(camera, domElement) {
+    console.log("Initializing controls...");
+    
     // Always use fallback controls in browser preview environments
     if (forceFallbackControls) {
+        console.log("Using fallback controls (forced)");
         return createFallbackControls(camera, domElement);
     }
     
@@ -34,29 +37,43 @@ function initControls(camera, domElement) {
         if (!document.pointerLockElement && 
             !document.mozPointerLockElement && 
             !document.webkitPointerLockElement) {
+            console.log("Pointer Lock API not supported, using fallback");
             return createFallbackControls(camera, domElement);
         }
+        
+        console.log("Using PointerLockControls");
         
         // Create PointerLockControls
         const controls = new THREE.PointerLockControls(camera, domElement);
         
         // Set up click event
         domElement.addEventListener('click', () => {
+            console.log("Canvas clicked, requesting pointer lock");
             controls.lock();
         });
         
         // Event listeners for controls state
         controls.addEventListener('lock', () => {
+            console.log("PointerLock controls LOCKED");
             document.getElementById('controls-info').style.display = 'none';
         });
         
         controls.addEventListener('unlock', () => {
+            console.log("PointerLock UNLOCKED");
             document.getElementById('controls-info').style.display = 'block';
         });
         
-        // Add keyboard controls
+        // Add keyboard controls with debug logging
         document.addEventListener('keydown', onKeyDown);
         document.addEventListener('keyup', onKeyUp);
+        
+        // Store controls object for movement functions
+        controls.moveState = {
+            moveForward: () => controls.moveForward(moveSpeed * clock.getDelta()),
+            moveBackward: () => controls.moveForward(-moveSpeed * clock.getDelta()),
+            moveLeft: () => controls.moveRight(-moveSpeed * clock.getDelta()),
+            moveRight: () => controls.moveRight(moveSpeed * clock.getDelta())
+        };
         
         return controls;
     } catch (e) {
@@ -336,33 +353,36 @@ function onKeyUp(event) {
 
 // Update controls - call this in the animation loop
 function updateControls(controls, delta) {
-    // Only update if controls are locked
-    if (controls.isLocked === false) return;
-    
-    // Apply gravity and handle jumping
-    velocity.y -= gravity * delta;
-    
-    // Calculate movement direction
-    direction.z = Number(moveForward) - Number(moveBackward);
-    direction.x = Number(moveRight) - Number(moveLeft);
-    direction.normalize(); // Normalize for consistent movement speed
-    
-    // Apply movement
-    if (moveForward || moveBackward) {
-        controls.moveForward(direction.z * moveSpeed * delta);
+    if (!controls) {
+        console.warn("Controls not initialized");
+        return;
     }
-    
-    if (moveLeft || moveRight) {
-        controls.moveRight(direction.x * moveSpeed * delta);
+
+    // If using PointerLockControls and not locked, return
+    if (controls.isLocked === false && !forceFallbackControls) {
+        return;
     }
-    
-    // Apply gravity
-    controls.getObject().position.y += velocity.y * delta;
-    
-    // Check if we're on ground
-    if (controls.getObject().position.y < playerHeight) {
-        velocity.y = 0;
-        controls.getObject().position.y = playerHeight;
-        canJump = true;
+
+    // Update velocity
+    velocity.x -= velocity.x * 10.0 * delta;
+    velocity.z -= velocity.z * 10.0 * delta;
+    velocity.y -= gravity * delta; // Apply gravity
+
+    // Apply movement based on key states - fixed direction
+    if (moveForward) controls.moveForward(moveSpeed * delta);
+    if (moveBackward) controls.moveForward(-moveSpeed * delta);
+    if (moveLeft) controls.moveRight(-moveSpeed * delta);
+    if (moveRight) controls.moveRight(moveSpeed * delta);
+
+    // Update Y position with gravity
+    if (controls.getObject) {
+        controls.getObject().position.y += velocity.y * delta;
+
+        // Ground collision
+        if (controls.getObject().position.y < playerHeight) {
+            velocity.y = 0;
+            controls.getObject().position.y = playerHeight;
+            canJump = true;
+        }
     }
 }
