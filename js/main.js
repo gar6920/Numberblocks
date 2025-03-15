@@ -6,6 +6,7 @@ let scene, camera, renderer;
 let ground;
 let controls;
 let clock;
+let playerNumberblock; // Player's Numberblock
 
 // Initialize the Three.js scene
 function init() {
@@ -37,6 +38,9 @@ function init() {
     
     // Add landscape elements for perspective
     createLandscapeElements();
+    
+    // Create player's Numberblock
+    playerNumberblock = createPlayerNumberblock(scene, 1);
     
     controls = initControls(camera, renderer.domElement);
 
@@ -210,8 +214,48 @@ function animate() {
         updateControls(controls, delta);
     }
     
+    // Update the playerNumberblock position to follow the camera
+    updatePlayerPosition();
+    
+    // Update the HTML number tag position in 2D space
+    if (playerNumberblock && typeof playerNumberblock.updateNumberTagPosition === 'function') {
+        playerNumberblock.updateNumberTagPosition(camera, renderer);
+    }
+    
     // Render the scene
     renderer.render(scene, camera);
+}
+
+// Update the player's Numberblock position to follow the camera
+function updatePlayerPosition() {
+    if (playerNumberblock && controls) {
+        // Get the controls object's position
+        const controlsObject = controls.getObject();
+        
+        // Calculate the position in front of the camera but lower
+        const camDirection = new THREE.Vector3(0, 0, -1);
+        camDirection.applyQuaternion(camera.quaternion);
+        
+        // Position the Numberblock slightly in front and below the camera
+        const distanceInFront = 2;  // Distance in front of the camera
+        const targetPosition = new THREE.Vector3();
+        targetPosition.copy(controlsObject.position);
+        targetPosition.y -= 1.5;  // Position below the camera (first-person view)
+        targetPosition.add(camDirection.multiplyScalar(distanceInFront));
+        
+        // Check if the Numberblock's position is different from the target position
+        if (!playerNumberblock.mesh.position.equals(targetPosition)) {
+            // Update the Numberblock's position
+            const lerpFactor = 0.1;  // Smoothing factor
+            playerNumberblock.mesh.position.lerp(targetPosition, lerpFactor);
+            
+            // Make the Numberblock face the camera direction
+            const lookAtPos = new THREE.Vector3();
+            lookAtPos.copy(playerNumberblock.mesh.position);
+            lookAtPos.add(camDirection);
+            playerNumberblock.mesh.lookAt(lookAtPos);
+        }
+    }
 }
 
 // Initialize the scene when the page loads

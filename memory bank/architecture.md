@@ -11,6 +11,7 @@ Root
 ├── js
 │   ├── main.js
 │   ├── controls.js
+│   ├── numberblock.js
 │   ├── player.js
 │   ├── operators.js
 │   ├── network.js
@@ -47,6 +48,16 @@ controls.js: Handles user input and controls (e.g., keyboard or mouse events). F
   - Mouse locking within the game window with proper cursor disengagement
   - Event handler management for clean switching between locked/unlocked states
   - Support for WASD/Arrow keys movement and spacebar jumping
+
+numberblock.js: Implements the Numberblock class for creating and managing Numberblock entities. Features:
+  - Dynamic creation of block stacks based on numeric value
+  - Face rendering with eyes and mouth on the top block
+  - Arms with hands on the sides of blocks
+  - Feet on the bottom block
+  - Number tag display on top of the stack
+  - Color mapping based on Numberblocks TV show aesthetics
+  - HTML/CSS overlay for number display
+  - Methods for updating and animating Numberblocks
 
 player.js: Manages player-related logic (e.g., movement, health).
 
