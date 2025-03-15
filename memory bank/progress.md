@@ -11,6 +11,13 @@
 - Created comprehensive README.md file
 - Set up Git repository and GitHub remote
 - Added .gitignore file for the project
+- Completed Step 2 of implementation plan: Created a basic 3D scene
+  - Implemented Three.js scene, camera, and renderer in main.js
+  - Added a flat green plane as the ground
+  - Positioned the camera above the ground
+  - Added proper lighting (ambient and directional)
+  - Implemented window resize handling
+  - Set up the animation loop
 
 ## Next Steps
-- Step 2: Create a basic 3D scene with a ground plane and camera
+- Step 3: Implement first-person camera controls

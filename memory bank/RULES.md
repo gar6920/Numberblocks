@@ -23,6 +23,9 @@
 
 - Always include the Three.js library before your own JavaScript files in the HTML
 - When testing, make sure to run a local HTTP server rather than opening the HTML file directly due to CORS restrictions with resource loading
+- Use a thin BoxGeometry instead of PlaneGeometry for the ground to ensure proper lighting on both sides
+- Always implement window resize handling for responsive design (update camera aspect ratio and renderer size)
+- For better performance, set renderer.setPixelRatio to match the device's pixel ratio
 
 ## Git Workflow
 
