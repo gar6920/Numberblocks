@@ -41,7 +41,7 @@ function init() {
     
     // Create player's Numberblock
     playerNumberblock = createPlayerNumberblock(scene, 1);
-    
+
     controls = initControls(camera, renderer.domElement);
 
     // CRITICAL FIX: Explicitly set position on controls object (not camera directly)
@@ -232,29 +232,35 @@ function updatePlayerPosition() {
         // Get the controls object's position
         const controlsObject = controls.getObject();
         
-        // Calculate the position in front of the camera but lower
+        // Calculate the forward direction vector
         const camDirection = new THREE.Vector3(0, 0, -1);
         camDirection.applyQuaternion(camera.quaternion);
         
-        // Position the Numberblock slightly in front and below the camera
-        const distanceInFront = 2;  // Distance in front of the camera
+        // Position the Numberblock at the exact same position as the camera, but slightly lower
         const targetPosition = new THREE.Vector3();
         targetPosition.copy(controlsObject.position);
-        targetPosition.y -= 1.5;  // Position below the camera (first-person view)
-        targetPosition.add(camDirection.multiplyScalar(distanceInFront));
         
-        // Check if the Numberblock's position is different from the target position
-        if (!playerNumberblock.mesh.position.equals(targetPosition)) {
-            // Update the Numberblock's position
-            const lerpFactor = 0.1;  // Smoothing factor
-            playerNumberblock.mesh.position.lerp(targetPosition, lerpFactor);
-            
-            // Make the Numberblock face the camera direction
-            const lookAtPos = new THREE.Vector3();
-            lookAtPos.copy(playerNumberblock.mesh.position);
-            lookAtPos.add(camDirection);
-            playerNumberblock.mesh.lookAt(lookAtPos);
+        // Fixed vertical offset to maintain strict relationship between camera and Numberblock
+        const verticalOffset = 1.5;
+        targetPosition.y -= verticalOffset;
+        
+        // Get the height of the Numberblock for ground collision
+        const numberblockHeight = playerNumberblock.getHeight();
+        const groundLevel = numberblockHeight / 2; // Bottom of Numberblock should be at y=0
+        
+        // Prevent the Numberblock from falling through the ground
+        // This will also adjust the camera accordingly to maintain the relationship
+        if (targetPosition.y < groundLevel) {
+            targetPosition.y = groundLevel;
+            // Adjust camera position to maintain the fixed relationship
+            controlsObject.position.y = groundLevel + verticalOffset;
         }
+        
+        // Update the Numberblock's position immediately (no lerp) to stay perfectly aligned with camera
+        playerNumberblock.mesh.position.copy(targetPosition);
+        
+        // Make the Numberblock rotate to match camera's horizontal rotation
+        playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
     }
 }
 

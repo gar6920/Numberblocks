@@ -197,6 +197,7 @@ FILE: index.html
     
     <!-- Game JavaScript files -->
     <script src="js/controls.js"></script>
+    <script src="js/numberblock.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
@@ -273,6 +274,7 @@ let moveBackward = false;
 let moveLeft = false;
 let moveRight = false;
 let canJump = false;
+let pitch = 0;  // Track vertical rotation separately
 
 let prevTime = performance.now();
 let velocity = new THREE.Vector3();
@@ -285,13 +287,12 @@ const jumpHeight = 5.0;               // Jump impulse force
 const gravity = 9.8;                  // Gravity force 
 
 // Flag to force fallback controls (for environments like browser previews)
-const forceFallbackControls = true;
+const forceFallbackControls = false;
 
 // Initialize controls for the camera
 function initControls(camera, domElement) {
     // Always use fallback controls in browser preview environments
     if (forceFallbackControls) {
-        console.log('Using fallback controls for preview environment');
         return createFallbackControls(camera, domElement);
     }
     
@@ -301,7 +302,6 @@ function initControls(camera, domElement) {
         if (!document.pointerLockElement && 
             !document.mozPointerLockElement && 
             !document.webkitPointerLockElement) {
-            console.log('Pointer Lock API not available, using fallback controls');
             return createFallbackControls(camera, domElement);
         }
         
@@ -315,12 +315,10 @@ function initControls(camera, domElement) {
         
         // Event listeners for controls state
         controls.addEventListener('lock', () => {
-            console.log('Controls locked');
             document.getElementById('controls-info').style.display = 'none';
         });
         
         controls.addEventListener('unlock', () => {
-            console.log('Controls unlocked');
             document.getElementById('controls-info').style.display = 'block';
         });
         
@@ -330,87 +328,212 @@ function initControls(camera, domElement) {
         
         return controls;
     } catch (e) {
-        console.log('Error initializing controls, using fallback:', e);
+        console.error('Error initializing controls, using fallback:', e);
         return createFallbackControls(camera, domElement);
     }
 }
 
 // Create improved fallback controls
 function createFallbackControls(camera, domElement) {
-    console.log('Creating fallback controls');
-
     const pitchObject = new THREE.Object3D();
     pitchObject.add(camera);
 
     const controlsObject = new THREE.Object3D();
     controlsObject.add(pitchObject);
 
+    // Track active event handlers for removal when needed
+    const activeEventListeners = {
+        mousemove: null,
+        mouseleave: null,
+        keydown: null
+    };
+
     const mockControls = {
         isLocked: false,
-        getObject: function() {
-            return controlsObject;
-        },
-        moveForward: function(distance) {
+        getObject: () => controlsObject,
+
+        moveForward: (distance) => {
+            if (!mockControls.isLocked) return;
             const dir = new THREE.Vector3(0, 0, -1);
             dir.applyQuaternion(controlsObject.quaternion);
-            controlsObject.position.add(dir.multiplyScalar(distance));
+            controlsObject.position.addScaledVector(dir, distance);
         },
-        moveRight: function(distance) {
+        moveRight: (distance) => {
+            if (!mockControls.isLocked) return;
             const right = new THREE.Vector3(1, 0, 0);
             right.applyQuaternion(controlsObject.quaternion);
             controlsObject.position.add(right.multiplyScalar(distance));
         },
+
         lock: function() {
+            if (this.isLocked) return;
+
             this.isLocked = true;
             document.getElementById('controls-info').style.display = 'none';
             document.body.style.cursor = 'none';
+            
+            // Attempt to use standard pointer lock if available
+            try {
+                if (domElement.requestPointerLock) {
+                    domElement.requestPointerLock();
+                } else if (domElement.mozRequestPointerLock) {
+                    domElement.mozRequestPointerLock();
+                } else if (domElement.webkitRequestPointerLock) {
+                    domElement.webkitRequestPointerLock();
+                }
+            } catch (e) {
+                console.error('Pointer lock not supported, using fallback cursor hiding');
+            }
+            
+            // Apply cursor containment styles
+            document.body.classList.add('cursor-locked');
+
+            // Add event listeners only when locked
+            this.setupEventListeners();
+            
             this.dispatchEvent({ type: 'lock' });
         },
+
         unlock: function() {
+            if (!this.isLocked) return;
+
             this.isLocked = false;
             document.getElementById('controls-info').style.display = 'block';
             document.body.style.cursor = 'auto';
+            
+            // Exit pointer lock if active
+            try {
+                if (document.exitPointerLock) {
+                    document.exitPointerLock();
+                } else if (document.mozExitPointerLock) {
+                    document.mozExitPointerLock();
+                } else if (document.webkitExitPointerLock) {
+                    document.webkitExitPointerLock();
+                }
+            } catch (e) {
+                console.error('Error exiting pointer lock');
+            }
+            
+            // Remove cursor containment styles
+            document.body.classList.remove('cursor-locked');
+            
+            // Remove event listeners when unlocked to fully disengage
+            this.removeEventListeners();
+            
             this.dispatchEvent({ type: 'unlock' });
         },
+        
+        setupEventListeners: function() {
+            // Mouse look event handling
+            const mouseMoveHandler = (event) => {
+                if (!mockControls.isLocked) return;
+
+                // For browsers that don't support pointer lock, we can use this approach
+                // to at least keep processing mouse events even at screen edges
+                const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+                const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+                
+                // Only apply reasonable movements to avoid jumps
+                if (Math.abs(movementX) < 100 && Math.abs(movementY) < 100) {
+                    controlsObject.rotation.y -= movementX * 0.002; // Unlimited horizontal rotation (yaw)
+                    
+                    pitch -= movementY * 0.002; // track pitch separately
+                    pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch)); // limit pitch
+                    pitchObject.rotation.x = pitch; // apply limited pitch
+                }
+            };
+
+            // Handle mouseleave to prevent cursor from exiting the window
+            const mouseLeaveHandler = (event) => {
+                if (mockControls.isLocked) {
+                    // If mouse leaves the window, simulate it returning to center
+                    // This keeps the cursor within the window bounds
+                    const rect = domElement.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    
+                    // Create a new mouse event to simulate mouse movement
+                    const mouseEvent = new MouseEvent('mousemove', {
+                        clientX: centerX,
+                        clientY: centerY,
+                        screenX: centerX,
+                        screenY: centerY,
+                        movementX: 0,
+                        movementY: 0
+                    });
+                    
+                    // Dispatch the event
+                    document.dispatchEvent(mouseEvent);
+                }
+            };
+
+            // Escape to unlock controls
+            const escKeyHandler = (event) => {
+                if (event.code === 'Escape' && mockControls.isLocked) {
+                    mockControls.unlock();
+                }
+            };
+
+            // Store references to handlers so we can remove them later
+            activeEventListeners.mousemove = mouseMoveHandler;
+            activeEventListeners.mouseleave = mouseLeaveHandler;
+            activeEventListeners.keydown = escKeyHandler;
+
+            // Add the event listeners
+            document.addEventListener('mousemove', mouseMoveHandler);
+            document.addEventListener('mouseleave', mouseLeaveHandler);
+            document.addEventListener('keydown', escKeyHandler);
+        },
+        
+        removeEventListeners: function() {
+            // Remove all active event listeners to fully disengage
+            if (activeEventListeners.mousemove) {
+                document.removeEventListener('mousemove', activeEventListeners.mousemove);
+            }
+            
+            if (activeEventListeners.mouseleave) {
+                document.removeEventListener('mouseleave', activeEventListeners.mouseleave);
+            }
+            
+            if (activeEventListeners.keydown) {
+                document.removeEventListener('keydown', activeEventListeners.keydown);
+            }
+        },
+        
         _listeners: {},
         addEventListener: function(type, listener) {
             this._listeners[type] = this._listeners[type] || [];
             this._listeners[type].push(listener);
         },
         dispatchEvent: function(event) {
-            const listeners = this._listeners[event.type];
-            if (listeners) {
-                listeners.forEach(callback => callback.call(this, event));
+            if (this._listeners[event.type]) {
+                this._listeners[event.type].forEach(listener => listener.call(this, event));
             }
         }
     };
 
-    // Mouse movement handling
-    document.addEventListener('mousemove', function(event) {
-        if (!mockControls.isLocked) return;
+    // Add CSS to trap cursor within game area
+    const style = document.createElement('style');
+    style.textContent = `
+        .cursor-locked {
+            cursor: none !important;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .cursor-locked * {
+            cursor: none !important;
+        }
+    `;
+    document.head.appendChild(style);
 
-        const movementX = event.movementX || 0;
-        const movementY = event.movementY || 0;
-
-        controlsObject.rotation.y -= movementX * 0.002; // Horizontal rotation (yaw)
-        pitchObject.rotation.x -= movementY * 0.002; // Vertical rotation (pitch)
-
-        // Limit vertical rotation (pitch) to avoid flipping
-        pitchObject.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchObject.rotation.x));
-    });
-
+    // Click event handling - this one remains always active
     domElement.addEventListener('click', () => {
-        mockControls.lock();
+        if (!mockControls.isLocked) mockControls.lock();
     });
 
+    // Add keyboard event listeners for movement - these remain always active
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
-
-    document.addEventListener('keydown', function(event) {
-        if (event.code === 'Escape' && mockControls.isLocked) {
-            mockControls.unlock();
-        }
-    });
 
     return mockControls;
 }
@@ -418,36 +541,38 @@ function createFallbackControls(camera, domElement) {
 // Key down event handler
 function onKeyDown(event) {
     // Skip if we're in an input field or textarea
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
         return;
     }
     
+    // Map key code to action
     switch (event.code) {
-        case 'KeyW':
         case 'ArrowUp':
+        case 'KeyW':
             moveForward = true;
             break;
             
-        case 'KeyA':
         case 'ArrowLeft':
+        case 'KeyA':
             moveLeft = true;
             break;
             
-        case 'KeyS':
         case 'ArrowDown':
+        case 'KeyS':
             moveBackward = true;
             break;
             
-        case 'KeyD':
         case 'ArrowRight':
+        case 'KeyD':
             moveRight = true;
             break;
             
         case 'Space':
             if (canJump) {
-                velocity.y = jumpHeight;
+                // Apply a physically accurate jump velocity
+                velocity.y = Math.sqrt(jumpHeight * 2 * gravity);
+                canJump = false;
             }
-            canJump = false;
             break;
     }
 }
@@ -455,23 +580,23 @@ function onKeyDown(event) {
 // Key up event handler
 function onKeyUp(event) {
     switch (event.code) {
-        case 'KeyW':
         case 'ArrowUp':
+        case 'KeyW':
             moveForward = false;
             break;
             
-        case 'KeyA':
         case 'ArrowLeft':
+        case 'KeyA':
             moveLeft = false;
             break;
             
-        case 'KeyS':
         case 'ArrowDown':
+        case 'KeyS':
             moveBackward = false;
             break;
             
-        case 'KeyD':
         case 'ArrowRight':
+        case 'KeyD':
             moveRight = false;
             break;
     }
@@ -523,6 +648,7 @@ let scene, camera, renderer;
 let ground;
 let controls;
 let clock;
+let playerNumberblock; // Player's Numberblock
 
 // Initialize the Three.js scene
 function init() {
@@ -555,6 +681,9 @@ function init() {
     // Add landscape elements for perspective
     createLandscapeElements();
     
+    // Create player's Numberblock
+    playerNumberblock = createPlayerNumberblock(scene, 1);
+
     controls = initControls(camera, renderer.domElement);
 
     // CRITICAL FIX: Explicitly set position on controls object (not camera directly)
@@ -563,6 +692,10 @@ function init() {
     
     clock = new THREE.Clock();
     window.addEventListener('resize', onWindowResize);
+    
+    // CRITICAL FIX: Explicitly call onWindowResize to ensure camera's projection matrix is correct initially
+    onWindowResize();
+    
     animate();
 }
 
@@ -718,12 +851,59 @@ function animate() {
     // Calculate time delta for smooth movement
     const delta = clock.getDelta();
     
-    // Update controls if they exist
-    if (controls) {
+    // Update controls
+    if (controls && typeof updateControls === 'function') {
         updateControls(controls, delta);
     }
     
+    // Update the playerNumberblock position to follow the camera
+    updatePlayerPosition();
+    
+    // Update the HTML number tag position in 2D space
+    if (playerNumberblock && typeof playerNumberblock.updateNumberTagPosition === 'function') {
+        playerNumberblock.updateNumberTagPosition(camera, renderer);
+    }
+    
+    // Render the scene
     renderer.render(scene, camera);
+}
+
+// Update the player's Numberblock position to follow the camera
+function updatePlayerPosition() {
+    if (playerNumberblock && controls) {
+        // Get the controls object's position
+        const controlsObject = controls.getObject();
+        
+        // Calculate the forward direction vector
+        const camDirection = new THREE.Vector3(0, 0, -1);
+        camDirection.applyQuaternion(camera.quaternion);
+        
+        // Position the Numberblock at the exact same position as the camera, but slightly lower
+        const targetPosition = new THREE.Vector3();
+        targetPosition.copy(controlsObject.position);
+        
+        // Fixed vertical offset to maintain strict relationship between camera and Numberblock
+        const verticalOffset = 1.5;
+        targetPosition.y -= verticalOffset;
+        
+        // Get the height of the Numberblock for ground collision
+        const numberblockHeight = playerNumberblock.getHeight();
+        const groundLevel = numberblockHeight / 2; // Bottom of Numberblock should be at y=0
+        
+        // Prevent the Numberblock from falling through the ground
+        // This will also adjust the camera accordingly to maintain the relationship
+        if (targetPosition.y < groundLevel) {
+            targetPosition.y = groundLevel;
+            // Adjust camera position to maintain the fixed relationship
+            controlsObject.position.y = groundLevel + verticalOffset;
+        }
+        
+        // Update the Numberblock's position immediately (no lerp) to stay perfectly aligned with camera
+        playerNumberblock.mesh.position.copy(targetPosition);
+        
+        // Make the Numberblock rotate to match camera's horizontal rotation
+        playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
+    }
 }
 
 // Initialize the scene when the page loads
@@ -734,5 +914,367 @@ document.addEventListener('DOMContentLoaded', init);
 FILE: js\numberblock.js 
 ===================================================== 
  
- 
+// Numberblocks game - Numberblock model implementation
+
+class Numberblock {
+    constructor(value = 1, color = null) {
+        this.value = value;
+        this.mesh = new THREE.Group();
+        this.blockSize = 1; // Size of each cube
+        this.blockSpacing = 0.01; // Small gap between blocks
+        this.totalHeight = 0;
+        
+        // Set color based on the Numberblock value, following show colors if no color specified
+        if (!color) {
+            this.color = this.getColorForNumber(value);
+        } else {
+            this.color = color;
+        }
+        
+        this.createNumberblock();
+    }
+    
+    // Get the standard Numberblocks color based on value
+    getColorForNumber(number) {
+        const colors = {
+            1: 0xFF0000,   // Red (One)
+            2: 0xFFA500,   // Orange (Two)
+            3: 0xFFFF00,   // Yellow (Three)
+            4: 0x00FF00,   // Green (Four)
+            5: 0x0000FF,   // Blue (Five)
+            6: 0x800080,   // Purple (Six)
+            7: 0xFFC0CB,   // Pink (Seven)
+            8: 0xA52A2A,   // Brown (Eight)
+            9: 0x808080    // Grey (Nine)
+        };
+        
+        // For numbers greater than 9, cycle through the colors or use white
+        return colors[number % 9] || 0xFFFFFF;
+    }
+    
+    // Create the complete Numberblock with all features
+    createNumberblock() {
+        this.mesh.clear(); // Clear any existing meshes
+        this.totalHeight = 0;
+        
+        // Create the stack of blocks
+        for (let i = 0; i < this.value; i++) {
+            const block = this.createBlock();
+            
+            // Position each block on top of the previous one
+            block.position.y = this.totalHeight;
+            this.totalHeight += this.blockSize + this.blockSpacing;
+            
+            this.mesh.add(block);
+            
+            // Add face only to the top block
+            if (i === this.value - 1) {
+                const face = this.createFace();
+                block.add(face);
+                
+                // Add number tag on top of the top block
+                const numberTag = this.createNumberTag();
+                numberTag.position.y = this.blockSize / 2 + 0.1; // Position just above the top block
+                block.add(numberTag);
+            }
+        }
+        
+        // Add arms to the middle block or the second block from the bottom if more than 3 blocks
+        const armBlockIndex = this.value <= 3 ? Math.floor(this.value / 2) : 1;
+        if (this.value > 0 && armBlockIndex < this.value) {
+            const leftArm = this.createArm('left');
+            const rightArm = this.createArm('right');
+            
+            this.mesh.children[armBlockIndex].add(leftArm);
+            this.mesh.children[armBlockIndex].add(rightArm);
+        }
+        
+        // Add feet to the bottom block
+        if (this.value > 0) {
+            const leftFoot = this.createFoot('left');
+            const rightFoot = this.createFoot('right');
+            
+            this.mesh.children[0].add(leftFoot);
+            this.mesh.children[0].add(rightFoot);
+        }
+        
+        // Adjust the entire Numberblock position so the bottom is at y=0
+        this.mesh.position.y = 0;
+    }
+    
+    // Get the height of the Numberblock (for physics calculations)
+    getHeight() {
+        // Return the total height calculated during creation
+        // If value is 0, return a minimum height
+        return this.value > 0 ? this.totalHeight - this.blockSpacing : this.blockSize;
+    }
+    
+    // Create a single block with the Numberblock's color
+    createBlock() {
+        const geometry = new THREE.BoxGeometry(this.blockSize, this.blockSize, this.blockSize);
+        const material = new THREE.MeshStandardMaterial({
+            color: this.color,
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        
+        return new THREE.Mesh(geometry, material);
+    }
+    
+    // Create a face with eyes and mouth
+    createFace() {
+        const face = new THREE.Group();
+        
+        // Eyes (white spheres with black pupils)
+        const eyeSize = this.blockSize * 0.15;
+        const eyeSpacing = this.blockSize * 0.3;
+        const eyeHeight = this.blockSize * 0.1;
+        const eyeDepth = this.blockSize / 2 + 0.01; // Slightly in front of the face
+        
+        // Create and position left eye
+        const leftEye = this.createEye(eyeSize);
+        leftEye.position.set(-eyeSpacing, eyeHeight, eyeDepth);
+        face.add(leftEye);
+        
+        // Create and position right eye
+        const rightEye = this.createEye(eyeSize);
+        rightEye.position.set(eyeSpacing, eyeHeight, eyeDepth);
+        face.add(rightEye);
+        
+        // Mouth (curved line or small cylinder)
+        const mouthWidth = this.blockSize * 0.4;
+        const mouthHeight = this.blockSize * 0.1;
+        const mouthDepth = this.blockSize / 2 + 0.01; // Slightly in front of the face
+        const mouthY = -eyeHeight * 2; // Position below the eyes
+        
+        const mouthGeometry = new THREE.CylinderGeometry(
+            mouthHeight/2, mouthHeight/2, mouthWidth, 16, 1, false, 0, Math.PI
+        );
+        mouthGeometry.rotateZ(Math.PI / 2); // Rotate to correct orientation
+        
+        const mouthMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
+        mouth.position.set(0, mouthY, mouthDepth);
+        face.add(mouth);
+        
+        return face;
+    }
+    
+    // Create an eye (white sphere with black pupil)
+    createEye(size) {
+        const eye = new THREE.Group();
+        
+        // White part of the eye
+        const eyeWhiteGeometry = new THREE.SphereGeometry(size, 16, 16);
+        const eyeWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+        const eyeWhite = new THREE.Mesh(eyeWhiteGeometry, eyeWhiteMaterial);
+        eye.add(eyeWhite);
+        
+        // Black pupil
+        const pupilSize = size * 0.5;
+        const pupilGeometry = new THREE.SphereGeometry(pupilSize, 16, 16);
+        const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const pupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+        pupil.position.z = size * 0.6; // Position the pupil slightly in front of the eye
+        eye.add(pupil);
+        
+        return eye;
+    }
+    
+    // Create a number tag to display on top of the Numberblock
+    createNumberTag() {
+        const tag = new THREE.Group();
+        
+        // Create a circular background for the number
+        const tagRadius = this.blockSize * 0.3;
+        const tagGeometry = new THREE.CylinderGeometry(tagRadius, tagRadius, 0.05, 32);
+        const tagMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+        const tagMesh = new THREE.Mesh(tagGeometry, tagMaterial);
+        tagMesh.rotation.x = Math.PI / 2; // Make it horizontal
+        tag.add(tagMesh);
+        
+        // Create text geometry for the number
+        // Note: Using a simple approach since Three.js TextGeometry requires font loading
+        // In production, use Three.js TextGeometry with a loaded font
+        
+        // For now, we'll create a simple representation
+        const numberSize = this.blockSize * 0.2;
+        const numberThickness = 0.05;
+        let numberMesh;
+        
+        // Create a simple cube for the number (in a real implementation, use TextGeometry)
+        const numberGeometry = new THREE.BoxGeometry(numberSize, numberSize * 1.5, numberThickness);
+        const numberMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        numberMesh = new THREE.Mesh(numberGeometry, numberMaterial);
+        
+        // Position the number just above the tag background
+        numberMesh.position.z = 0.03;
+        tag.add(numberMesh);
+        
+        // Add a text object using HTML and CSS (will be updated in the render loop)
+        const valueDiv = document.createElement('div');
+        valueDiv.className = 'numberblock-value';
+        valueDiv.innerHTML = this.value.toString();
+        valueDiv.style.position = 'absolute';
+        valueDiv.style.display = 'none'; // Will be positioned in render loop
+        valueDiv.style.color = 'black';
+        valueDiv.style.fontWeight = 'bold';
+        valueDiv.style.fontSize = '24px';
+        valueDiv.style.fontFamily = 'Arial, sans-serif';
+        valueDiv.style.textAlign = 'center';
+        valueDiv.style.userSelect = 'none';
+        document.body.appendChild(valueDiv);
+        
+        // Store the div element for later positioning
+        this.valueDiv = valueDiv;
+        
+        return tag;
+    }
+    
+    // Create an arm (left or right)
+    createArm(side) {
+        const arm = new THREE.Group();
+        
+        // Arm dimensions
+        const armLength = this.blockSize * 0.6;
+        const armWidth = this.blockSize * 0.2;
+        const armHeight = this.blockSize * 0.2;
+        
+        // Create the arm geometry
+        const armGeometry = new THREE.BoxGeometry(armLength, armHeight, armWidth);
+        const armMaterial = new THREE.MeshStandardMaterial({
+            color: this.color,
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        
+        const armMesh = new THREE.Mesh(armGeometry, armMaterial);
+        
+        // Position the arm on the side of the block
+        const xOffset = (this.blockSize / 2 + armLength / 2) * (side === 'left' ? -1 : 1);
+        armMesh.position.set(xOffset, 0, 0);
+        
+        arm.add(armMesh);
+        
+        // Add a hand at the end of the arm
+        const handRadius = armWidth * 0.8;
+        const handGeometry = new THREE.SphereGeometry(handRadius, 16, 16);
+        const handMaterial = new THREE.MeshStandardMaterial({
+            color: 0xFFFFFF, // White hands
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        
+        const hand = new THREE.Mesh(handGeometry, handMaterial);
+        
+        // Position the hand at the end of the arm
+        const handX = armLength / 2 * (side === 'left' ? -1 : 1);
+        hand.position.set(handX, 0, 0);
+        
+        armMesh.add(hand);
+        
+        return arm;
+    }
+    
+    // Create a foot (left or right)
+    createFoot(side) {
+        const foot = new THREE.Group();
+        
+        // Foot dimensions
+        const footLength = this.blockSize * 0.4;
+        const footWidth = this.blockSize * 0.3;
+        const footHeight = this.blockSize * 0.15;
+        
+        // Create the foot geometry
+        const footGeometry = new THREE.BoxGeometry(footLength, footHeight, footWidth);
+        const footMaterial = new THREE.MeshStandardMaterial({
+            color: 0x000000, // Black feet
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        
+        const footMesh = new THREE.Mesh(footGeometry, footMaterial);
+        
+        // Position the foot on the bottom of the block
+        const xOffset = (this.blockSize / 4) * (side === 'left' ? -1 : 1);
+        const yOffset = -this.blockSize / 2 - footHeight / 2;
+        const zOffset = this.blockSize / 4; // Push feet slightly forward
+        footMesh.position.set(xOffset, yOffset, zOffset);
+        
+        foot.add(footMesh);
+        
+        return foot;
+    }
+    
+    // Update the Numberblock value and regenerate the model
+    setValue(newValue) {
+        if (newValue < 1) newValue = 1; // Ensure minimum value of 1
+        if (newValue !== this.value) {
+            this.value = newValue;
+            this.color = this.getColorForNumber(newValue);
+            this.createNumberblock();
+        }
+    }
+    
+    // Update the position of the HTML number tag in render loop
+    updateNumberTagPosition(camera, renderer) {
+        if (this.valueDiv && this.mesh.children.length > 0) {
+            // Get the top block
+            const topBlock = this.mesh.children[this.value - 1];
+            
+            // Calculate position in screen space
+            const position = new THREE.Vector3();
+            position.copy(topBlock.position);
+            position.y += this.blockSize / 2 + 0.2; // Position above the top block
+            
+            // Convert 3D position to 2D screen coordinates
+            const worldPos = new THREE.Vector3();
+            topBlock.getWorldPosition(worldPos);
+            worldPos.y += this.blockSize / 2 + 0.2;
+            
+            const screenPos = worldPos.clone();
+            screenPos.project(camera);
+            
+            // Convert to CSS coordinates
+            const x = (screenPos.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+            const y = (-screenPos.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
+            
+            // Update the position of the div
+            this.valueDiv.style.display = 'block';
+            this.valueDiv.style.left = `${x}px`;
+            this.valueDiv.style.top = `${y}px`;
+            this.valueDiv.innerHTML = this.value.toString();
+        }
+    }
+    
+    // Clean up resources when no longer needed
+    dispose() {
+        if (this.valueDiv && this.valueDiv.parentNode) {
+            this.valueDiv.parentNode.removeChild(this.valueDiv);
+        }
+    }
+}
+
+// Function to create a player Numberblock and add it to the scene
+function createPlayerNumberblock(scene, value = 1) {
+    // Create the Numberblock
+    const playerBlock = new Numberblock(value);
+    
+    // Position it slightly above the ground
+    const totalHeight = playerBlock.totalHeight;
+    playerBlock.mesh.position.y = totalHeight / 2;
+    
+    // Add to scene
+    scene.add(playerBlock.mesh);
+    
+    return playerBlock;
+}
+
+// Export for use in other modules
+if (typeof module !== 'undefined') {
+    module.exports = {
+        Numberblock,
+        createPlayerNumberblock
+    };
+} 
  

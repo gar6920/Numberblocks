@@ -86,6 +86,13 @@ class Numberblock {
         this.mesh.position.y = 0;
     }
     
+    // Get the height of the Numberblock (for physics calculations)
+    getHeight() {
+        // Return the total height calculated during creation
+        // If value is 0, return a minimum height
+        return this.value > 0 ? this.totalHeight - this.blockSpacing : this.blockSize;
+    }
+    
     // Create a single block with the Numberblock's color
     createBlock() {
         const geometry = new THREE.BoxGeometry(this.blockSize, this.blockSize, this.blockSize);

@@ -273,36 +273,38 @@ function createFallbackControls(camera, domElement) {
 // Key down event handler
 function onKeyDown(event) {
     // Skip if we're in an input field or textarea
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
         return;
     }
     
+    // Map key code to action
     switch (event.code) {
-        case 'KeyW':
         case 'ArrowUp':
+        case 'KeyW':
             moveForward = true;
             break;
             
-        case 'KeyA':
         case 'ArrowLeft':
+        case 'KeyA':
             moveLeft = true;
             break;
             
-        case 'KeyS':
         case 'ArrowDown':
+        case 'KeyS':
             moveBackward = true;
             break;
             
-        case 'KeyD':
         case 'ArrowRight':
+        case 'KeyD':
             moveRight = true;
             break;
             
         case 'Space':
             if (canJump) {
-                velocity.y = jumpHeight;
+                // Apply a physically accurate jump velocity
+                velocity.y = Math.sqrt(jumpHeight * 2 * gravity);
+                canJump = false;
             }
-            canJump = false;
             break;
     }
 }
@@ -310,23 +312,23 @@ function onKeyDown(event) {
 // Key up event handler
 function onKeyUp(event) {
     switch (event.code) {
-        case 'KeyW':
         case 'ArrowUp':
+        case 'KeyW':
             moveForward = false;
             break;
             
-        case 'KeyA':
         case 'ArrowLeft':
+        case 'KeyA':
             moveLeft = false;
             break;
             
-        case 'KeyS':
         case 'ArrowDown':
+        case 'KeyS':
             moveBackward = false;
             break;
             
-        case 'KeyD':
         case 'ArrowRight':
+        case 'KeyD':
             moveRight = false;
             break;
     }
