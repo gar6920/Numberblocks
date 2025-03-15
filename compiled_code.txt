@@ -3,6 +3,170 @@ NUMBERBLOCKS GAME - COMPLETE CODE COMPILATION
 ===================================================== 
  
 ===================================================== 
+FILE: debug-test.html 
+===================================================== 
+ 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numberblocks Debug Test</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #debug-canvas { width: 100%; height: 100%; display: block; }
+        #debug-info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            z-index: 1000;
+            max-width: 400px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="debug-canvas"></canvas>
+    <div id="debug-info">Loading...</div>
+    
+    <!-- Load Three.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <script>
+        // Debug log function
+        function log(message) {
+            console.log(message);
+            const debugInfo = document.getElementById('debug-info');
+            debugInfo.innerHTML += `<div>${message}</div>`;
+        }
+        
+        // Error handler
+        window.onerror = function(message, source, lineno, colno, error) {
+            log(`ERROR: ${message} at ${source}:${lineno}`);
+            return false;
+        };
+        
+        // Initialize everything
+        window.addEventListener('load', () => {
+            log('Page loaded, initializing Three.js');
+            
+            // Check if Three.js is available
+            if (typeof THREE === 'undefined') {
+                log('ERROR: THREE is not defined! Check network connection or CDN link.');
+                return;
+            }
+            
+            log(`THREE.js version ${THREE.REVISION} loaded successfully`);
+            
+            try {
+                // Create scene
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x87CEEB); // Sky blue
+                log('Scene created with blue background');
+                
+                // Create camera
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(0, 2, 5);
+                camera.lookAt(0, 0, 0);
+                log(`Camera created at position (${camera.position.x}, ${camera.position.y}, ${camera.position.z})`);
+                
+                // Create renderer
+                const canvas = document.getElementById('debug-canvas');
+                if (!canvas) {
+                    log('ERROR: Canvas element not found!');
+                    return;
+                }
+                
+                const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                log('Renderer created and attached to canvas');
+                
+                // Check if renderer is working properly
+                if (!renderer.domElement) {
+                    log('ERROR: Renderer domElement is not available!');
+                    return;
+                }
+                
+                // Create a simple ground plane
+                const groundGeometry = new THREE.BoxGeometry(50, 0.1, 50);
+                const groundMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x7CFC00, // Green
+                    roughness: 0.8, 
+                    metalness: 0.2 
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.position.y = -0.05;
+                scene.add(ground);
+                log('Ground plane added to scene');
+                
+                // Add ambient light
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
+                
+                // Add directional light
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 20, 10);
+                scene.add(directionalLight);
+                log('Lights added to scene');
+                
+                // Add a visible object to confirm rendering
+                const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                cube.position.set(0, 1, 0);
+                scene.add(cube);
+                log('Red cube added to center of scene for visibility test');
+                
+                // Testing WebGL capabilities
+                log('WebGL Capabilities:');
+                const gl = renderer.getContext();
+                log(`Max texture size: ${gl.getParameter(gl.MAX_TEXTURE_SIZE)}`);
+                log(`WebGL version: ${gl.getParameter(gl.VERSION)}`);
+                log(`Renderer: ${gl.getParameter(gl.RENDERER)}`);
+                log(`Vendor: ${gl.getParameter(gl.VENDOR)}`);
+                
+                // Animation loop
+                function animate() {
+                    requestAnimationFrame(animate);
+                    
+                    // Rotate the cube to make it obvious if rendering is working
+                    cube.rotation.x += 0.01;
+                    cube.rotation.y += 0.01;
+                    
+                    // Render the scene
+                    renderer.render(scene, camera);
+                }
+                
+                // Start animation
+                animate();
+                log('Animation loop started');
+                
+                // Add window resize handler
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    log('Window resized, canvas adjusted');
+                });
+                
+                log('Debug test initialization complete, you should see a rotating red cube');
+            } catch (e) {
+                log(`CRITICAL ERROR: ${e.message}`);
+                log(`Stack trace: ${e.stack}`);
+            }
+        });
+    </script>
+</body>
+</html>
+ 
+ 
+===================================================== 
 FILE: index.html 
 ===================================================== 
  
@@ -120,22 +284,36 @@ const moveSpeed = 5.0;                // Units per second
 const jumpHeight = 5.0;               // Jump impulse force
 const gravity = 9.8;                  // Gravity force 
 
+// Flag to force fallback controls (for environments like browser previews)
+const forceFallbackControls = true;
+
 // Initialize controls for the camera
 function initControls(camera, domElement) {
+    // Always use fallback controls in browser preview environments
+    if (forceFallbackControls) {
+        console.log('Using fallback controls for preview environment');
+        return createFallbackControls(camera, domElement);
+    }
+    
+    // For non-preview environments, try to use PointerLockControls
     try {
-        // Set up pointer lock controls
+        // Test if Pointer Lock API is supported
+        if (!document.pointerLockElement && 
+            !document.mozPointerLockElement && 
+            !document.webkitPointerLockElement) {
+            console.log('Pointer Lock API not available, using fallback controls');
+            return createFallbackControls(camera, domElement);
+        }
+        
+        // Create PointerLockControls
         const controls = new THREE.PointerLockControls(camera, domElement);
         
-        // Add click event to lock pointer
+        // Set up click event
         domElement.addEventListener('click', () => {
-            try {
-                controls.lock();
-            } catch (e) {
-                console.log('Failed to lock pointer:', e);
-            }
+            controls.lock();
         });
         
-        // Add event listeners for controls state
+        // Event listeners for controls state
         controls.addEventListener('lock', () => {
             console.log('Controls locked');
             document.getElementById('controls-info').style.display = 'none';
@@ -152,63 +330,98 @@ function initControls(camera, domElement) {
         
         return controls;
     } catch (e) {
-        console.error('Error initializing controls:', e);
+        console.log('Error initializing controls, using fallback:', e);
         return createFallbackControls(camera, domElement);
     }
 }
 
-// Fallback controls if PointerLockControls fails
+// Create improved fallback controls
 function createFallbackControls(camera, domElement) {
     console.log('Creating fallback controls');
-    
-    // Create a mock controls object with the same interface
+
+    const pitchObject = new THREE.Object3D();
+    pitchObject.add(camera);
+
+    const controlsObject = new THREE.Object3D();
+    controlsObject.add(pitchObject);
+
     const mockControls = {
         isLocked: false,
-        getObject: () => camera,
-        moveForward: (distance) => {
-            camera.position.z -= distance;
+        getObject: function() {
+            return controlsObject;
         },
-        moveRight: (distance) => {
-            camera.position.x += distance;
+        moveForward: function(distance) {
+            const dir = new THREE.Vector3(0, 0, -1);
+            dir.applyQuaternion(controlsObject.quaternion);
+            controlsObject.position.add(dir.multiplyScalar(distance));
         },
-        lock: () => {
-            mockControls.isLocked = true;
+        moveRight: function(distance) {
+            const right = new THREE.Vector3(1, 0, 0);
+            right.applyQuaternion(controlsObject.quaternion);
+            controlsObject.position.add(right.multiplyScalar(distance));
+        },
+        lock: function() {
+            this.isLocked = true;
             document.getElementById('controls-info').style.display = 'none';
-            const event = new Event('lock');
-            mockControls.dispatchEvent(event);
+            document.body.style.cursor = 'none';
+            this.dispatchEvent({ type: 'lock' });
         },
-        unlock: () => {
-            mockControls.isLocked = false;
+        unlock: function() {
+            this.isLocked = false;
             document.getElementById('controls-info').style.display = 'block';
-            const event = new Event('unlock');
-            mockControls.dispatchEvent(event);
+            document.body.style.cursor = 'auto';
+            this.dispatchEvent({ type: 'unlock' });
         },
-        addEventListener: (event, callback) => {
-            mockControls.eventListeners = mockControls.eventListeners || {};
-            mockControls.eventListeners[event] = mockControls.eventListeners[event] || [];
-            mockControls.eventListeners[event].push(callback);
+        _listeners: {},
+        addEventListener: function(type, listener) {
+            this._listeners[type] = this._listeners[type] || [];
+            this._listeners[type].push(listener);
         },
-        dispatchEvent: (event) => {
-            if (mockControls.eventListeners && mockControls.eventListeners[event.type]) {
-                mockControls.eventListeners[event.type].forEach(callback => callback(event));
+        dispatchEvent: function(event) {
+            const listeners = this._listeners[event.type];
+            if (listeners) {
+                listeners.forEach(callback => callback.call(this, event));
             }
         }
     };
-    
-    // Add click event to "lock" pointer
+
+    // Mouse movement handling
+    document.addEventListener('mousemove', function(event) {
+        if (!mockControls.isLocked) return;
+
+        const movementX = event.movementX || 0;
+        const movementY = event.movementY || 0;
+
+        controlsObject.rotation.y -= movementX * 0.002; // Horizontal rotation (yaw)
+        pitchObject.rotation.x -= movementY * 0.002; // Vertical rotation (pitch)
+
+        // Limit vertical rotation (pitch) to avoid flipping
+        pitchObject.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchObject.rotation.x));
+    });
+
     domElement.addEventListener('click', () => {
         mockControls.lock();
     });
-    
-    // Add keyboard event listeners
+
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
-    
+
+    document.addEventListener('keydown', function(event) {
+        if (event.code === 'Escape' && mockControls.isLocked) {
+            mockControls.unlock();
+        }
+    });
+
     return mockControls;
 }
 
 // Key down event handler
 function onKeyDown(event) {
+    // Skip if we're in an input field or textarea
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+    }
+    
     switch (event.code) {
         case 'KeyW':
         case 'ArrowUp':
@@ -267,7 +480,7 @@ function onKeyUp(event) {
 // Update controls - call this in the animation loop
 function updateControls(controls, delta) {
     // Only update if controls are locked
-    if (!controls.isLocked) return;
+    if (controls.isLocked === false) return;
     
     // Apply gravity and handle jumping
     velocity.y -= gravity * delta;
@@ -313,22 +526,16 @@ let clock;
 
 // Initialize the Three.js scene
 function init() {
-    // Create the scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB); // Sky blue background
     
-    // Create the camera
     camera = new THREE.PerspectiveCamera(
-        75, // Field of view
-        window.innerWidth / window.innerHeight, // Aspect ratio
-        0.1, // Near clipping plane
-        1000 // Far clipping plane
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
     );
     
-    // Position the camera above the ground
-    camera.position.y = 2;
-    
-    // Create the renderer
     renderer = new THREE.WebGLRenderer({ 
         canvas: document.getElementById('game-canvas'),
         antialias: true 
@@ -336,29 +543,26 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     
-    // Add a ground plane
     createGround();
     
-    // Add ambient light
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
     
-    // Add directional light (like sunlight)
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(10, 20, 10);
     scene.add(directionalLight);
     
-    // Initialize first-person controls
+    // Add landscape elements for perspective
+    createLandscapeElements();
+    
     controls = initControls(camera, renderer.domElement);
+
+    // CRITICAL FIX: Explicitly set position on controls object (not camera directly)
+    controls.getObject().position.set(0, 2, 5);
     scene.add(controls.getObject());
     
-    // Initialize clock for frame-rate independent movement
     clock = new THREE.Clock();
-    
-    // Handle window resize
     window.addEventListener('resize', onWindowResize);
-    
-    // Start the animation loop
     animate();
 }
 
@@ -375,6 +579,129 @@ function createGround() {
     ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.position.y = -0.05; // Move it slightly down to center it
     scene.add(ground);
+}
+
+// Create random landscape elements for perspective
+function createLandscapeElements() {
+    // Define bright colors that match Numberblocks aesthetic
+    const colors = [
+        0xFF0000, // Red (One)
+        0xFFA500, // Orange (Two)
+        0xFFFF00, // Yellow (Three)
+        0x00FF00, // Green (Four)
+        0x0000FF, // Blue (Five)
+        0x800080, // Purple (Six)
+        0xFFC0CB, // Pink (Seven)
+        0xA52A2A, // Brown (Eight)
+        0x808080  // Grey (Nine)
+    ];
+    
+    // Create 30 random objects
+    for (let i = 0; i < 30; i++) {
+        let geometry, material, mesh;
+        const shapeType = Math.floor(Math.random() * 4); // 0-3 for different shapes
+        const colorIndex = Math.floor(Math.random() * colors.length);
+        const color = colors[colorIndex];
+        
+        // Create different shapes
+        switch (shapeType) {
+            case 0: // Cube (like Numberblock parts)
+                const size = 0.5 + Math.random() * 1.5;
+                geometry = new THREE.BoxGeometry(size, size, size);
+                break;
+            case 1: // Cylinder
+                const radius = 0.3 + Math.random() * 1;
+                const height = 1 + Math.random() * 3;
+                geometry = new THREE.CylinderGeometry(radius, radius, height, 16);
+                break;
+            case 2: // Sphere
+                const sphereRadius = 0.5 + Math.random() * 1;
+                geometry = new THREE.SphereGeometry(sphereRadius, 16, 16);
+                break;
+            case 3: // Cone
+                const coneRadius = 0.5 + Math.random() * 1;
+                const coneHeight = 1 + Math.random() * 2;
+                geometry = new THREE.ConeGeometry(coneRadius, coneHeight, 16);
+                break;
+        }
+        
+        // Create material with random color
+        material = new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        
+        // Create and position the mesh
+        mesh = new THREE.Mesh(geometry, material);
+        
+        // Position randomly on the ground plane (within a 40x40 area)
+        const posX = (Math.random() * 40) - 20;
+        const posZ = (Math.random() * 40) - 20;
+        
+        // Calculate Y position based on the shape's height
+        let posY;
+        if (shapeType === 0) { // Cube
+            posY = mesh.geometry.parameters.height / 2;
+        } else if (shapeType === 1) { // Cylinder
+            posY = mesh.geometry.parameters.height / 2;
+        } else if (shapeType === 2) { // Sphere
+            posY = mesh.geometry.parameters.radius;
+        } else { // Cone
+            posY = mesh.geometry.parameters.height / 2;
+        }
+        
+        mesh.position.set(posX, posY, posZ);
+        
+        // Add random rotation for more variety
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        
+        // Add to scene
+        scene.add(mesh);
+    }
+    
+    // Add some trees as landmarks
+    createTrees();
+}
+
+// Create simple trees as landmarks
+function createTrees() {
+    for (let i = 0; i < 10; i++) {
+        // Create trunk
+        const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.5, 2, 8);
+        const trunkMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8B4513, // Brown
+            roughness: 0.9
+        });
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        
+        // Create foliage (as a cone)
+        const foliageGeometry = new THREE.ConeGeometry(1.5, 3, 8);
+        const foliageMaterial = new THREE.MeshStandardMaterial({
+            color: 0x228B22, // Forest green
+            roughness: 0.8
+        });
+        const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+        foliage.position.y = 2.5; // Position on top of trunk
+        
+        // Create tree group
+        const tree = new THREE.Group();
+        tree.add(trunk);
+        tree.add(foliage);
+        
+        // Position randomly on the ground plane but away from center
+        let posX, posZ, distance;
+        do {
+            posX = (Math.random() * 40) - 20;
+            posZ = (Math.random() * 40) - 20;
+            distance = Math.sqrt(posX * posX + posZ * posZ);
+        } while (distance < 8); // Keep trees away from spawn point
+        
+        tree.position.set(posX, 1, posZ); // Position with trunk base on ground
+        
+        // Add to scene
+        scene.add(tree);
+    }
 }
 
 // Handle window resize

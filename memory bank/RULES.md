@@ -19,6 +19,21 @@
 
 - PowerShell's `mkdir` doesn't support multiple directory arguments like in Linux/macOS. Create directories one by one or use a loop.
 
+## Server Management and Development Workflow
+
+### Restarting the Development Server
+- When making changes to JavaScript files, use the following process to restart the server for clean testing:
+  ```powershell
+  # 1. Kill any running Node.js server instances (prevents port conflicts)
+  taskkill /f /im node.exe
+  
+  # 2. Start the http-server with cache disabled
+  npx http-server -c-1
+  ```
+- The `-c-1` flag disables caching, ensuring that file changes are immediately visible
+- Always kill previous instances of the server to avoid potential port conflicts
+- Using `taskkill /f /im node.exe` is more reliable than Ctrl+C which sometimes leaves orphaned processes
+
 ## Three.js Implementation Notes
 
 - Always include the Three.js library before your own JavaScript files in the HTML
@@ -33,6 +48,19 @@
 - Always implement a fallback mechanism for critical browser APIs in case they fail
 - Use try-catch blocks around browser API calls that might not be supported in all environments
 - Check browser console for API-related errors when testing in different environments
+- When implementing mouse controls:
+  - Proper event listener management is essential (add/remove listeners appropriately)
+  - Always provide visual feedback when controls are locked/unlocked
+  - Ensure complete disengagement of controls when user presses ESC
+
+## JavaScript Considerations
+
+- When using event handlers, store references to them for proper removal later to prevent memory leaks
+- For event-based systems (like controls), implement a proper event dispatcher mechanism
+- Use class-based or module patterns for complex components to keep code organized
+- When dealing with 3D rotations:
+  - Separate axes of rotation (yaw, pitch, roll) to prevent gimbal lock issues
+  - Always clamp vertical rotation (pitch) to prevent camera flipping
 
 ## Git Workflow
 

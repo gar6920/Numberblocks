@@ -9,22 +9,16 @@ let clock;
 
 // Initialize the Three.js scene
 function init() {
-    // Create the scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB); // Sky blue background
     
-    // Create the camera
     camera = new THREE.PerspectiveCamera(
-        75, // Field of view
-        window.innerWidth / window.innerHeight, // Aspect ratio
-        0.1, // Near clipping plane
-        1000 // Far clipping plane
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
     );
     
-    // Position the camera above the ground
-    camera.position.y = 2;
-    
-    // Create the renderer
     renderer = new THREE.WebGLRenderer({ 
         canvas: document.getElementById('game-canvas'),
         antialias: true 
@@ -32,29 +26,26 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     
-    // Add a ground plane
     createGround();
     
-    // Add ambient light
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
     
-    // Add directional light (like sunlight)
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(10, 20, 10);
     scene.add(directionalLight);
     
-    // Initialize first-person controls
+    // Add landscape elements for perspective
+    createLandscapeElements();
+    
     controls = initControls(camera, renderer.domElement);
+
+    // CRITICAL FIX: Explicitly set position on controls object (not camera directly)
+    controls.getObject().position.set(0, 2, 5);
     scene.add(controls.getObject());
     
-    // Initialize clock for frame-rate independent movement
     clock = new THREE.Clock();
-    
-    // Handle window resize
     window.addEventListener('resize', onWindowResize);
-    
-    // Start the animation loop
     animate();
 }
 
@@ -71,6 +62,129 @@ function createGround() {
     ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.position.y = -0.05; // Move it slightly down to center it
     scene.add(ground);
+}
+
+// Create random landscape elements for perspective
+function createLandscapeElements() {
+    // Define bright colors that match Numberblocks aesthetic
+    const colors = [
+        0xFF0000, // Red (One)
+        0xFFA500, // Orange (Two)
+        0xFFFF00, // Yellow (Three)
+        0x00FF00, // Green (Four)
+        0x0000FF, // Blue (Five)
+        0x800080, // Purple (Six)
+        0xFFC0CB, // Pink (Seven)
+        0xA52A2A, // Brown (Eight)
+        0x808080  // Grey (Nine)
+    ];
+    
+    // Create 30 random objects
+    for (let i = 0; i < 30; i++) {
+        let geometry, material, mesh;
+        const shapeType = Math.floor(Math.random() * 4); // 0-3 for different shapes
+        const colorIndex = Math.floor(Math.random() * colors.length);
+        const color = colors[colorIndex];
+        
+        // Create different shapes
+        switch (shapeType) {
+            case 0: // Cube (like Numberblock parts)
+                const size = 0.5 + Math.random() * 1.5;
+                geometry = new THREE.BoxGeometry(size, size, size);
+                break;
+            case 1: // Cylinder
+                const radius = 0.3 + Math.random() * 1;
+                const height = 1 + Math.random() * 3;
+                geometry = new THREE.CylinderGeometry(radius, radius, height, 16);
+                break;
+            case 2: // Sphere
+                const sphereRadius = 0.5 + Math.random() * 1;
+                geometry = new THREE.SphereGeometry(sphereRadius, 16, 16);
+                break;
+            case 3: // Cone
+                const coneRadius = 0.5 + Math.random() * 1;
+                const coneHeight = 1 + Math.random() * 2;
+                geometry = new THREE.ConeGeometry(coneRadius, coneHeight, 16);
+                break;
+        }
+        
+        // Create material with random color
+        material = new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        
+        // Create and position the mesh
+        mesh = new THREE.Mesh(geometry, material);
+        
+        // Position randomly on the ground plane (within a 40x40 area)
+        const posX = (Math.random() * 40) - 20;
+        const posZ = (Math.random() * 40) - 20;
+        
+        // Calculate Y position based on the shape's height
+        let posY;
+        if (shapeType === 0) { // Cube
+            posY = mesh.geometry.parameters.height / 2;
+        } else if (shapeType === 1) { // Cylinder
+            posY = mesh.geometry.parameters.height / 2;
+        } else if (shapeType === 2) { // Sphere
+            posY = mesh.geometry.parameters.radius;
+        } else { // Cone
+            posY = mesh.geometry.parameters.height / 2;
+        }
+        
+        mesh.position.set(posX, posY, posZ);
+        
+        // Add random rotation for more variety
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        
+        // Add to scene
+        scene.add(mesh);
+    }
+    
+    // Add some trees as landmarks
+    createTrees();
+}
+
+// Create simple trees as landmarks
+function createTrees() {
+    for (let i = 0; i < 10; i++) {
+        // Create trunk
+        const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.5, 2, 8);
+        const trunkMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8B4513, // Brown
+            roughness: 0.9
+        });
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        
+        // Create foliage (as a cone)
+        const foliageGeometry = new THREE.ConeGeometry(1.5, 3, 8);
+        const foliageMaterial = new THREE.MeshStandardMaterial({
+            color: 0x228B22, // Forest green
+            roughness: 0.8
+        });
+        const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+        foliage.position.y = 2.5; // Position on top of trunk
+        
+        // Create tree group
+        const tree = new THREE.Group();
+        tree.add(trunk);
+        tree.add(foliage);
+        
+        // Position randomly on the ground plane but away from center
+        let posX, posZ, distance;
+        do {
+            posX = (Math.random() * 40) - 20;
+            posZ = (Math.random() * 40) - 20;
+            distance = Math.sqrt(posX * posX + posZ * posZ);
+        } while (distance < 8); // Keep trees away from spawn point
+        
+        tree.position.set(posX, 1, posZ); // Position with trunk base on ground
+        
+        // Add to scene
+        scene.add(tree);
+    }
 }
 
 // Handle window resize

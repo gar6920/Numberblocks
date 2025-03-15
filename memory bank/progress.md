@@ -28,6 +28,13 @@
   - Implemented robust fallback mechanism for environments where Pointer Lock API is unavailable
   - Added error handling with try-catch blocks for browser API compatibility
   - Created mockControls object that mimics the PointerLockControls interface for seamless operation
+  - Enhanced FPS camera controls:
+    - Added parent-child object hierarchy for proper camera rotation
+    - Separated yaw (horizontal) and pitch (vertical) rotations for natural camera movement
+    - Implemented pitch clamping to prevent camera flipping
+    - Added mouse locking within the game window using CSS and event handling
+    - Ensured proper cursor disengagement when ESC key is pressed
+    - Implemented proper event listener cleanup for complete mouse control disengagement
   - Updated RULES.md with browser API considerations based on implementation experience
 
 ## Next Steps

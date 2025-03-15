@@ -40,7 +40,13 @@ styles.css: The primary CSS file for styling your UI, HUD, or other visual eleme
 js/: A folder for all JavaScript files, each serving a specific purpose:
 main.js: The core script that initializes the project (e.g., sets up the scene or game loop).
 
-controls.js: Handles user input and controls (e.g., keyboard or mouse events). Includes robust fallback mechanisms for browser API compatibility.
+controls.js: Handles user input and controls (e.g., keyboard or mouse events). Features:
+  - Robust fallback mechanisms for browser API compatibility
+  - First-person camera controls with parent-child hierarchy for proper rotation
+  - Separated yaw and pitch rotations for natural camera movement
+  - Mouse locking within the game window with proper cursor disengagement
+  - Event handler management for clean switching between locked/unlocked states
+  - Support for WASD/Arrow keys movement and spacebar jumping
 
 player.js: Manages player-related logic (e.g., movement, health).
 
