@@ -1,0 +1,19 @@
+/* Reset default margins and padding */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Make the canvas fill the entire screen */
+#game-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
