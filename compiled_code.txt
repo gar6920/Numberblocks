@@ -1,0 +1,411 @@
+===================================================== 
+NUMBERBLOCKS GAME - COMPLETE CODE COMPILATION 
+===================================================== 
+ 
+===================================================== 
+FILE: index.html 
+===================================================== 
+ 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numberblocks Game</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+    
+    <div id="controls-info" class="overlay">
+        <h2>Numberblocks Game</h2>
+        <p>Click anywhere to enable controls</p>
+        <ul>
+            <li>Move: WASD or Arrow Keys</li>
+            <li>Jump: Space</li>
+            <li>Look: Mouse</li>
+        </ul>
+    </div>
+    
+    <!-- Three.js library via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
+    
+    <!-- Game JavaScript files -->
+    <script src="js/controls.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
+ 
+ 
+===================================================== 
+FILE: css\styles.css 
+===================================================== 
+ 
+/* Reset default margins and padding */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+}
+
+/* Make the canvas fill the entire screen */
+#game-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Controls info overlay */
+.overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    z-index: 100;
+}
+
+.overlay h2 {
+    margin-bottom: 10px;
+}
+
+.overlay p {
+    margin-bottom: 15px;
+}
+
+.overlay ul {
+    list-style-type: none;
+    text-align: left;
+    margin: 0 auto;
+    display: inline-block;
+}
+
+.overlay ul li {
+    margin-bottom: 5px;
+}
+ 
+ 
+===================================================== 
+FILE: js\controls.js 
+===================================================== 
+ 
+// Numberblocks game - First-person controls implementation
+
+// Global variables
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+let canJump = false;
+
+let prevTime = performance.now();
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+
+// Player settings
+const playerHeight = 2.0;             // Height of camera from ground
+const moveSpeed = 5.0;                // Units per second
+const jumpHeight = 5.0;               // Jump impulse force
+const gravity = 9.8;                  // Gravity force 
+
+// Initialize controls for the camera
+function initControls(camera, domElement) {
+    try {
+        // Set up pointer lock controls
+        const controls = new THREE.PointerLockControls(camera, domElement);
+        
+        // Add click event to lock pointer
+        domElement.addEventListener('click', () => {
+            try {
+                controls.lock();
+            } catch (e) {
+                console.log('Failed to lock pointer:', e);
+            }
+        });
+        
+        // Add event listeners for controls state
+        controls.addEventListener('lock', () => {
+            console.log('Controls locked');
+            document.getElementById('controls-info').style.display = 'none';
+        });
+        
+        controls.addEventListener('unlock', () => {
+            console.log('Controls unlocked');
+            document.getElementById('controls-info').style.display = 'block';
+        });
+        
+        // Add keyboard controls
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+        
+        return controls;
+    } catch (e) {
+        console.error('Error initializing controls:', e);
+        return createFallbackControls(camera, domElement);
+    }
+}
+
+// Fallback controls if PointerLockControls fails
+function createFallbackControls(camera, domElement) {
+    console.log('Creating fallback controls');
+    
+    // Create a mock controls object with the same interface
+    const mockControls = {
+        isLocked: false,
+        getObject: () => camera,
+        moveForward: (distance) => {
+            camera.position.z -= distance;
+        },
+        moveRight: (distance) => {
+            camera.position.x += distance;
+        },
+        lock: () => {
+            mockControls.isLocked = true;
+            document.getElementById('controls-info').style.display = 'none';
+            const event = new Event('lock');
+            mockControls.dispatchEvent(event);
+        },
+        unlock: () => {
+            mockControls.isLocked = false;
+            document.getElementById('controls-info').style.display = 'block';
+            const event = new Event('unlock');
+            mockControls.dispatchEvent(event);
+        },
+        addEventListener: (event, callback) => {
+            mockControls.eventListeners = mockControls.eventListeners || {};
+            mockControls.eventListeners[event] = mockControls.eventListeners[event] || [];
+            mockControls.eventListeners[event].push(callback);
+        },
+        dispatchEvent: (event) => {
+            if (mockControls.eventListeners && mockControls.eventListeners[event.type]) {
+                mockControls.eventListeners[event.type].forEach(callback => callback(event));
+            }
+        }
+    };
+    
+    // Add click event to "lock" pointer
+    domElement.addEventListener('click', () => {
+        mockControls.lock();
+    });
+    
+    // Add keyboard event listeners
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    
+    return mockControls;
+}
+
+// Key down event handler
+function onKeyDown(event) {
+    switch (event.code) {
+        case 'KeyW':
+        case 'ArrowUp':
+            moveForward = true;
+            break;
+            
+        case 'KeyA':
+        case 'ArrowLeft':
+            moveLeft = true;
+            break;
+            
+        case 'KeyS':
+        case 'ArrowDown':
+            moveBackward = true;
+            break;
+            
+        case 'KeyD':
+        case 'ArrowRight':
+            moveRight = true;
+            break;
+            
+        case 'Space':
+            if (canJump) {
+                velocity.y = jumpHeight;
+            }
+            canJump = false;
+            break;
+    }
+}
+
+// Key up event handler
+function onKeyUp(event) {
+    switch (event.code) {
+        case 'KeyW':
+        case 'ArrowUp':
+            moveForward = false;
+            break;
+            
+        case 'KeyA':
+        case 'ArrowLeft':
+            moveLeft = false;
+            break;
+            
+        case 'KeyS':
+        case 'ArrowDown':
+            moveBackward = false;
+            break;
+            
+        case 'KeyD':
+        case 'ArrowRight':
+            moveRight = false;
+            break;
+    }
+}
+
+// Update controls - call this in the animation loop
+function updateControls(controls, delta) {
+    // Only update if controls are locked
+    if (!controls.isLocked) return;
+    
+    // Apply gravity and handle jumping
+    velocity.y -= gravity * delta;
+    
+    // Calculate movement direction
+    direction.z = Number(moveForward) - Number(moveBackward);
+    direction.x = Number(moveRight) - Number(moveLeft);
+    direction.normalize(); // Normalize for consistent movement speed
+    
+    // Apply movement
+    if (moveForward || moveBackward) {
+        controls.moveForward(direction.z * moveSpeed * delta);
+    }
+    
+    if (moveLeft || moveRight) {
+        controls.moveRight(direction.x * moveSpeed * delta);
+    }
+    
+    // Apply gravity
+    controls.getObject().position.y += velocity.y * delta;
+    
+    // Check if we're on ground
+    if (controls.getObject().position.y < playerHeight) {
+        velocity.y = 0;
+        controls.getObject().position.y = playerHeight;
+        canJump = true;
+    }
+}
+ 
+ 
+===================================================== 
+FILE: js\main.js 
+===================================================== 
+ 
+// Numberblocks game - Three.js implementation
+console.log('Numberblocks game initializing...');
+
+// Global variables
+let scene, camera, renderer;
+let ground;
+let controls;
+let clock;
+
+// Initialize the Three.js scene
+function init() {
+    // Create the scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+    
+    // Create the camera
+    camera = new THREE.PerspectiveCamera(
+        75, // Field of view
+        window.innerWidth / window.innerHeight, // Aspect ratio
+        0.1, // Near clipping plane
+        1000 // Far clipping plane
+    );
+    
+    // Position the camera above the ground
+    camera.position.y = 2;
+    
+    // Create the renderer
+    renderer = new THREE.WebGLRenderer({ 
+        canvas: document.getElementById('game-canvas'),
+        antialias: true 
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    
+    // Add a ground plane
+    createGround();
+    
+    // Add ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    
+    // Add directional light (like sunlight)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 20, 10);
+    scene.add(directionalLight);
+    
+    // Initialize first-person controls
+    controls = initControls(camera, renderer.domElement);
+    scene.add(controls.getObject());
+    
+    // Initialize clock for frame-rate independent movement
+    clock = new THREE.Clock();
+    
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize);
+    
+    // Start the animation loop
+    animate();
+}
+
+// Create the ground plane
+function createGround() {
+    // Create a large flat plane for the ground
+    const groundGeometry = new THREE.BoxGeometry(50, 0.1, 50);
+    const groundMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x7CFC00, // Lawn green color
+        roughness: 0.8,
+        metalness: 0.2
+    });
+    
+    ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.position.y = -0.05; // Move it slightly down to center it
+    scene.add(ground);
+}
+
+// Handle window resize
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// Animation loop
+function animate() {
+    requestAnimationFrame(animate);
+    
+    // Calculate time delta for smooth movement
+    const delta = clock.getDelta();
+    
+    // Update controls if they exist
+    if (controls) {
+        updateControls(controls, delta);
+    }
+    
+    renderer.render(scene, camera);
+}
+
+// Initialize the scene when the page loads
+document.addEventListener('DOMContentLoaded', init);
+ 
+ 
+===================================================== 
+FILE: js\numberblock.js 
+===================================================== 
+ 
+ 
+ 
