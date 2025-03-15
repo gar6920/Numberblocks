@@ -1,6 +1,35 @@
 // Numberblocks game - Three.js implementation
 console.log('Numberblocks game initializing...');
 
+// Import collision functions if they're not already globally available
+if (typeof updateAABB !== 'function' || typeof checkCollision !== 'function') {
+    console.log('Importing collision functions...');
+    
+    // Define the functions locally if they're not available globally
+    function updateAABB(mesh) {
+        if (!mesh) return null;
+        
+        // Use Three.js Box3 to create a bounding box from the mesh
+        try {
+            const box = new THREE.Box3().setFromObject(mesh);
+            return box;
+        } catch (error) {
+            console.error("Error creating bounding box:", error);
+            return null;
+        }
+    }
+
+    function checkCollision(boxA, boxB) {
+        if (!boxA || !boxB) return false;
+        try {
+            return boxA.intersectsBox(boxB);
+        } catch (error) {
+            console.error("Error checking collision:", error);
+            return false;
+        }
+    }
+}
+
 // Global variables
 let scene, camera, renderer;
 let ground;
@@ -227,6 +256,9 @@ function animate() {
         operatorManager.update(delta);
     }
     
+    // Check for collisions between playerNumberblock and operators
+    checkOperatorCollisions();
+    
     // Render the scene
     renderer.render(scene, camera);
 }
@@ -266,6 +298,49 @@ function updatePlayerPosition() {
         
         // Make the Numberblock rotate to match camera's horizontal rotation
         playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
+    }
+}
+
+// Check for collisions between player's Numberblock and operators
+function checkOperatorCollisions() {
+    try {
+        if (!playerNumberblock || !operatorManager) return;
+        
+        const operators = operatorManager.getOperators();
+        if (!operators || operators.length === 0) return;
+        
+        // Get the player's AABB
+        const playerBox = updateAABB(playerNumberblock.mesh);
+        if (!playerBox) {
+            console.warn("Could not create player's bounding box");
+            return;
+        }
+        
+        // Check collision with each operator
+        for (let i = 0; i < operators.length; i++) {
+            const operator = operators[i];
+            if (!operator || !operator.mesh) continue;
+            
+            // Get the operator's AABB
+            const operatorBox = updateAABB(operator.mesh);
+            if (!operatorBox) {
+                console.warn(`Could not create bounding box for operator ${i}`);
+                continue;
+            }
+            
+            // Check if there's a collision
+            if (checkCollision(playerBox, operatorBox)) {
+                console.log(`Collision detected with ${operator.type} operator`);
+                
+                // Pickup the operator and attach it to the Numberblock
+                operatorManager.setHeldOperator(operator, playerNumberblock);
+                
+                // No need to check further after picking up an operator
+                break;
+            }
+        }
+    } catch (error) {
+        console.error("Error in checkOperatorCollisions:", error);
     }
 }
 

@@ -205,7 +205,7 @@ class OperatorManager {
     }
     
     // Set the currently held operator
-    setHeldOperator(operator) {
+    setHeldOperator(operator, numberblock) {
         // Clear any previously held operator
         this.clearHeldOperator();
         
@@ -215,8 +215,49 @@ class OperatorManager {
         // Create a smaller version of the operator for holding
         this.heldOperatorMesh = operator.createHeldOperatorMesh();
         
-        // Add to the scene
-        this.scene.add(this.heldOperatorMesh);
+        // Attach the operator to the Numberblock's right hand
+        if (numberblock && numberblock.mesh) {
+            // Find the right hand in the Numberblock's mesh hierarchy
+            let rightHand = null;
+            
+            // Look for the arm block (should be the second block for Numberblocks with more than 3 blocks)
+            const armBlockIndex = numberblock.value <= 3 ? Math.floor(numberblock.value / 2) : 1;
+            
+            // Find the right hand if there are enough blocks
+            if (numberblock.value > 0 && armBlockIndex < numberblock.value) {
+                // Get the arm block
+                const armBlock = numberblock.mesh.children[armBlockIndex];
+                
+                // Search for the rightHand in the arm block's children
+                armBlock.traverse((child) => {
+                    if (child.name === 'rightHand') {
+                        rightHand = child;
+                    }
+                });
+                
+                // If we found the right hand, attach the operator to it
+                if (rightHand) {
+                    // Position the held operator slightly offset from the hand
+                    this.heldOperatorMesh.position.set(0, 0.2, 0);
+                    
+                    // Add the held operator mesh to the right hand
+                    rightHand.add(this.heldOperatorMesh);
+                    
+                    console.log(`Attached ${this.heldOperator} operator to Numberblock's right hand`);
+                } else {
+                    // Fallback: Add to the scene if we can't find the hand
+                    console.warn("Could not find rightHand - adding operator to scene");
+                    this.scene.add(this.heldOperatorMesh);
+                }
+            } else {
+                // Fallback: Add to the scene if Numberblock doesn't have arms
+                console.warn("Numberblock doesn't have enough blocks for arms - adding operator to scene");
+                this.scene.add(this.heldOperatorMesh);
+            }
+        } else {
+            // Add to the scene if no Numberblock is provided
+            this.scene.add(this.heldOperatorMesh);
+        }
         
         // Remove the original operator from the scene
         this.removeOperator(operator);
@@ -228,7 +269,13 @@ class OperatorManager {
     // Clear the currently held operator
     clearHeldOperator() {
         if (this.heldOperatorMesh) {
-            this.scene.remove(this.heldOperatorMesh);
+            // Remove from parent (either scene or hand)
+            if (this.heldOperatorMesh.parent) {
+                this.heldOperatorMesh.parent.remove(this.heldOperatorMesh);
+            } else {
+                this.scene.remove(this.heldOperatorMesh);
+            }
+            
             this.heldOperatorMesh = null;
         }
         this.heldOperator = null;

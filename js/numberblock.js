@@ -255,6 +255,9 @@ class Numberblock {
         const handX = armLength / 2 * (side === 'left' ? -1 : 1);
         hand.position.set(handX, 0, 0);
         
+        // Name the hand for easy reference
+        hand.name = side + 'Hand';
+        
         armMesh.add(hand);
         
         return arm;
