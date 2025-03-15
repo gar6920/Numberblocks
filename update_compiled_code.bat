@@ -12,6 +12,23 @@ echo NUMBERBLOCKS GAME - COMPLETE CODE COMPILATION >> compiled_code.txt
 echo ===================================================== >> compiled_code.txt
 echo. >> compiled_code.txt
 
+:: Memory Bank files
+echo Processing Memory Bank files...
+echo ===================================================== >> compiled_code.txt
+echo SECTION: MEMORY BANK >> compiled_code.txt
+echo ===================================================== >> compiled_code.txt
+echo. >> compiled_code.txt
+for %%F in ("memory bank\*.md") do (
+  echo Processing %%F...
+  echo ----------------------------------------------------- >> compiled_code.txt
+  echo FILE: %%F >> compiled_code.txt
+  echo ----------------------------------------------------- >> compiled_code.txt
+  echo. >> compiled_code.txt
+  type "%%F" >> compiled_code.txt
+  echo. >> compiled_code.txt
+  echo. >> compiled_code.txt
+)
+
 :: HTML files
 for %%F in (*.html) do (
   echo Processing %%F...
