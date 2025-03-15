@@ -46,6 +46,10 @@ function init() {
     
     clock = new THREE.Clock();
     window.addEventListener('resize', onWindowResize);
+    
+    // CRITICAL FIX: Explicitly call onWindowResize to ensure camera's projection matrix is correct initially
+    onWindowResize();
+    
     animate();
 }
 
@@ -201,11 +205,12 @@ function animate() {
     // Calculate time delta for smooth movement
     const delta = clock.getDelta();
     
-    // Update controls if they exist
-    if (controls) {
+    // Update controls
+    if (controls && typeof updateControls === 'function') {
         updateControls(controls, delta);
     }
     
+    // Render the scene
     renderer.render(scene, camera);
 }
 

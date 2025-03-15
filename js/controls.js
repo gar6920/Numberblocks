@@ -19,7 +19,7 @@ const jumpHeight = 5.0;               // Jump impulse force
 const gravity = 9.8;                  // Gravity force 
 
 // Flag to force fallback controls (for environments like browser previews)
-const forceFallbackControls = true;
+const forceFallbackControls = false;
 
 // Initialize controls for the camera
 function initControls(camera, domElement) {
