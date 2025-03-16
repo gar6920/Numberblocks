@@ -29,38 +29,48 @@ for %%F in ("memory bank\*.md") do (
   echo. >> compiled_code.txt
 )
 
-:: HTML files
-for %%F in (*.html) do (
-  echo Processing %%F...
+:: Server.js file
+echo Processing server.js...
+echo ===================================================== >> compiled_code.txt
+echo FILE: server.js >> compiled_code.txt
+echo ===================================================== >> compiled_code.txt
+echo. >> compiled_code.txt
+type "server.js" >> compiled_code.txt
+echo. >> compiled_code.txt
+echo. >> compiled_code.txt
+
+:: Client HTML files
+for %%F in (client\*.html) do (
+  echo Processing client\%%~nxF...
   echo ===================================================== >> compiled_code.txt
-  echo FILE: %%F >> compiled_code.txt
+  echo FILE: client\%%~nxF >> compiled_code.txt
   echo ===================================================== >> compiled_code.txt
   echo. >> compiled_code.txt
-  type "%%F" >> compiled_code.txt
+  type "client\%%~nxF" >> compiled_code.txt
   echo. >> compiled_code.txt
   echo. >> compiled_code.txt
 )
 
-:: CSS files
-for %%F in (css\*.css) do (
-  echo Processing %%F...
+:: Client CSS files
+for %%F in (client\css\*.css) do (
+  echo Processing client\css\%%~nxF...
   echo ===================================================== >> compiled_code.txt
-  echo FILE: %%F >> compiled_code.txt
+  echo FILE: client\css\%%~nxF >> compiled_code.txt
   echo ===================================================== >> compiled_code.txt
   echo. >> compiled_code.txt
-  type "%%F" >> compiled_code.txt
+  type "client\%%F" >> compiled_code.txt
   echo. >> compiled_code.txt
   echo. >> compiled_code.txt
 )
 
-:: JavaScript files
-for %%F in (js\*.js) do (
-  echo Processing %%F...
+:: Client JavaScript files
+for %%F in (client\js\*.js) do (
+  echo Processing client\js\%%~nxF...
   echo ===================================================== >> compiled_code.txt
-  echo FILE: %%F >> compiled_code.txt
+  echo FILE: client\js\%%~nxF >> compiled_code.txt
   echo ===================================================== >> compiled_code.txt
   echo. >> compiled_code.txt
-  type "%%F" >> compiled_code.txt
+  type "client\%%F" >> compiled_code.txt
   echo. >> compiled_code.txt
   echo. >> compiled_code.txt
 )

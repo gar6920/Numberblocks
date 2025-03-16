@@ -203,7 +203,6 @@ class NumberblocksRoom extends Room {
         staticBlock.value = value;
         staticBlock.x = x;
         // Set Y position to 0 (ground level)
-        // The client will adjust the visual height based on the value
         staticBlock.y = 0;
         staticBlock.z = z;
         

@@ -1,38 +1,59 @@
-Tech Stack
-Front-End
-HTML5: Provides the structure for the game, including the canvas element for 3D rendering and UI components like the heads-up display (HUD) and menus.
+# Numberblocks Game - Tech Stack
 
-CSS3: Styles the UI elements, such as the HUD, player stats, and overlays, ensuring they look polished and are positioned correctly over the game canvas.
+## Front-End
+- **HTML5:** Provides the structure for the game, including the canvas element for 3D rendering and UI components like the heads-up display (HUD) and menus.
 
-JavaScript (ES6+): Drives the game logic, handling player movement, operator collection, real-time updates, and interactions between Numberblocks.
+- **CSS3:** Styles the UI elements, such as the HUD, player stats, and overlays, ensuring they look polished and are positioned correctly over the game canvas.
 
-Three.js: A JavaScript library that simplifies WebGL for 3D rendering, used to create the game world, dynamic Numberblock models (e.g., stacks of cubes), and themed maps like Number Forest or Block City.
+- **JavaScript (ES6+):** Drives the client-side game logic, handling player input, visual rendering, and network communication.
 
-Web Audio API: Manages audio, including sound effects for actions like bumping into players or collecting operators, and optional background music for immersion.
+- **Three.js:** A JavaScript library that simplifies WebGL for 3D rendering, used to create the game world, dynamic Numberblock models, and environmental elements.
 
-Back-End
-Node.js: Acts as the server-side runtime, serving static files (HTML, CSS, JavaScript) and managing game logic for multiplayer sessions, such as validating player actions and maintaining game state authority.
+- **Web Audio API:** Manages audio, including sound effects for actions like bumping into players or collecting operators, and background music.
 
-Socket.io: Facilitates real-time, bidirectional communication between players, syncing positions, numbers, and operator states for a seamless multiplayer experience.
+## Back-End
+- **Node.js:** Server-side JavaScript runtime that hosts the game server, manages player connections, and maintains the authoritative game state.
 
-Development Tools
-Git: Version control system to track changes, collaborate with others (if applicable), and manage the project’s codebase effectively.
+- **Colyseus:** Framework for multiplayer game server development that handles room-based multiplayer, state synchronization, and client message processing.
 
-Local Server: A simple server like http-server or Node.js’s built-in http module for testing the game locally during development, simulating both single-player and multiplayer scenarios.
+- **Colyseus Schema:** Provides efficient state synchronization between server and clients with binary encoding and delta updates.
 
-Jest (Optional): A JavaScript testing framework to verify game logic (e.g., operator interactions, collision detection), which can be added as the project scales.
+## Networking
+- **WebSockets:** Underlying protocol for real-time bidirectional communication between clients and server.
 
-Hosting
-Heroku (or similar platforms like AWS, DigitalOcean): Hosts the Node.js application, serving both the front-end assets and WebSocket connections for multiplayer functionality, offering a straightforward deployment solution.
+- **Client-Server Architecture:** Maintains authoritative game state on the server to prevent cheating and ensure consistent gameplay.
 
-Why This Stack?
-Front-End: HTML, CSS, and JavaScript are core web technologies, making them essential for a browser-based game. Three.js provides an accessible way to render 3D graphics, while the Web Audio API ensures robust audio support.
+- **Room-Based Multiplayer:** Organizes players into game rooms with shared state and scoped communication.
 
-Back-End: Node.js integrates seamlessly with JavaScript and Socket.io, offering a lightweight yet powerful solution for real-time multiplayer features like position syncing and player interactions.
+## Development Tools
+- **Git:** Version control system to track changes and manage the project's codebase.
 
-Development Tools: Git is a standard for version control, and a local server simplifies testing. Jest is optional but recommended for ensuring reliability as complexity grows.
+- **npm:** Package manager for JavaScript, used to manage dependencies and run scripts.
 
-Hosting: Heroku supports Node.js and WebSocket applications out of the box, making it an ideal choice for deploying the full game (front-end and back-end) in one place.
+- **Nodemon:** Development utility that monitors server.js changes and automatically restarts the server during development.
 
-This tech stack aligns with your project’s needs: a browser-based, multiplayer 3D FPS game with dynamic Numberblock characters, real-time interactions, and themed environments. It’s lightweight, scalable, and leverages widely-used web technologies. Let me know if you’d like more details on any component!
+- **ESLint:** JavaScript linter that helps maintain code quality and consistency.
 
+## Project Organization
+- **Client-Server Separation:** Distinct code organization with `/client` directory for front-end and root-level server code.
+
+- **Modular Design:** Separate JavaScript modules for different game systems (networking, rendering, game logic).
+
+- **Build Process:** Custom scripts to compile and bundle client code for production deployment.
+
+## Deployment
+- **Node.js Hosting:** Server deployed on Node.js compatible hosting platforms (e.g., Heroku, AWS, DigitalOcean).
+
+- **Static Asset Serving:** Client-side assets (HTML, CSS, JS) served by the Node.js server.
+
+## Why This Stack?
+
+- **Three.js:** Provides powerful 3D rendering capabilities with a manageable learning curve, ideal for creating the Numberblock characters and interactive 3D environment.
+
+- **Colyseus:** Purpose-built for multiplayer games with efficient state synchronization and room management, simplifying networked gameplay implementation.
+
+- **Client-Server Model:** Ensures fair gameplay by maintaining authoritative state on the server, preventing client-side cheating.
+
+- **Node.js:** Enables JavaScript throughout the stack, reducing context switching and allowing code sharing between client and server when appropriate.
+
+This tech stack supports all core gameplay mechanics of Numberblocks, including the dynamic character models, mathematical interactions, and multiplayer functionality, while providing a solid foundation for future enhancements.

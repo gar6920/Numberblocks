@@ -2,6 +2,12 @@
 
 ## PowerShell Command Issues
 
+## restarting server / game
+- Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force
+PS 
+-  npm start  
+
+
 ### Directory Creation
 - When creating multiple directories at once with PowerShell's `mkdir` command, you must use quotes when specifying paths with spaces or multiple directories:
   ```
@@ -19,20 +25,6 @@
 
 - PowerShell's `mkdir` doesn't support multiple directory arguments like in Linux/macOS. Create directories one by one or use a loop.
 
-## Server Management and Development Workflow
-
-### Restarting the Development Server
-- When making changes to JavaScript files, use the following process to restart the server for clean testing:
-  ```powershell
-  # 1. Kill any running Node.js server instances (prevents port conflicts)
-  taskkill /f /im node.exe
-  
-  # 2. Start the http-server with cache disabled
-  npx http-server -c-1
-  ```
-- The `-c-1` flag disables caching, ensuring that file changes are immediately visible
-- Always kill previous instances of the server to avoid potential port conflicts
-- Using `taskkill /f /im node.exe` is more reliable than Ctrl+C which sometimes leaves orphaned processes
 
 ## Three.js Implementation Notes
 
@@ -71,3 +63,7 @@
 
 - Follow the architecture document precisely to ensure consistency
 - New JavaScript files should be placed in the js/ directory and then linked in index.html as needed
+
+## class structure
+- keep classes modular - each class should have a single responsibility
+- use classes to group related functionality

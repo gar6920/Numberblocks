@@ -101,13 +101,103 @@ Objective: Earn points for each operation performed (e.g., +1 point per addition
 The player with the most points at the end wins, tracked via a leaderboard.
 
 Multiplayer Features
-Real-Time Interaction
-Multiple players inhabit the same world, interacting in real time.
 
-Players can see each other's numbers and operators for strategic planning.
+The Numberblocks game features a comprehensive multiplayer system with support for both local split-screen and online networked play, allowing for flexible and varied play experiences.
 
-Teams (Optional)
-Team modes allow collaboration, such as achieving the highest combined team number.
+### Core Multiplayer Architecture
+
+- **Client-Server Model**: Uses Colyseus for WebSocket communication, providing a server-authoritative game state
+- **Room-Based Gameplay**: Players join game rooms with unique session IDs and synchronized state
+- **Cross-Platform Support**: Play on various devices and browsers with consistent experience
+
+### Local Split-Screen Multiplayer
+
+- **Player Count**: Supports 2-4 players on a single device
+- **Screen Division**:
+  - 2 players: Horizontal split (top/bottom) or vertical split (left/right)
+  - 3-4 players: Quadrant-based division with each player assigned a section of the screen
+- **Input Management**:
+  - Primary player: WASD movement, mouse look, spacebar jump
+  - Secondary player(s): Arrow key movement, numpad look, enter jump
+  - Gamepad support for all players with standard mapping
+- **Visual Distinction**:
+  - Unique colors/patterns for each player's Numberblock
+  - Player names or icons displayed in their viewport
+  - HUD customization per viewport showing player-specific info
+
+### Online Multiplayer
+
+- **Player Connection**: Connect to game servers via unique room codes or matchmaking
+- **Persistence**: Session reconnection support if temporarily disconnected
+- **Latency Management**:
+  - Client-side prediction for responsive gameplay
+  - Server reconciliation to maintain game state integrity
+  - Position interpolation for smooth movement of other players
+- **Player Limit**: Up to 10 players per online game room
+- **Social Features**:
+  - Player names and optional customization
+  - Simple chat system or emoji-based communication
+  - Friend invites and private rooms
+
+### Hybrid Multiplayer
+
+- **Local + Online**: Combine local split-screen with online play
+  - Example: Two players on one device can join an online room with other remote players
+- **Scaling**:
+  - Game difficulty and operator spawning adjusts based on player count
+  - Maps expand or contract to maintain optimal player density
+- **Fairness**:
+  - Equal operator distribution across the map
+  - Spawn protection to prevent immediate targeting of new players
+  - Optional balancing mechanics for teams with uneven player counts
+
+### Gameplay Modes
+
+- **Free-for-All**: Every player competes individually
+- **Team Play**:
+  - Form teams of 2-3 players
+  - Combined team score or cooperative objectives
+  - Team-based visual identity (color schemes)
+- **Specialized Modes**:
+  - Capture the Flag: Teams attempt to capture numbered flags
+  - King of the Hill: Control zones to accumulate points
+  - Math Race: Race through checkpoints solving math problems
+
+### Player Interaction
+
+- **Core Bumping Mechanics**: Apply operators to other players through collision
+- **Cooperative Actions**:
+  - Stand close to allies to combine numbers temporarily
+  - Form "number trains" for enhanced movement or special abilities
+  - Share operators with teammates
+- **Competitive Actions**:
+  - Block opponents from reaching operators
+  - Strategic positioning to access high-value areas
+  - Tactical operator usage to manipulate opponent numbers
+
+### Networking Considerations
+
+- **Bandwidth Optimization**:
+  - Efficient state synchronization with delta updates
+  - Interest management to prioritize nearby players
+- **Cross-Device Performance**:
+  - Adaptive rendering quality based on device capabilities
+  - Optional graphic settings to maintain performance
+- **Connection Quality**:
+  - Visual indicators for network status
+  - Graceful handling of high-latency situations
+
+### Split-Screen Technical Implementation
+
+- **Renderer Management**: Multiple Three.js renderers for each viewport
+- **Camera Control**: Independent camera instances for each local player
+- **Resource Sharing**: Optimized asset sharing for memory efficiency
+- **Performance Considerations**:
+  - Simplified lighting in multi-viewport mode
+  - Reduced draw distance for split-screen to maintain frame rate
+  - Level of detail adjustments based on viewport size
+
+This comprehensive multiplayer system ensures the Numberblocks game is enjoyable whether playing with friends on the same device or connecting with players around the world.
 
 Handling Edge Cases
 Zero or Negative Numbers
@@ -182,4 +272,3 @@ Educational Mode: Single-player math puzzles for kids.
 
 Conclusion
 This game combines the playful, educational charm of Numberblocks with dynamic FPS gameplay. Its simple mechanics make it accessible to children, while strategic depth and multiplayer fun appeal to all ages. With proper balancing and optimization, it can become an entertaining and educational browser-based experience.
-

@@ -1266,171 +1266,285 @@ This tech stack aligns with your project’s needs: a browser-based, multiplayer
  
  
 ===================================================== 
-FILE: debug-test.html 
+FILE: server.js 
 ===================================================== 
  
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Numberblocks Debug Test</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        #debug-canvas { width: 100%; height: 100%; display: block; }
-        #debug-info {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px;
-            font-family: monospace;
-            z-index: 1000;
-            max-width: 400px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-    </style>
-</head>
-<body>
-    <canvas id="debug-canvas"></canvas>
-    <div id="debug-info">Loading...</div>
-    
-    <!-- Load Three.js library -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    
-    <script>
-        // Debug log function
-        function log(message) {
-            console.log(message);
-            const debugInfo = document.getElementById('debug-info');
-            debugInfo.innerHTML += `<div>${message}</div>`;
-        }
+// Import required modules
+const http = require('http');
+const express = require('express');
+const { Server } = require('colyseus');
+const { Room } = require("colyseus");
+const { Schema, type } = require("@colyseus/schema");
+const path = require('path');
+
+// Define the state schema for Colyseus
+class Player extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 1;
+        this.z = 0;
+        this.value = 1;
+        this.rotationY = 0;
+        this.pitch = 0;
+        this.operator = null;
+        this.color = null;
+    }
+}
+
+class Operator extends Schema {
+    constructor() {
+        super();
+        this.id = "";
+        this.type = ""; // 'plus' or 'minus'
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+    }
+}
+
+class GameState extends Schema {
+    constructor() {
+        super();
+        this.players = {};
+        this.operators = {};
+        this.staticNumberblocks = {};
+    }
+}
+
+// Register schema types
+type("number")(Player.prototype, "x");
+type("number")(Player.prototype, "y");
+type("number")(Player.prototype, "z");
+type("number")(Player.prototype, "value");
+type("number")(Player.prototype, "rotationY");
+type("number")(Player.prototype, "pitch");
+type("string")(Player.prototype, "operator");
+type("string")(Player.prototype, "color");
+
+type("string")(Operator.prototype, "id");
+type("string")(Operator.prototype, "type");
+type("number")(Operator.prototype, "x");
+type("number")(Operator.prototype, "y");
+type("number")(Operator.prototype, "z");
+
+type({ map: Player })(GameState.prototype, "players");
+type({ map: Operator })(GameState.prototype, "operators");
+type({ map: Player })(GameState.prototype, "staticNumberblocks");
+
+// Define the game room
+class NumberblocksRoom extends Room {
+    onCreate(options) {
+        console.log("NumberblocksRoom created!", options);
         
-        // Error handler
-        window.onerror = function(message, source, lineno, colno, error) {
-            log(`ERROR: ${message} at ${source}:${lineno}`);
-            return false;
-        };
+        // Initialize room state
+        this.setState(new GameState());
         
-        // Initialize everything
-        window.addEventListener('load', () => {
-            log('Page loaded, initializing Three.js');
-            
-            // Check if Three.js is available
-            if (typeof THREE === 'undefined') {
-                log('ERROR: THREE is not defined! Check network connection or CDN link.');
-                return;
-            }
-            
-            log(`THREE.js version ${THREE.REVISION} loaded successfully`);
-            
-            try {
-                // Create scene
-                const scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x87CEEB); // Sky blue
-                log('Scene created with blue background');
+        // Set maximum number of clients
+        this.maxClients = 4;
+        
+        // Set frequency of patches to send
+        this.setPatchRate(1000 / 30); // 30 fps
+        
+        // Set simulation interval for server-side logic
+        this.setSimulationInterval(() => this.update());
+        
+        // Setup operator spawning system
+        this.spawnTimer = 0;
+        this.spawnInterval = this.getRandomSpawnInterval();
+        this.maxOperators = 10;
+        
+        // Setup static numberblocks
+        this.createStaticNumberblock("static1", 2, 0, 0, -5);
+        this.createStaticNumberblock("static2", 3, 5, 0, -5);
+        this.createStaticNumberblock("static3", 4, -5, 0, -5);
+        this.createStaticNumberblock("static4", 5, 0, 0, -10);
+        this.createStaticNumberblock("static5", 1, 5, 0, -10);
+        
+        // Listen for messages from clients
+        this.onMessage("move", (client, message) => {
+            const player = this.state.players[client.sessionId];
+            if (player) {
+                // Validate movement with speed limit
+                const speedLimit = 5.0 * (1/30); // moveSpeed * delta
+                const dx = message.x - player.x;
+                const dz = message.z - player.z;
                 
-                // Create camera
-                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.set(0, 2, 5);
-                camera.lookAt(0, 0, 0);
-                log(`Camera created at position (${camera.position.x}, ${camera.position.y}, ${camera.position.z})`);
-                
-                // Create renderer
-                const canvas = document.getElementById('debug-canvas');
-                if (!canvas) {
-                    log('ERROR: Canvas element not found!');
-                    return;
+                // Simple distance check for speed hacking prevention
+                if (Math.sqrt(dx * dx + dz * dz) <= speedLimit) {
+                    player.x = message.x;
+                    player.y = message.y;
+                    player.z = message.z;
+                    player.rotationY = message.rotationY;
+                    player.pitch = message.pitch;
+                } else {
+                    console.log(`Rejected movement from ${client.sessionId}: too fast`);
+                    // Could send a correction message here
                 }
-                
-                const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.setPixelRatio(window.devicePixelRatio);
-                log('Renderer created and attached to canvas');
-                
-                // Check if renderer is working properly
-                if (!renderer.domElement) {
-                    log('ERROR: Renderer domElement is not available!');
-                    return;
-                }
-                
-                // Create a simple ground plane
-                const groundGeometry = new THREE.BoxGeometry(50, 0.1, 50);
-                const groundMaterial = new THREE.MeshStandardMaterial({ 
-                    color: 0x7CFC00, // Green
-                    roughness: 0.8, 
-                    metalness: 0.2 
-                });
-                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-                ground.position.y = -0.05;
-                scene.add(ground);
-                log('Ground plane added to scene');
-                
-                // Add ambient light
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-                scene.add(ambientLight);
-                
-                // Add directional light
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(10, 20, 10);
-                scene.add(directionalLight);
-                log('Lights added to scene');
-                
-                // Add a visible object to confirm rendering
-                const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-                const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-                const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-                cube.position.set(0, 1, 0);
-                scene.add(cube);
-                log('Red cube added to center of scene for visibility test');
-                
-                // Testing WebGL capabilities
-                log('WebGL Capabilities:');
-                const gl = renderer.getContext();
-                log(`Max texture size: ${gl.getParameter(gl.MAX_TEXTURE_SIZE)}`);
-                log(`WebGL version: ${gl.getParameter(gl.VERSION)}`);
-                log(`Renderer: ${gl.getParameter(gl.RENDERER)}`);
-                log(`Vendor: ${gl.getParameter(gl.VENDOR)}`);
-                
-                // Animation loop
-                function animate() {
-                    requestAnimationFrame(animate);
-                    
-                    // Rotate the cube to make it obvious if rendering is working
-                    cube.rotation.x += 0.01;
-                    cube.rotation.y += 0.01;
-                    
-                    // Render the scene
-                    renderer.render(scene, camera);
-                }
-                
-                // Start animation
-                animate();
-                log('Animation loop started');
-                
-                // Add window resize handler
-                window.addEventListener('resize', () => {
-                    camera.aspect = window.innerWidth / window.innerHeight;
-                    camera.updateProjectionMatrix();
-                    renderer.setSize(window.innerWidth, window.innerHeight);
-                    log('Window resized, canvas adjusted');
-                });
-                
-                log('Debug test initialization complete, you should see a rotating red cube');
-            } catch (e) {
-                log(`CRITICAL ERROR: ${e.message}`);
-                log(`Stack trace: ${e.stack}`);
             }
         });
-    </script>
-</body>
-</html>
+        
+        this.onMessage("collectOperator", (client, message) => {
+            const player = this.state.players[client.sessionId];
+            const operator = this.state.operators[message.id];
+            
+            if (player && operator) {
+                // Apply operator effect
+                if (operator.type === "plus") {
+                    player.value++;
+                } else if (operator.type === "minus" && player.value > 1) {
+                    player.value--;
+                }
+                
+                // Remove operator from state
+                delete this.state.operators[operator.id];
+                console.log(`Player ${client.sessionId} collected ${operator.type} operator`);
+            }
+        });
+        
+        this.onMessage("numberblockCollision", (client, message) => {
+            const player = this.state.players[client.sessionId];
+            const targetId = message.targetId;
+            let target;
+            
+            // Check if target is another player or a static numberblock
+            if (this.state.players[targetId]) {
+                target = this.state.players[targetId];
+            } else if (this.state.staticNumberblocks[targetId]) {
+                target = this.state.staticNumberblocks[targetId];
+            }
+            
+            if (player && target) {
+                // Handle the collision based on operator
+                if (player.operator === "plus") {
+                    player.value += target.value;
+                    player.operator = null;
+                } else if (player.operator === "minus" && player.value > target.value) {
+                    player.value -= target.value;
+                    player.operator = null;
+                }
+                
+                // If target was a static numberblock, we don't change it
+                // If target was another player, we'd need additional logic here
+            }
+        });
+    }
+    
+    update() {
+        // Spawn operators periodically
+        this.spawnTimer += 1/30; // Assuming 30 fps
+        if (this.spawnTimer >= this.spawnInterval && Object.keys(this.state.operators).length < this.maxOperators) {
+            this.spawnOperator();
+            this.spawnTimer = 0;
+            this.spawnInterval = this.getRandomSpawnInterval();
+        }
+        
+        // Check for collisions between players (could be added here)
+    }
+    
+    // Get a random spawn interval between 5-10 seconds
+    getRandomSpawnInterval() {
+        return 5 + Math.random() * 5; // 5-10 seconds
+    }
+    
+    // Spawn a new operator
+    spawnOperator() {
+        const id = `op_${Math.floor(Math.random() * 10000)}`;
+        const type = Math.random() > 0.5 ? "plus" : "minus";
+        
+        // Create operator with random position
+        const operator = new Operator();
+        operator.id = id;
+        operator.type = type;
+        
+        // Set random position (40x40 map)
+        const mapSize = 40;
+        operator.x = (Math.random() * mapSize) - (mapSize / 2);
+        operator.y = 0.6; // Slightly above ground
+        operator.z = (Math.random() * mapSize) - (mapSize / 2);
+        
+        // Add to state
+        this.state.operators[id] = operator;
+        console.log(`Spawned ${type} operator at (${operator.x.toFixed(2)}, ${operator.y}, ${operator.z.toFixed(2)})`);
+    }
+    
+    // Create a static numberblock (for players to interact with)
+    createStaticNumberblock(id, value, x, y, z) {
+        const staticBlock = new Player();
+        staticBlock.value = value;
+        staticBlock.x = x;
+        // Set Y position to 0 (ground level)
+        staticBlock.y = 0;
+        staticBlock.z = z;
+        
+        this.state.staticNumberblocks[id] = staticBlock;
+        console.log(`Created static numberblock with ID ${id}, value ${value} at (${x}, ${staticBlock.y}, ${z})`);
+    }
+    
+    onJoin(client, options) {
+        console.log(`${client.sessionId} joined the game`);
+        
+        // Create player with initial state
+        const player = new Player();
+        player.x = 0;
+        player.y = 1;
+        player.z = 5; // Starting position
+        player.value = 1;
+        player.color = this.getColorForPlayer(Object.keys(this.state.players).length);
+        
+        // Add player to room state
+        this.state.players[client.sessionId] = player;
+    }
+    
+    onLeave(client, consented) {
+        console.log(`${client.sessionId} left the game`);
+        
+        // Remove player from room state
+        delete this.state.players[client.sessionId];
+    }
+    
+    // Get a distinct color for each player
+    getColorForPlayer(index) {
+        const colors = [
+            "#FF0000", // Red
+            "#00FF00", // Green
+            "#0000FF", // Blue
+            "#FFFF00"  // Yellow
+        ];
+        return colors[index % colors.length];
+    }
+}
+
+// Create Express app and HTTP server
+const app = express();
+const server = http.createServer(app);
+
+// Set up static file serving
+app.use(express.static(path.join(__dirname, 'client')));
+
+// Serve the main index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'client', 'index.html'));
+});
+
+// Create and attach Colyseus server
+const gameServer = new Server({
+    server,
+    express: app
+});
+
+// Define room handlers
+gameServer.define("numberblocks", NumberblocksRoom);
+
+// Start server
+const port = process.env.PORT || 3000;
+server.listen(port, () => {
+    console.log(`Numberblocks game server is running on http://localhost:${port}`);
+});
  
  
 ===================================================== 
-FILE: index.html 
+FILE: client\index.html 
 ===================================================== 
  
 <!DOCTYPE html>
@@ -1440,17 +1554,50 @@ FILE: index.html
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Numberblocks Game</title>
     <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+        #game-canvas { display: block; width: 100vw; height: 100vh; }
+        #debug-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            max-width: 500px;
+            overflow: auto;
+            z-index: 1000;
+        }
+        #lock-instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 999;
+        }
+    </style>
 </head>
 <body>
     <canvas id="game-canvas"></canvas>
     
-    <div id="controls-info" class="overlay">
+    <div id="debug-panel"></div>
+    
+    <div id="lock-instructions">
         <h2>Numberblocks Game</h2>
         <p>Click anywhere to enable controls</p>
         <ul>
             <li>Move: WASD or Arrow Keys</li>
             <li>Jump: Space</li>
             <li>Look: Mouse</li>
+            <li>Turn: Q & E Keys</li>
         </ul>
     </div>
     
@@ -1458,1984 +1605,74 @@ FILE: index.html
     <div id="game-hud" class="hud">
     </div>
     
+    <!-- Multiplayer panel -->
+    <div id="multiplayer-panel" class="overlay" style="display: none; top: 10px; right: 10px; text-align: right; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;">
+        <h3>Players</h3>
+        <div id="player-list"></div>
+    </div>
+    
     <!-- Three.js library via CDN -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
     
+    <!-- Colyseus client library -->
+    <script src="https://unpkg.com/colyseus.js@0.14.13/dist/colyseus.js"></script>
+    
     <!-- Game JavaScript files -->
     <script src="js/collision.js"></script>
-    <script src="js/controls.js"></script>
     <script src="js/numberblock.js"></script>
     <script src="js/operator.js"></script>
-    <script src="js/main.js"></script>
+    <script src="js/network.js"></script>
+    <script src="js/main-fixed.js"></script>
 </body>
 </html>
  
  
 ===================================================== 
-FILE: css\styles.css 
+FILE: client\css\styles.css 
 ===================================================== 
  
-/* Reset default margins and padding */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    overflow: hidden;
-}
-
-body, html {
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    font-family: Arial, sans-serif;
-    background-color: #000;
-}
-
-/* Make the canvas fill the entire screen */
-#game-canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-
-/* Fix for horizontal bar issue - ensuring no elements create unwanted artifacts */
-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    outline: none;
-}
-
-/* Controls info overlay */
-.overlay {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 20px;
-    border-radius: 8px;
-    text-align: center;
-    z-index: 100;
-}
-
-.overlay h2 {
-    margin-bottom: 10px;
-}
-
-.overlay p {
-    margin-bottom: 15px;
-}
-
-.overlay ul {
-    list-style-type: none;
-    text-align: left;
-    margin: 0 auto;
-    display: inline-block;
-}
-
-.overlay ul li {
-    margin-bottom: 5px;
-}
-
-/* Game HUD */
-.hud {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    z-index: 10;
-    color: white;
-    font-size: 24px;
-    font-weight: bold;
-    text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.8);
-    background-color: rgba(0, 0, 0, 0.5);
-    padding: 10px 15px;
-    border-radius: 8px;
-    pointer-events: none; /* Allow clicking through the HUD */
-}
-
-#player-number-display {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-}
-
-#player-value {
-    margin-left: 5px;
-    font-size: 32px;
-}
-
-/* Ensure no overflow elements */
-body, html, canvas {
-    overflow: hidden;
-}
  
  
 ===================================================== 
-FILE: js\collision.js 
+FILE: client\js\collision.js 
 ===================================================== 
  
-/**
- * Numberblocks AABB Collision System
- * Uses Axis-Aligned Bounding Boxes for efficient collision detection
- */
-
-// Collection of collidable objects
-let collidableObjects = [];
-let debugMode = true; // Set to true to see debug logging
-
-// Initialize collision system and collect collidable objects from the scene
-function initCollisionSystem(scene) {
-    console.log("Initializing collision system...");
-    collidableObjects = [];
-    
-    // Traverse the scene to find all collidable objects
-    scene.traverse((object) => {
-        if (object.isMesh && object.userData && object.userData.collidable === true) {
-            collidableObjects.push(object);
-            if (debugMode) console.log(`Added collidable object: ${object.name || 'unnamed object'}`);
-        }
-    });
-    
-    console.log(`Collision system initialized with ${collidableObjects.length} collidable objects`);
-    return collidableObjects.length;
-}
-
-// Add a single object to the collidable objects list
-function addCollidableObject(object) {
-    if (!object || !(object.isMesh || object.isGroup)) return;
-    
-    // Mark the object as collidable
-    object.userData = object.userData || {};
-    object.userData.collidable = true;
-    
-    // Add a name if it doesn't have one for easier debugging
-    if (!object.name) {
-        object.name = `collidable_${collidableObjects.length}`;
-    }
-    
-    // Only add if not already in the list
-    if (!collidableObjects.includes(object)) {
-        collidableObjects.push(object);
-        if (debugMode) console.log(`Added collidable object: ${object.name}`);
-        
-        // If it's a group, also make all children collidable
-        if (object.isGroup && object.children) {
-            object.children.forEach(child => {
-                if (child.isMesh) {
-                    child.userData = child.userData || {};
-                    child.userData.collidable = true;
-                    collidableObjects.push(child);
-                    if (debugMode) console.log(`Added child collidable object: ${child.name || 'unnamed child'}`);
-                }
-            });
-        }
-    }
-}
-
-// Create or update a bounding box for a mesh
-function updateAABB(mesh) {
-    if (!mesh) return null;
-    
-    // Use Three.js Box3 to create a bounding box from the mesh
-    const box = new THREE.Box3().setFromObject(mesh);
-    return box;
-}
-
-// Check if two bounding boxes intersect
-function checkCollision(boxA, boxB) {
-    if (!boxA || !boxB) return false;
-    return boxA.intersectsBox(boxB);
-}
-
-// Get the minimum translation vector to resolve a collision
-function getCollisionResponse(boxA, boxB) {
-    // Create a box that represents the intersection
-    const intersection = new THREE.Box3();
-    intersection.copy(boxA).intersect(boxB);
-    
-    // Get the size of the intersection
-    const size = intersection.getSize(new THREE.Vector3());
-    
-    // Find the minimum penetration axis (x, y, or z)
-    let axis, minSize;
-    
-    if (size.x <= size.y && size.x <= size.z) {
-        axis = 'x';
-        minSize = size.x;
-    } else if (size.y <= size.x && size.y <= size.z) {
-        axis = 'y';
-        minSize = size.y;
-    } else {
-        axis = 'z';
-        minSize = size.z;
-    }
-    
-    // Return the direction and amount to move
-    const response = {
-        axis: axis,
-        depth: minSize,
-        direction: new THREE.Vector3()
-    };
-    
-    // Calculate the direction to move (away from the obstacle)
-    const centerA = boxA.getCenter(new THREE.Vector3());
-    const centerB = boxB.getCenter(new THREE.Vector3());
-    
-    if (axis === 'x') {
-        response.direction.x = centerA.x < centerB.x ? -1 : 1;
-    } else if (axis === 'y') {
-        response.direction.y = centerA.y < centerB.y ? -1 : 1;
-    } else {
-        response.direction.z = centerA.z < centerB.z ? -1 : 1;
-    }
-    
-    return response;
-}
-
-// Check collisions for the player against all collidable objects
-function checkPlayerCollisions(playerMesh, controlsObject) {
-    if (!playerMesh || !controlsObject || collidableObjects.length === 0) {
-        return { collision: false, grounded: false };
-    }
-    
-    // Update player bounding box
-    const playerBox = updateAABB(playerMesh);
-    let hasCollision = false;
-    let isGrounded = false;
-    
-    // Check against all collidable objects
-    for (const obstacle of collidableObjects) {
-        // Skip player's own mesh
-        if (obstacle === playerMesh) continue;
-        
-        const obstacleBox = updateAABB(obstacle);
-        if (checkCollision(playerBox, obstacleBox)) {
-            hasCollision = true;
-            if (debugMode) console.log(`Collision detected with ${obstacle.name || 'unnamed object'}`);
-            
-            // Handle the collision and check if we're standing on something
-            const collisionResult = handleCollision(playerBox, obstacleBox, controlsObject);
-            if (collisionResult.landedOnTop) {
-                isGrounded = true;
-            }
-        }
-    }
-    
-    return { collision: hasCollision, grounded: isGrounded };
-}
-
-// Apply collision response and return collision info
-function handleCollision(playerBox, obstacleBox, controlsObject) {
-    const response = getCollisionResponse(playerBox, obstacleBox);
-    
-    // Apply a small buffer to prevent getting stuck
-    const buffer = 0.1;
-    let landedOnTop = false;
-    
-    // Apply the collision response to the controls object
-    if (response.axis === 'x') {
-        controlsObject.position.x += (response.depth + buffer) * response.direction.x;
-    } else if (response.axis === 'y') {
-        // For Y-axis collisions, we need to determine if we landed on top
-        if (response.direction.y > 0) {
-            // We hit the bottom of something
-            controlsObject.position.y += (response.depth + buffer) * response.direction.y;
-        } else {
-            // We landed on top of something
-            controlsObject.position.y += (response.depth + buffer) * response.direction.y;
-            landedOnTop = true;
-            
-            // Stop any downward velocity if we're using physics
-            if (controlsObject.userData && controlsObject.userData.velocity) {
-                controlsObject.userData.velocity.y = 0;
-            }
-        }
-    } else {
-        controlsObject.position.z += (response.depth + buffer) * response.direction.z;
-    }
-    
-    return { landedOnTop };
-}
-
-// Mark objects in the scene as collidable
-function markAllObjectsAsCollidable(scene) {
-    scene.traverse(object => {
-        // Skip the player, camera, lights, and ground
-        if (object.name === 'ground' || 
-            object.name === 'player' || 
-            object.isLight || 
-            object.isCamera) {
-            return;
-        }
-        
-        // Mark all meshes that aren't the player, lights, or ground as collidable
-        if (object.isMesh) {
-            object.userData = object.userData || {};
-            object.userData.collidable = true;
-            
-            // Add it to our collidable objects array if not already there
-            if (!collidableObjects.includes(object)) {
-                collidableObjects.push(object);
-                if (debugMode) console.log(`Auto-marked as collidable: ${object.name || 'unnamed mesh'}`);
-            }
-        }
-    });
-    
-    console.log(`Total collidable objects after auto-marking: ${collidableObjects.length}`);
-}
-
-// No modules export - functions are accessible globally for traditional script inclusion
  
  
 ===================================================== 
-FILE: js\controls.js 
+FILE: client\js\controls.js 
 ===================================================== 
  
-// Numberblocks game - First-person controls implementation
-
-// Global variables
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-let turnLeft = false;    // New variable for Q key turning
-let turnRight = false;   // New variable for E key turning
-let canJump = false;
-let pitch = 0;  // Track vertical rotation separately
-// isFirstPerson is a global variable attached to the window object in main.js
-
-let prevTime = performance.now();
-let velocity = new THREE.Vector3();
-let direction = new THREE.Vector3();
-
-// Player settings
-const playerHeight = 2.0;             // Height of camera from ground
-const moveSpeed = 5.0;                // Units per second
-const turnSpeed = 2.0;                // Rotation speed for Q/E turning
-const jumpHeight = 5.0;               // Jump impulse force
-const gravity = 9.8;                  // Gravity force 
-
-// Initialize controls for the camera
-window.initControls = function(camera, domElement) {
-    console.log("Initializing PointerLockControls properly...");
-
-    const controls = new THREE.PointerLockControls(camera, domElement);
-
-    domElement.addEventListener('click', () => {
-        controls.lock();
-    });
-
-    controls.addEventListener('lock', () => {
-        if (window.isFirstPerson) {
-            document.getElementById('controls-info').style.display = 'none';
-        }
-        // Always hide cursor when locked, regardless of view mode
-        document.body.style.cursor = 'none';
-    });
-
-    controls.addEventListener('unlock', () => {
-        if (window.isFirstPerson) {
-            document.getElementById('controls-info').style.display = 'block';
-        }
-        // Always show cursor when unlocked, regardless of view mode
-        document.body.style.cursor = 'auto';
-    });
-
-    // Keyboard listeners for movement remain as-is
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp);
-
-    return controls;
-}
-
-// Key down event handler
-function onKeyDown(event) {
-    // Skip if we're in an input field or textarea
-    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
-        return;
-    }
-    
-    // Map key code to action
-    switch (event.code) {
-        case 'ArrowUp':
-        case 'KeyW':
-            moveForward = true;
-            break;
-            
-        case 'ArrowLeft':
-        case 'KeyA':
-            moveLeft = true;
-            break;
-            
-        case 'ArrowDown':
-        case 'KeyS':
-            moveBackward = true;
-            break;
-            
-        case 'ArrowRight':
-        case 'KeyD':
-            moveRight = true;
-            break;
-            
-        case 'KeyQ':
-            turnLeft = true;
-            break;
-            
-        case 'KeyE':
-            turnRight = true;
-            break;
-            
-        case 'Space':
-            if (canJump) {
-                // Apply a physically accurate jump velocity
-                velocity.y = Math.sqrt(jumpHeight * 2 * gravity);
-                canJump = false;
-            }
-            break;
-    }
-}
-
-// Key up event handler
-function onKeyUp(event) {
-    switch (event.code) {
-        case 'ArrowUp':
-        case 'KeyW':
-            moveForward = false;
-            break;
-            
-        case 'ArrowLeft':
-        case 'KeyA':
-            moveLeft = false;
-            break;
-            
-        case 'ArrowDown':
-        case 'KeyS':
-            moveBackward = false;
-            break;
-            
-        case 'ArrowRight':
-        case 'KeyD':
-            moveRight = false;
-            break;
-            
-        case 'KeyQ':
-            turnLeft = false;
-            break;
-            
-        case 'KeyE':
-            turnRight = false;
-            break;
-    }
-}
-
-// Update controls - call this in the animation loop
-window.updateControls = function(controls, delta) {
-    if (!controls.isLocked) return;
-
-    if (moveForward) controls.moveForward(moveSpeed * delta);
-    if (moveBackward) controls.moveForward(-moveSpeed * delta);
-    if (moveLeft) controls.moveRight(-moveSpeed * delta);
-    if (moveRight) controls.moveRight(moveSpeed * delta);
-    
-    // Proper on-axis rotation using the PointerLockControls object's quaternion
-    if (turnLeft || turnRight) {
-        // Create rotation quaternion for Q/E rotation
-        const rotationAngle = (turnLeft ? 1 : -1) * turnSpeed * delta;
-        const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(0, 1, 0), // Rotate around y-axis only
-            rotationAngle
-        );
-        
-        // Apply rotation to controls object's quaternion
-        controls.getObject().quaternion.premultiply(rotationQuaternion);
-    }
-
-    velocity.y -= gravity * delta;
-    controls.getObject().position.y += velocity.y * delta;
-
-    if (controls.getObject().position.y < playerHeight) {
-        velocity.y = 0;
-        controls.getObject().position.y = playerHeight;
-        canJump = true;
-    }
-}
  
  
 ===================================================== 
-FILE: js\main.js 
+FILE: client\js\main-fixed.js 
 ===================================================== 
  
-// Numberblocks game - Three.js implementation
-console.log('Numberblocks game initializing...');
-
-// Import collision functions if they're not already globally available
-if (typeof updateAABB !== 'function' || typeof checkCollision !== 'function') {
-    console.log('Importing collision functions...');
-    
-    // Define the functions locally if they're not available globally
-    function updateAABB(mesh) {
-        if (!mesh) return null;
-        
-        // Use Three.js Box3 to create a bounding box from the mesh
-        try {
-            const box = new THREE.Box3().setFromObject(mesh);
-            return box;
-        } catch (error) {
-            console.error("Error creating bounding box:", error);
-            return null;
-        }
-    }
-
-    function checkCollision(boxA, boxB) {
-        if (!boxA || !boxB) return false;
-        try {
-            return boxA.intersectsBox(boxB);
-        } catch (error) {
-            console.error("Error checking collision:", error);
-            return false;
-        }
-    }
-}
-
-// Global variables
-let scene, camera, renderer, controls;
-let ground;
-let playerNumberblock; // Player's Numberblock
-let staticNumberblock; // Static Numberblock for interaction
-let operatorManager; // Operator system manager
-let numberblocks = []; // Array to track random Numberblocks
-let operatorDisplay; // Add operator display element
-window.isFirstPerson = true; // Make isFirstPerson truly global by attaching to window
-
-// Initialize the Three.js scene
-function init() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB); // Sky blue background
-    
-    camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1000
-    );
-    
-    renderer = new THREE.WebGLRenderer({ 
-        canvas: document.getElementById('game-canvas'),
-        antialias: true 
-    });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    
-    createGround();
-    
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-    
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 20, 10);
-    scene.add(directionalLight);
-    
-    // Add landscape elements for perspective
-    createLandscapeElements();
-    
-    // Create player's Numberblock
-    playerNumberblock = createPlayerNumberblock(scene, 1);
-
-    // Initialize the HUD display with the starting value
-    updatePlayerDisplay(1);
-    
-    // Create static Numberblock for operator application
-    staticNumberblock = createStaticNumberblock(2, { x: 0, z: -5 });
-    console.log("Static Numberblock created with value: 2");
-
-    // Initialize operator system
-    window.camera = camera; // Make camera available for operator billboarding
-    operatorManager = new OperatorManager(scene);
-
-    // Initialize FPS controls with proper look
-    controls = initControls(camera, renderer.domElement);
-    
-    // CRITICAL FIX: Explicitly set position on controls object (not camera directly)
-    controls.getObject().position.set(0, 2, 5);
-    scene.add(controls.getObject());
-    
-    // Initialize collision detection
-    if (typeof addCollidableObject === 'function') {
-        addCollidableObject(playerNumberblock.mesh);
-        addCollidableObject(staticNumberblock.mesh);
-        console.log("Collision objects registered");
-    } else {
-        console.error("Collision functions not available!");
-    }
-    
-    clock = new THREE.Clock();
-    window.addEventListener('resize', onWindowResize);
-    
-    // CRITICAL FIX: Explicitly call onWindowResize to ensure camera's projection matrix is correct initially
-    onWindowResize();
-    
-    // Create HUD elements
-    createHUD();
-    
-    // Create random Numberblocks around the map
-    createRandomNumberblocks();
-    
-    animate();
-}
-
-// Create the ground plane
-function createGround() {
-    // Create a large flat plane for the ground
-    const groundGeometry = new THREE.BoxGeometry(200, 0.1, 200);
-    const groundMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x7CFC00, // Lawn green color
-        roughness: 0.8,
-        metalness: 0.2
-    });
-    
-    ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.position.y = -0.05; // Move it slightly down to center it
-    scene.add(ground);
-}
-
-// Create random landscape elements for perspective
-function createLandscapeElements() {
-    // Define bright colors that match Numberblocks aesthetic
-    const colors = [
-        0xFF0000, // Red (One)
-        0xFFA500, // Orange (Two)
-        0xFFFF00, // Yellow (Three)
-        0x00FF00, // Green (Four)
-        0x0000FF, // Blue (Five)
-        0x800080, // Purple (Six)
-        0xFFC0CB, // Pink (Seven)
-        0xA52A2A, // Brown (Eight)
-        0x808080  // Grey (Nine)
-    ];
-    
-    // Create 120 random objects (increased from 30 for the larger world)
-    for (let i = 0; i < 120; i++) {
-        let geometry, material, mesh;
-        const shapeType = Math.floor(Math.random() * 4); // 0-3 for different shapes
-        const colorIndex = Math.floor(Math.random() * colors.length);
-        const color = colors[colorIndex];
-        
-        // Create different shapes
-        switch (shapeType) {
-            case 0: // Cube (like Numberblock parts)
-                const size = 0.5 + Math.random() * 1.5;
-                geometry = new THREE.BoxGeometry(size, size, size);
-                break;
-            case 1: // Cylinder
-                const radius = 0.3 + Math.random() * 1;
-                const height = 1 + Math.random() * 3;
-                geometry = new THREE.CylinderGeometry(radius, radius, height, 16);
-                break;
-            case 2: // Sphere
-                const sphereRadius = 0.5 + Math.random() * 1;
-                geometry = new THREE.SphereGeometry(sphereRadius, 16, 16);
-                break;
-            case 3: // Cone
-                const coneRadius = 0.5 + Math.random() * 1;
-                const coneHeight = 1 + Math.random() * 2;
-                geometry = new THREE.ConeGeometry(coneRadius, coneHeight, 16);
-                break;
-        }
-        
-        // Create material with random color
-        material = new THREE.MeshStandardMaterial({
-            color: color,
-            roughness: 0.7,
-            metalness: 0.2
-        });
-        
-        // Create and position the mesh
-        mesh = new THREE.Mesh(geometry, material);
-        
-        // Position randomly on the ground plane (within a 180x180 area)
-        // Keep away from center where player spawns
-        let posX, posZ;
-        do {
-            posX = (Math.random() * 180) - 90;
-            posZ = (Math.random() * 180) - 90;
-        } while (Math.abs(posX) < 8 && Math.abs(posZ) < 8); // Increased spawn area protection
-        
-        mesh.position.set(posX, 0, posZ);
-        
-        // Add random rotation for more variety
-        mesh.rotation.y = Math.random() * Math.PI * 2;
-        
-        // Add to scene
-        scene.add(mesh);
-    }
-    
-    // Add some trees as landmarks
-    createTrees();
-}
-
-// Create simple trees as landmarks
-function createTrees() {
-    for (let i = 0; i < 40; i++) {
-        // Create trunk
-        const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.5, 2, 8);
-        const trunkMaterial = new THREE.MeshStandardMaterial({
-            color: 0x8B4513, // Brown
-            roughness: 0.9
-        });
-        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        
-        // Create foliage (as a cone)
-        const foliageGeometry = new THREE.ConeGeometry(1.5, 3, 8);
-        const foliageMaterial = new THREE.MeshStandardMaterial({
-            color: 0x228B22, // Forest green
-            roughness: 0.8
-        });
-        const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
-        foliage.position.y = 2.5; // Position on top of trunk
-        
-        // Create tree group
-        const tree = new THREE.Group();
-        tree.add(trunk);
-        tree.add(foliage);
-        
-        // Position randomly on the ground plane but away from center
-        let posX, posZ, distance;
-        do {
-            posX = (Math.random() * 180) - 90;
-            posZ = (Math.random() * 180) - 90;
-            distance = Math.sqrt(posX * posX + posZ * posZ);
-        } while (distance < 10); // Keep trees away from spawn point
-        
-        tree.position.set(posX, 1, posZ); // Position with trunk base on ground
-        
-        // Add to scene
-        scene.add(tree);
-    }
-}
-
-// Create HUD elements
-function createHUD() {
-    // Player's number display
-    const valueDisplay = document.createElement('div');
-    valueDisplay.id = 'value-display';
-    valueDisplay.style.position = 'absolute';
-    valueDisplay.style.bottom = '20px';
-    valueDisplay.style.left = '20px';
-    valueDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    valueDisplay.style.color = 'white';
-    valueDisplay.style.padding = '10px 20px';
-    valueDisplay.style.borderRadius = '5px';
-    valueDisplay.style.fontFamily = 'Arial, sans-serif';
-    valueDisplay.style.fontSize = '24px';
-    valueDisplay.style.fontWeight = 'bold';
-    valueDisplay.innerHTML = 'Value: 1';
-    document.body.appendChild(valueDisplay);
-
-    // Operator display
-    operatorDisplay = document.createElement('div');
-    operatorDisplay.id = 'operator-display';
-    operatorDisplay.style.position = 'absolute';
-    operatorDisplay.style.bottom = '20px';
-    operatorDisplay.style.right = '20px';
-    operatorDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    operatorDisplay.style.color = 'white';
-    operatorDisplay.style.padding = '10px 20px';
-    operatorDisplay.style.borderRadius = '5px';
-    operatorDisplay.style.fontFamily = 'Arial, sans-serif';
-    operatorDisplay.style.fontSize = '24px';
-    operatorDisplay.style.fontWeight = 'bold';
-    operatorDisplay.innerHTML = 'Current Operator: None';
-    document.body.appendChild(operatorDisplay);
-    
-    // View mode display
-    const viewModeDisplay = document.createElement('div');
-    viewModeDisplay.id = 'view-mode-display';
-    viewModeDisplay.style.position = 'absolute';
-    viewModeDisplay.style.top = '20px';
-    viewModeDisplay.style.left = '50%';
-    viewModeDisplay.style.transform = 'translateX(-50%)';
-    viewModeDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    viewModeDisplay.style.color = 'white';
-    viewModeDisplay.style.padding = '10px 20px';
-    viewModeDisplay.style.borderRadius = '5px';
-    viewModeDisplay.style.fontFamily = 'Arial, sans-serif';
-    viewModeDisplay.style.fontSize = '20px';
-    viewModeDisplay.style.fontWeight = 'bold';
-    viewModeDisplay.style.transition = 'opacity 1s';
-    viewModeDisplay.style.opacity = '0';
-    viewModeDisplay.innerHTML = 'First Person View';
-    document.body.appendChild(viewModeDisplay);
-}
-
-// Update the player's number display in the HUD
-function updatePlayerDisplay(value) {
-    const valueDisplay = document.getElementById('value-display');
-    if (valueDisplay) {
-        valueDisplay.innerHTML = `Value: ${value}`;
-    }
-}
-
-// Update operator display
-function updateOperatorDisplay(operatorType) {
-    if (operatorDisplay) {
-        if (operatorType) {
-            operatorDisplay.innerHTML = operatorType === 'plus' ? '+ Add' : '- Subtract';
-            operatorDisplay.style.color = operatorType === 'plus' ? '#00FF00' : '#FF0000';
-        } else {
-            operatorDisplay.innerHTML = 'Current Operator: None';
-            operatorDisplay.style.color = 'white';
-        }
-    }
-}
-
-// Create random Numberblocks around the map
-function createRandomNumberblocks() {
-    const numBlocks = 15; // Create 15 random Numberblocks
-    
-    for (let i = 0; i < numBlocks; i++) {
-        // Create a Numberblock with random value between 1 and 20
-        const value = Math.floor(Math.random() * 20) + 1;
-        const numberblock = new Numberblock(value);
-        
-        // Position randomly, away from player spawn
-        let posX, posZ;
-        do {
-            posX = (Math.random() * 40) - 20;
-            posZ = (Math.random() * 40) - 20;
-        } while (
-            Math.abs(posX) < 5 && 
-            Math.abs(posZ) < 5
-        );
-        
-        // Position the Numberblock with its base at ground level
-        numberblock.mesh.position.set(posX, numberblock.blockSize / 2, posZ);
-        scene.add(numberblock.mesh);
-        numberblocks.push(numberblock);
-        
-        if (typeof addCollidableObject === 'function') {
-            addCollidableObject(numberblock.mesh);
-        }
-    }
-}
-
-// Create a static Numberblock for testing
-function createStaticNumberblock(value = 2, position = { x: 0, z: -5 }) {
-    const numberblock = new Numberblock(value);
-    numberblock.mesh.position.set(position.x, numberblock.blockSize / 2, position.z);
-    scene.add(numberblock.mesh);
-    return numberblock;
-}
-
-// Create random shapes for the landscape
-function createRandomShapes() {
-    const numShapes = 30;
-    const shapes = [];
-    
-    for (let i = 0; i < numShapes; i++) {
-        let geometry, mesh;
-        const shapeType = Math.floor(Math.random() * 4); // 0: cube, 1: cylinder, 2: sphere, 3: cone
-        
-        // Create random shape
-        switch (shapeType) {
-            case 0: // Cube
-                geometry = new THREE.BoxGeometry(1, 1, 1);
-                break;
-            case 1: // Cylinder
-                geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
-                break;
-            case 2: // Sphere
-                geometry = new THREE.SphereGeometry(0.5, 16, 16);
-                break;
-            case 3: // Cone
-                geometry = new THREE.ConeGeometry(0.5, 1, 16);
-                break;
-        }
-        
-        // Create material with random color
-        const material = new THREE.MeshStandardMaterial({
-            color: Math.random() * 0xFFFFFF,
-            roughness: 0.7,
-            metalness: 0.3
-        });
-        
-        mesh = new THREE.Mesh(geometry, material);
-        
-        // Position randomly on the ground plane (within a 40x40 area)
-        // Keep away from center where player spawns
-        let posX, posZ;
-        do {
-            posX = (Math.random() * 40) - 20;
-            posZ = (Math.random() * 40) - 20;
-        } while (
-            Math.abs(posX) < 5 && 
-            Math.abs(posZ) < 5
-        );
-        
-        // Calculate Y position based on the shape's height
-        let posY;
-        if (shapeType === 0) { // Cube
-            posY = mesh.geometry.parameters.height / 2;
-        } else if (shapeType === 1) { // Cylinder
-            posY = mesh.geometry.parameters.height / 2;
-        } else if (shapeType === 2) { // Sphere
-            posY = mesh.geometry.parameters.radius;
-        } else { // Cone
-            posY = mesh.geometry.parameters.height / 2;
-        }
-        
-        mesh.position.set(posX, posY, posZ);
-        
-        // Add random rotation for more variety
-        mesh.rotation.y = Math.random() * Math.PI * 2;
-        
-        scene.add(mesh);
-        shapes.push(mesh);
-        
-        // Make it collidable
-        if (typeof addCollidableObject === 'function') {
-            addCollidableObject(mesh);
-        }
-    }
-    
-    return shapes;
-}
-
-// Create player Numberblock and add it to the scene
-function createPlayerNumberblock(scene, value = 1) {
-    const playerBlock = new Numberblock(value);
-    playerBlock.mesh.position.set(0, playerBlock.blockSize / 2, 0); // Start at origin, on ground
-    scene.add(playerBlock.mesh);
-    return playerBlock;
-}
-
-// Handle window resize
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-// Animation loop
-function animate() {
-    requestAnimationFrame(animate);
-    const delta = clock.getDelta();
-
-    if (controls) updateControls(controls, delta);
-    
-    // In first-person, update Numberblock position to match camera
-    // In third-person, handle camera following Numberblock
-    if (window.isFirstPerson) {
-        updatePlayerPosition();
-    } else {
-        // In third-person, update player position directly
-        updatePlayerPositionThirdPerson(delta);
-        updateThirdPersonCamera();
-    }
-
-    checkOperatorCollisions();
-    checkNumberblockCollisions();
-
-    renderer.render(scene, camera);
-}
-
-// Update player position and rotation based on controls - STANDARD FPS MECHANICS
-function updatePlayerPosition() {
-    if (!playerNumberblock || !controls) return;
-
-    const controlsObject = controls.getObject();
-
-    // Position Numberblock under camera based on height
-    const numberblockHeight = playerNumberblock.getHeight();
-    playerNumberblock.mesh.position.set(
-        controlsObject.position.x,
-        controlsObject.position.y - numberblockHeight / 2,
-        controlsObject.position.z
-    );
-
-    // Get camera direction vector and calculate rotation
-    // This addresses axis issues by deriving rotation from direction vector
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(controlsObject.quaternion);
-    direction.y = 0; // Zero out vertical component
-    direction.normalize();
-    
-    // Calculate rotation from direction vector
-    const rotationY = Math.atan2(direction.x, direction.z);
-    playerNumberblock.mesh.rotation.set(0, rotationY, 0);
-}
-
-// Update player position in third-person mode
-function updatePlayerPositionThirdPerson(delta) {
-    if (!playerNumberblock || !controls) return;
-
-    const moveSpeed = 5.0; // Movement speed
-    const rotationSpeed = 2.0; // Rotation speed for Q/E keys
-
-    // Get camera's current direction vectors
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).setY(0).normalize();
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).setY(0).normalize();
-
-    // Calculate desired movement direction from keyboard input
-    const movement = new THREE.Vector3();
-    if (moveForward) movement.add(forward);
-    if (moveBackward) movement.sub(forward);
-    if (moveLeft) movement.sub(right);
-    if (moveRight) movement.add(right);
-
-    movement.normalize().multiplyScalar(moveSpeed * delta);
-
-    // Update player position
-    playerNumberblock.mesh.position.add(movement);
-
-    // Rotate player using Q/E keys
-    if (turnLeft) playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
-    if (turnRight) playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
-
-    // Rotate player to face movement direction if moving (and no manual rotation with Q/E)
-    if (movement.lengthSq() > 0.0001 && !turnLeft && !turnRight) {
-        const targetAngle = Math.atan2(movement.x, movement.z);
-        playerNumberblock.mesh.rotation.y = targetAngle;
-    }
-}
-
-// Update camera position in third-person mode
-function updateThirdPersonCamera() {
-    if (!playerNumberblock || !playerNumberblock.mesh) return;
-
-    const distance = 12;      // Camera distance behind the player
-    const heightOffset = 8;   // Height offset above the player
-    const smoothing = 0.1;    // Smooth camera motion factor
-    const rotationSpeed = 0.05;
-
-    // Initialize the angle if not set
-    if (typeof window.thirdPersonCameraAngle === 'undefined') {
-        window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
-    }
-
-    // Adjust camera angle with Q/E keys
-    if (turnLeft) window.thirdPersonCameraAngle += rotationSpeed;
-    if (turnRight) window.thirdPersonCameraAngle -= rotationSpeed;
-
-    // Calculate desired camera position explicitly without cumulative interpolation errors
-    const playerPos = playerNumberblock.mesh.position.clone();
-    const targetX = playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance;
-    const targetZ = playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance;
-    
-    // Ensure camera Y position is always exactly at height offset plus player's midpoint height
-    const targetY = playerNumberblock.mesh.position.y + heightOffset;
-
-    // Set camera position explicitly without smoothing vertically to prevent drift
-    camera.position.set(
-        THREE.MathUtils.lerp(camera.position.x, targetX, 0.1),
-        targetY, // No vertical smoothing
-        THREE.MathUtils.lerp(camera.position.z, targetZ, 0.1)
-    );
-
-    // Always look at the player's midpoint height directly
-    const lookAtY = playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2;
-    camera.lookAt(playerNumberblock.mesh.position.x, targetY - (heightOffset / 2), playerNumberblock.mesh.position.z);
-}
-
-// Switch to third-person view
-function switchToThirdPersonView() {
-    // Make sure the camera is only in one place at a time
-    if (camera.parent === controls.getObject()) {
-        // If camera is attached to controls, remove it first
-        controls.getObject().remove(camera);
-    }
-    
-    // Only add to scene if it's not already there
-    if (camera.parent !== scene) {
-        scene.add(camera);
-    }
-    
-    // Reset camera's up vector to ensure correct orientation
-    camera.up.set(0, 1, 0);
-    
-    // Initialize third-person camera angle based on current player rotation
-    // Use + Math.PI to position camera behind player
-    window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
-    
-    // Set initial camera position immediately to avoid gradual transition
-    const playerPos = playerNumberblock.mesh.position.clone();
-    const distance = 12;
-    const height = 8;
-    
-    camera.position.set(
-        playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance,
-        playerPos.y + height,
-        playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance
-    );
-    
-    // Look at player immediately
-    const targetY = playerPos.y + playerNumberblock.getHeight() / 2;
-    camera.lookAt(playerPos.x, targetY, playerPos.z);
-    
-    // Setup mouse controls for third-person camera rotation
-    if (!window.thirdPersonMouseHandler) {
-        window.thirdPersonMouseHandler = function(event) {
-            // Skip processing extremely small movements to prevent drift
-            if (Math.abs(event.movementX) > 0.5) {
-                window.thirdPersonCameraAngle -= event.movementX * 0.002;
-            }
-        };
-    }
-    
-    // Activate third-person mouse controls using the pointer lock events
-    document.addEventListener('mousemove', window.thirdPersonMouseHandler);
-    window.thirdPersonMouseControlsActive = true;
-    
-    // Make sure pointer is locked
-    if (!controls.isLocked) {
-        controls.lock();
-    }
-}
-
-// Check for collisions between player's Numberblock and other Numberblocks
-function checkNumberblockCollisions() {
-    if (!playerNumberblock || !playerNumberblock.mesh) return;
-    
-    const playerBox = new THREE.Box3().setFromObject(playerNumberblock.mesh);
-    
-    // Check collision with static Numberblock
-    if (staticNumberblock && staticNumberblock.mesh) {
-        const staticBox = new THREE.Box3().setFromObject(staticNumberblock.mesh);
-        if (playerBox.intersectsBox(staticBox)) {
-            // Only handle collision if we have an operator
-            if (operatorManager && operatorManager.getHeldOperator()) {
-                handleNumberblockCollision(staticNumberblock);
-                
-                // Remove the static Numberblock
-                scene.remove(staticNumberblock.mesh);
-                staticNumberblock = null;
-                
-                // Create a new static Numberblock
-                const value = Math.floor(Math.random() * 20) + 1;
-                staticNumberblock = createStaticNumberblock(value, { x: 0, z: -5 });
-                
-                // Position it randomly, away from the player
-                let posX, posZ;
-                do {
-                    posX = (Math.random() * 40) - 20;
-                    posZ = (Math.random() * 40) - 20;
-                } while (
-                    Math.abs(posX - playerNumberblock.mesh.position.x) < 5 && 
-                    Math.abs(posZ - playerNumberblock.mesh.position.z) < 5
-                );
-                
-                staticNumberblock.mesh.position.set(posX, staticNumberblock.blockSize / 2, posZ);
-                scene.add(staticNumberblock.mesh);
-                
-                if (typeof addCollidableObject === 'function') {
-                    addCollidableObject(staticNumberblock.mesh);
-                }
-            }
-        }
-    }
-    
-    // Check collisions with random Numberblocks
-    for (let i = numberblocks.length - 1; i >= 0; i--) {
-        const numberblock = numberblocks[i];
-        if (!numberblock || !numberblock.mesh) continue;
-        
-        const blockBox = new THREE.Box3().setFromObject(numberblock.mesh);
-        if (playerBox.intersectsBox(blockBox)) {
-            // Only handle collision if we have an operator
-            if (operatorManager && operatorManager.getHeldOperator()) {
-                handleNumberblockCollision(numberblock);
-                
-                // Remove the collided Numberblock
-                scene.remove(numberblock.mesh);
-                numberblocks.splice(i, 1);
-                
-                // Create a new Numberblock to replace it
-                const value = Math.floor(Math.random() * 20) + 1;
-                const newBlock = new Numberblock(value);
-                
-                // Position it randomly, away from the player
-                let posX, posZ;
-                do {
-                    posX = (Math.random() * 40) - 20;
-                    posZ = (Math.random() * 40) - 20;
-                } while (
-                    Math.abs(posX - playerNumberblock.mesh.position.x) < 5 && 
-                    Math.abs(posZ - playerNumberblock.mesh.position.z) < 5
-                );
-                
-                newBlock.mesh.position.set(posX, newBlock.blockSize / 2, posZ);
-                scene.add(newBlock.mesh);
-                numberblocks.push(newBlock);
-                
-                if (typeof addCollidableObject === 'function') {
-                    addCollidableObject(newBlock.mesh);
-                }
-            }
-        }
-    }
-}
-
-// Handle collision with a Numberblock
-function handleNumberblockCollision(hitNumberblock) {
-    // Only apply operation if we have an operator
-    const operatorType = operatorManager.getHeldOperator();
-    if (operatorType) {
-        const oldValue = playerNumberblock.value;
-        let newValue;
-        
-        if (operatorType === 'plus') {
-            newValue = oldValue + hitNumberblock.value;
-        } else {
-            newValue = oldValue - hitNumberblock.value;
-        }
-        
-        // Ensure value stays positive
-        newValue = Math.max(1, newValue);
-        
-        // Update player's Numberblock
-        playerNumberblock.setValue(newValue);
-        updatePlayerDisplay(newValue);
-        
-        // Clear the held operator
-        operatorManager.clearHeldOperator();
-        updateOperatorDisplay(null);
-        
-        // Update camera position for new height
-        updateCameraForNumberblockChange();
-        
-        console.log(`Applied ${operatorType} operation: ${oldValue} ${operatorType === 'plus' ? '+' : '-'} ${hitNumberblock.value} = ${newValue}`);
-    }
-}
-
-// Update camera position after Numberblock changes size
-function updateCameraForNumberblockChange() {
-    if (controls && playerNumberblock) {
-        const controlsObject = controls.getObject();
-        const numberblockHeight = playerNumberblock.getHeight();
-        
-        // Calculate new appropriate camera height
-        const verticalOffset = Math.max(1.5, numberblockHeight * 0.6);
-        const desiredCameraHeight = playerNumberblock.mesh.position.y + verticalOffset;
-        
-        // Set camera to new height
-        controlsObject.position.y = desiredCameraHeight;
-        
-        // Ensure camera doesn't go below minimum height
-        const minCameraHeight = 1.0;
-        if (controlsObject.position.y < minCameraHeight) {
-            controlsObject.position.y = minCameraHeight;
-        }
-    }
-}
-
-// Check for collisions between player's Numberblock and operators
-function checkOperatorCollisions() {
-    try {
-        if (!playerNumberblock || !operatorManager) return;
-        
-        const playerBox = new THREE.Box3().setFromObject(playerNumberblock.mesh);
-        if (!playerBox) {
-            console.warn("Could not create player's bounding box");
-            return;
-        }
-        
-        // Get all operators
-        const operators = operatorManager.getOperators();
-        
-        // Check collision with each operator
-        operators.forEach(operator => {
-            const operatorBox = new THREE.Box3().setFromObject(operator.mesh);
-            if (playerBox.intersectsBox(operatorBox)) {
-                // Set the held operator and update display
-                operatorManager.setHeldOperator(operator, playerNumberblock);
-                updateOperatorDisplay(operator.type);
-            }
-        });
-    } catch (error) {
-        console.error("Error in checkOperatorCollisions:", error);
-    }
-}
-
-// Add view toggle with V key
-document.addEventListener('keydown', (event) => {
-    if (event.code === 'KeyV') {
-        window.isFirstPerson = !window.isFirstPerson;
-
-        const controlsInfo = document.getElementById('controls-info');
-        if (controlsInfo) controlsInfo.style.display = 'none'; // Always hide in both modes
-
-        if (window.isFirstPerson) {
-            // Switch to first-person view
-            
-            // Remove any third-person mouse control listeners if they exist
-            if (window.thirdPersonMouseControlsActive) {
-                document.removeEventListener('mousemove', window.thirdPersonMouseHandler);
-                window.thirdPersonMouseControlsActive = false;
-            }
-            
-            // Make sure the camera is only in one place at a time
-            // Check if camera is already part of controls before adding it
-            if (camera.parent === scene) {
-                scene.remove(camera);
-                
-                // Reset camera and attach to controls
-                // IMPORTANT: Only add the camera if it's not already a child
-                if (!controls.getObject().children.includes(camera)) {
-                    controls.getObject().add(camera);
-                    camera.position.set(0, 0, 0);
-                    camera.rotation.set(0, 0, 0);
-                }
-            }
-            
-            // Position controls at Numberblock's head position
-            controls.getObject().position.copy(playerNumberblock.mesh.position);
-            controls.getObject().position.y += playerNumberblock.getHeight() / 2;
-            
-            // Set rotation to match Numberblock exactly
-            controls.getObject().rotation.y = playerNumberblock.mesh.rotation.y;
-            
-            // Make sure pointer is locked
-            if (!controls.isLocked) {
-                controls.lock();
-            }
-        } else {
-            // Use dedicated function for switching to third-person
-            switchToThirdPersonView();
-        }
-
-        camera.updateProjectionMatrix();
-
-        // Update HUD view mode display
-        const viewModeDisplay = document.getElementById('view-mode-display');
-        if (viewModeDisplay) {
-            viewModeDisplay.textContent = window.isFirstPerson ? 'First Person View' : 'Third Person View';
-            viewModeDisplay.style.opacity = '1';
-            setTimeout(() => viewModeDisplay.style.opacity = '0', 2000);
-        }
-    }
-});
-
-// Initialize the scene when the page loads
-document.addEventListener('DOMContentLoaded', init);
  
  
 ===================================================== 
-FILE: js\numberblock.js 
+FILE: client\js\main.js 
 ===================================================== 
  
-// Numberblocks game - Numberblock model implementation
-
-class Numberblock {
-    constructor(value = 1, color = null) {
-        this.value = value;
-        this.mesh = new THREE.Group();
-        this.blockSize = 1; // Size of each cube
-        this.blockSpacing = 0.01; // Small gap between blocks
-        this.totalHeight = 0;
-        
-        // Set color based on the Numberblock value, following show colors if no color specified
-        if (!color) {
-            this.color = this.getColorForNumber(value);
-        } else {
-            this.color = color;
-        }
-        
-        this.createNumberblock();
-    }
-    
-    // Get the standard Numberblocks color based on value
-    getColorForNumber(number) {
-        const colors = {
-            1: 0xFF0000,   // Red (One)
-            2: 0xFFA500,   // Orange (Two)
-            3: 0xFFFF00,   // Yellow (Three)
-            4: 0x00FF00,   // Green (Four)
-            5: 0x0000FF,   // Blue (Five)
-            6: 0x800080,   // Purple (Six)
-            7: 0xFFC0CB,   // Pink (Seven)
-            8: 0xA52A2A,   // Brown (Eight)
-            9: 0x808080    // Grey (Nine)
-        };
-        
-        // For numbers greater than 9, cycle through the colors or use white
-        return colors[number % 9] || 0xFFFFFF;
-    }
-    
-    // Create the complete Numberblock with all features
-    createNumberblock() {
-        this.mesh.clear(); // Clear any existing meshes
-        this.totalHeight = 0;
-        
-        // Create the stack of blocks
-        for (let i = 0; i < this.value; i++) {
-            const block = this.createBlock();
-            
-            // Position each block on top of the previous one
-            block.position.y = this.totalHeight;
-            this.totalHeight += this.blockSize + this.blockSpacing;
-            
-            this.mesh.add(block);
-            
-            // Add face only to the top block
-            if (i === this.value - 1) {
-                const face = this.createFace();
-                block.add(face);
-            }
-            
-            // Add feet to the bottom block
-            if (i === 0) {
-                const leftFoot = this.createFoot('left');
-                const rightFoot = this.createFoot('right');
-                block.add(leftFoot);
-                block.add(rightFoot);
-            }
-        }
-        
-        // Add arms to the middle block or the second block from the bottom if more than 3 blocks
-        const armBlockIndex = this.value <= 3 ? Math.floor(this.value / 2) : 1;
-        if (this.value > 0 && armBlockIndex < this.value) {
-            const leftArm = this.createArm('left');
-            const rightArm = this.createArm('right');
-            
-            this.mesh.children[armBlockIndex].add(leftArm);
-            this.mesh.children[armBlockIndex].add(rightArm);
-        }
-        
-        // Set initial position to 0 - we'll handle positioning in the game logic
-        this.mesh.position.y = 0;
-    }
-    
-    // Get the height of the Numberblock (for physics calculations)
-    getHeight() {
-        // Return the total height calculated during creation
-        // If value is 0, return a minimum height
-        return this.value > 0 ? this.totalHeight - this.blockSpacing : this.blockSize;
-    }
-    
-    // Create a single block with the Numberblock's color
-    createBlock() {
-        const geometry = new THREE.BoxGeometry(this.blockSize, this.blockSize, this.blockSize);
-        const material = new THREE.MeshStandardMaterial({
-            color: this.color,
-            roughness: 0.7,
-            metalness: 0.2
-        });
-        
-        return new THREE.Mesh(geometry, material);
-    }
-    
-    // Create a face with eyes and mouth
-    createFace() {
-        const face = new THREE.Group();
-        
-        // Eyes (white spheres with black pupils)
-        const eyeSize = this.blockSize * 0.15;
-        const eyeSpacing = this.blockSize * 0.3;
-        const eyeHeight = this.blockSize * 0.1;
-        const eyeDepth = this.blockSize / 2 + 0.01; // Slightly in front of the face
-        
-        // Create and position left eye
-        const leftEye = this.createEye(eyeSize);
-        leftEye.position.set(-eyeSpacing, eyeHeight, eyeDepth);
-        face.add(leftEye);
-        
-        // Create and position right eye
-        const rightEye = this.createEye(eyeSize);
-        rightEye.position.set(eyeSpacing, eyeHeight, eyeDepth);
-        face.add(rightEye);
-        
-        // Mouth (curved line or small cylinder)
-        const mouthWidth = this.blockSize * 0.4;
-        const mouthHeight = this.blockSize * 0.1;
-        const mouthDepth = this.blockSize / 2 + 0.01; // Slightly in front of the face
-        const mouthY = -eyeHeight * 2; // Position below the eyes
-        
-        const mouthGeometry = new THREE.CylinderGeometry(
-            mouthHeight/2, mouthHeight/2, mouthWidth, 16, 1, false, 0, Math.PI
-        );
-        mouthGeometry.rotateZ(Math.PI / 2); // Rotate to correct orientation
-        
-        const mouthMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
-        mouth.position.set(0, mouthY, mouthDepth);
-        face.add(mouth);
-        
-        return face;
-    }
-    
-    // Create an eye (white sphere with black pupil)
-    createEye(size) {
-        const eye = new THREE.Group();
-        
-        // White part of the eye
-        const eyeWhiteGeometry = new THREE.SphereGeometry(size, 16, 16);
-        const eyeWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
-        const eyeWhite = new THREE.Mesh(eyeWhiteGeometry, eyeWhiteMaterial);
-        eye.add(eyeWhite);
-        
-        // Black pupil
-        const pupilSize = size * 0.5;
-        const pupilGeometry = new THREE.SphereGeometry(pupilSize, 16, 16);
-        const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const pupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-        pupil.position.z = size * 0.6; // Position the pupil slightly in front of the eye
-        eye.add(pupil);
-        
-        return eye;
-    }
-    
-    // Create an arm (left or right)
-    createArm(side) {
-        const arm = new THREE.Group();
-        
-        // Arm dimensions
-        const armLength = this.blockSize * 0.6;
-        const armWidth = this.blockSize * 0.2;
-        const armHeight = this.blockSize * 0.2;
-        
-        // Create the arm geometry
-        const armGeometry = new THREE.BoxGeometry(armLength, armHeight, armWidth);
-        const armMaterial = new THREE.MeshStandardMaterial({
-            color: this.color,
-            roughness: 0.7,
-            metalness: 0.2
-        });
-        
-        const armMesh = new THREE.Mesh(armGeometry, armMaterial);
-        
-        // Position the arm on the side of the block
-        const xOffset = (this.blockSize / 2 + armLength / 2) * (side === 'left' ? -1 : 1);
-        armMesh.position.set(xOffset, 0, 0);
-        
-        arm.add(armMesh);
-        
-        // Add a hand at the end of the arm
-        const handRadius = armWidth * 0.8;
-        const handGeometry = new THREE.SphereGeometry(handRadius, 16, 16);
-        const handMaterial = new THREE.MeshStandardMaterial({
-            color: 0xFFFFFF, // White hands
-            roughness: 0.7,
-            metalness: 0.2
-        });
-        
-        const hand = new THREE.Mesh(handGeometry, handMaterial);
-        
-        // Position the hand at the end of the arm
-        const handX = armLength / 2 * (side === 'left' ? -1 : 1);
-        hand.position.set(handX, 0, 0);
-        
-        // Name the hand for easy reference
-        hand.name = side + 'Hand';
-        
-        armMesh.add(hand);
-        
-        return arm;
-    }
-    
-    // Create a foot (left or right)
-    createFoot(side) {
-        const foot = new THREE.Group();
-        
-        // Foot dimensions
-        const footLength = this.blockSize * 0.4;
-        const footWidth = this.blockSize * 0.3;
-        const footHeight = this.blockSize * 0.15;
-        
-        // Create the foot geometry
-        const footGeometry = new THREE.BoxGeometry(footLength, footHeight, footWidth);
-        const footMaterial = new THREE.MeshStandardMaterial({
-            color: 0x000000, // Black feet
-            roughness: 0.7,
-            metalness: 0.2
-        });
-        
-        const footMesh = new THREE.Mesh(footGeometry, footMaterial);
-        
-        // Position the foot on the bottom of the block
-        const xOffset = (this.blockSize / 4) * (side === 'left' ? -1 : 1);
-        const yOffset = -this.blockSize / 2 - footHeight / 2;
-        const zOffset = this.blockSize / 4; // Push feet slightly forward
-        footMesh.position.set(xOffset, yOffset, zOffset);
-        
-        foot.add(footMesh);
-        
-        return foot;
-    }
-    
-    // Update the Numberblock value and regenerate the model
-    setValue(newValue) {
-        if (newValue < 1) newValue = 1; // Ensure minimum value of 1
-        if (newValue !== this.value) {
-            this.value = newValue;
-            this.color = this.getColorForNumber(newValue);
-            this.createNumberblock();
-        }
-    }
-    
-    // Update the position of the HTML number tag in render loop
-    updateNumberTagPosition(camera, renderer) {
-        // Previous functionality disabled - no longer using HTML elements for tags
-        // Now fully using the HUD we created in index.html and main.js
-    }
-    
-    // Dispose any allocated resources
-    dispose() {
-        // We no longer need to remove HTML elements since we aren't creating them
-    }
-}
-
-// Function to create a player Numberblock and add it to the scene
-function createPlayerNumberblock(scene, value = 1) {
-    // Create the Numberblock
-    const playerBlock = new Numberblock(value);
-    
-    // Position it slightly above the ground
-    const totalHeight = playerBlock.totalHeight;
-    playerBlock.mesh.position.y = totalHeight / 2;
-    
-    // Add to scene
-    scene.add(playerBlock.mesh);
-    
-    return playerBlock;
-}
-
-// Export for use in other modules
-if (typeof module !== 'undefined') {
-    module.exports = {
-        Numberblock,
-        createPlayerNumberblock
-    };
-} 
+ 
  
 ===================================================== 
-FILE: js\operator.js 
+FILE: client\js\network.js 
 ===================================================== 
  
-// Numberblocks game - Operator implementation
-
-// Class to represent mathematical operators (+ and -)
-class Operator {
-    constructor(type, scene) {
-        this.type = type; // 'plus' or 'minus'
-        this.scene = scene;
-        this.mesh = this.createOperatorMesh();
-        
-        // Add the operator to the scene
-        scene.add(this.mesh);
-        
-        // Set the radius for collision detection
-        this.collisionRadius = 0.5;
-    }
-    
-    // Create the 3D mesh for the operator
-    createOperatorMesh() {
-        const operatorGroup = new THREE.Group();
-        
-        // Create a semi-transparent white sphere as the base
-        const sphereGeometry = new THREE.SphereGeometry(0.5, 16, 16);
-        const sphereMaterial = new THREE.MeshStandardMaterial({
-            color: 0xFFFFFF, // White sphere
-            roughness: 0.3,
-            metalness: 0.2,
-            transparent: true, // Make it transparent
-            opacity: 0.6 // 60% opacity
-        });
-        
-        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-        operatorGroup.add(sphere);
-        
-        // Create the symbol geometry (+ or -) and place it in the center
-        const symbolColor = 0x000000; // Black symbol
-        const symbolMaterial = new THREE.MeshBasicMaterial({ color: symbolColor });
-        
-        if (this.type === 'plus') {
-            // Create a plus sign (+) using two cylinders
-            // Horizontal bar
-            const horizontalGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.7, 16);
-            horizontalGeometry.rotateZ(Math.PI / 2); // Rotate to make it horizontal
-            const horizontalBar = new THREE.Mesh(horizontalGeometry, symbolMaterial);
-            
-            // Vertical bar
-            const verticalGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.7, 16);
-            const verticalBar = new THREE.Mesh(verticalGeometry, symbolMaterial);
-            
-            operatorGroup.add(horizontalBar);
-            operatorGroup.add(verticalBar);
-        } else {
-            // Create a minus sign (-) using a single cylinder
-            const minusGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.7, 16);
-            minusGeometry.rotateZ(Math.PI / 2); // Rotate to make it horizontal
-            const minusBar = new THREE.Mesh(minusGeometry, symbolMaterial);
-            
-            operatorGroup.add(minusBar);
-        }
-        
-        // Add a soft glow effect
-        const glowGeometry = new THREE.SphereGeometry(0.6, 16, 16);
-        const glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0xFFFFFF, // White glow
-            transparent: true,
-            opacity: 0.2
-        });
-        
-        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-        operatorGroup.add(glow);
-        
-        // Add rotation animation that ensures the symbol stays visible
-        this.animate = (deltaTime) => {
-            // Instead of rotating around Y-axis, make the operator face the camera
-            if (window.camera) {
-                // Get direction to camera
-                const direction = new THREE.Vector3();
-                direction.subVectors(window.camera.position, operatorGroup.position).normalize();
-                
-                // Create a temporary up vector (world up)
-                const up = new THREE.Vector3(0, 1, 0);
-                
-                // Create a look-at matrix
-                const lookMatrix = new THREE.Matrix4();
-                lookMatrix.lookAt(operatorGroup.position, 
-                                  operatorGroup.position.clone().add(direction), 
-                                  up);
-                
-                // Convert to quaternion and apply
-                operatorGroup.quaternion.setFromRotationMatrix(lookMatrix);
-            } else {
-                // Default rotation if no camera
-                operatorGroup.rotation.y += deltaTime * 1.5;
-            }
-            
-            // Add a subtle floating animation
-            operatorGroup.position.y = Math.sin(Date.now() * 0.002) * 0.1 + 0.6; // Float between 0.5 and 0.7
-        };
-        
-        return operatorGroup;
-    }
-    
-    // Position the operator in the scene
-    setPosition(x, y, z) {
-        this.mesh.position.set(x, y, z);
-    }
-    
-    // Remove the operator from the scene
-    remove() {
-        this.scene.remove(this.mesh);
-        
-        // Clean up geometries and materials to prevent memory leaks
-        this.mesh.traverse((child) => {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-                if (Array.isArray(child.material)) {
-                    child.material.forEach(material => material.dispose());
-                } else {
-                    child.material.dispose();
-                }
-            }
-        });
-    }
-    
-    // Create a smaller version of the operator for holding
-    createHeldOperatorMesh() {
-        // Create a smaller version of the operator for holding
-        const scale = 0.4; // Smaller scale for held operator
-        const heldMesh = this.createOperatorMesh();
-        heldMesh.scale.set(scale, scale, scale);
-        
-        return heldMesh;
-    }
-}
-
-// Class to manage all operators in the game
-class OperatorManager {
-    constructor(scene) {
-        this.scene = scene;
-        this.operators = [];
-        this.spawnTimer = 0;
-        this.spawnInterval = this.getRandomSpawnInterval();
-        this.maxOperators = 10; // Maximum number of operators allowed at once
-        this.groundY = 0; // Y position of the ground
-        this.mapSize = 40; // Size of the playable area (40x40)
-        
-        // Player's held operator
-        this.heldOperator = null;
-        this.heldOperatorMesh = null;
-        
-        // Debug message to check initialization
-        console.log("OperatorManager initialized");
-    }
-    
-    // Get a random spawn interval between 5-10 seconds
-    getRandomSpawnInterval() {
-        return 5 + Math.random() * 5; // 5-10 seconds
-    }
-    
-    // Update function to be called in animation loop
-    update(deltaTime) {
-        // Update existing operators
-        this.operators.forEach(operator => {
-            operator.animate(deltaTime);
-        });
-        
-        // Check if it's time to spawn a new operator
-        this.spawnTimer += deltaTime;
-        if (this.spawnTimer >= this.spawnInterval && this.operators.length < this.maxOperators) {
-            this.spawnOperator();
-            this.spawnTimer = 0;
-            this.spawnInterval = this.getRandomSpawnInterval();
-        }
-    }
-    
-    // Spawn a new operator at a random position
-    spawnOperator() {
-        // Randomly choose between plus and minus
-        const type = Math.random() > 0.5 ? 'plus' : 'minus';
-        
-        // Create the operator
-        const operator = new Operator(type, this.scene);
-        
-        // Set a random position on the ground
-        const posX = (Math.random() * this.mapSize) - (this.mapSize / 2);
-        const posZ = (Math.random() * this.mapSize) - (this.mapSize / 2);
-        
-        // Set the Y position slightly above the ground to prevent z-fighting
-        operator.setPosition(posX, this.groundY + 0.6, posZ);
-        
-        // Add to the array of active operators
-        this.operators.push(operator);
-        
-        console.log(`Spawned ${type} operator at (${posX.toFixed(2)}, ${this.groundY + 0.6}, ${posZ.toFixed(2)})`);
-        
-        return operator;
-    }
-    
-    // Remove an operator from the scene and the operators array
-    removeOperator(operator) {
-        const index = this.operators.indexOf(operator);
-        if (index !== -1) {
-            operator.remove();
-            this.operators.splice(index, 1);
-        }
-    }
-    
-    // Set the currently held operator
-    setHeldOperator(operator, numberblock) {
-        // Clear any previously held operator
-        this.clearHeldOperator();
-        
-        // Store the operator type
-        this.heldOperator = operator.type;
-        console.log("Setting held operator type:", this.heldOperator); // Debug log
-        
-        // Create a smaller version of the operator for holding
-        this.heldOperatorMesh = operator.createHeldOperatorMesh();
-        
-        // Attach the operator to the Numberblock's right hand
-        if (numberblock && numberblock.mesh) {
-            // Find the right hand in the Numberblock's mesh hierarchy
-            let rightHand = null;
-            
-            // Look for the arm block (should be the second block for Numberblocks with more than 3 blocks)
-            const armBlockIndex = numberblock.value <= 3 ? Math.floor(numberblock.value / 2) : 1;
-            
-            // Find the right hand if there are enough blocks
-            if (numberblock.value > 0 && armBlockIndex < numberblock.value) {
-                // Get the arm block
-                const armBlock = numberblock.mesh.children[armBlockIndex];
-                
-                // Search for the rightHand in the arm block's children
-                armBlock.traverse((child) => {
-                    if (child.name === 'rightHand') {
-                        rightHand = child;
-                    }
-                });
-                
-                // If we found the right hand, attach the operator to it
-                if (rightHand) {
-                    // Position the held operator slightly offset from the hand
-                    this.heldOperatorMesh.position.set(0, 0.2, 0);
-                    
-                    // Add the held operator mesh to the right hand
-                    rightHand.add(this.heldOperatorMesh);
-                    
-                    console.log(`Attached ${this.heldOperator} operator to Numberblock's right hand`);
-                } else {
-                    // Fallback: Add to the scene if we can't find the hand
-                    console.warn("Could not find rightHand - adding operator to scene");
-                    this.scene.add(this.heldOperatorMesh);
-                }
-            } else {
-                // Fallback: Add to the scene if Numberblock doesn't have arms
-                console.warn("Numberblock doesn't have enough blocks for arms - adding operator to scene");
-                this.scene.add(this.heldOperatorMesh);
-            }
-        } else {
-            // Add to the scene if no Numberblock is provided
-            this.scene.add(this.heldOperatorMesh);
-        }
-        
-        // Remove the original operator from the scene
-        this.removeOperator(operator);
-        
-        console.log(`Now holding ${this.heldOperator} operator`); // Debug log
-        return this.heldOperator;
-    }
-    
-    // Clear the currently held operator
-    clearHeldOperator() {
-        if (this.heldOperatorMesh) {
-            // Remove from parent (either scene or hand)
-            if (this.heldOperatorMesh.parent) {
-                this.heldOperatorMesh.parent.remove(this.heldOperatorMesh);
-            } else {
-                this.scene.remove(this.heldOperatorMesh);
-            }
-            
-            this.heldOperatorMesh = null;
-        }
-        this.heldOperator = null;
-        console.log("Cleared held operator"); // Debug log
-    }
-    
-    // Get the currently held operator type
-    getHeldOperator() {
-        console.log("Getting held operator type:", this.heldOperator); // Debug log
-        return this.heldOperator;
-    }
-    
-    // Attach the held operator to a Numberblock
-    attachOperatorToNumberblock(numberblock) {
-        if (this.heldOperatorMesh && numberblock) {
-            // The numberblock will handle the positioning
-            return {
-                type: this.heldOperator,
-                mesh: this.heldOperatorMesh
-            };
-        }
-        return null;
-    }
-    
-    // Clear all operators
-    clearAll() {
-        while (this.operators.length > 0) {
-            this.removeOperator(this.operators[0]);
-        }
-        this.clearHeldOperator();
-    }
-    
-    // Get all operators for collision checking
-    getOperators() {
-        return this.operators;
-    }
-}
-
-// Export for use in other modules
-if (typeof module !== 'undefined') {
-    module.exports = {
-        Operator,
-        OperatorManager
-    };
-}
+ 
+ 
+===================================================== 
+FILE: client\js\numberblock.js 
+===================================================== 
+ 
+ 
+ 
+===================================================== 
+FILE: client\js\operator.js 
+===================================================== 
+ 
  
  

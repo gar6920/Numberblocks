@@ -110,12 +110,41 @@ function toggleCameraView() {
         viewToggleBtn.innerText = window.isFirstPerson ? 'Switch to Third Person' : 'Switch to First Person';
     }
     
+    // Store the current position before switching views to ensure consistency
+    const currentPosition = playerNumberblock ? playerNumberblock.mesh.position.clone() : null;
+    const currentRotation = playerNumberblock ? playerNumberblock.mesh.rotation.y : 0;
+    
     if (window.isFirstPerson) {
         debug('Switched to first-person view');
         switchToFirstPersonView();
     } else {
         debug('Switched to third-person view');
         switchToThirdPersonView();
+    }
+    
+    // After switching views, ensure position consistency
+    if (currentPosition && playerNumberblock) {
+        playerNumberblock.mesh.position.copy(currentPosition);
+        playerNumberblock.mesh.rotation.y = currentRotation;
+        
+        // If in first-person mode, also update controls position
+        if (window.isFirstPerson && controls) {
+            controls.getObject().position.set(
+                currentPosition.x,
+                currentPosition.y + 1.0, // Adjust for eye height
+                currentPosition.z
+            );
+        }
+        
+        // Force a position update to the server to ensure sync
+        if (typeof window.room !== 'undefined' && window.room) {
+            window.room.send("updatePosition", {
+                x: playerNumberblock.mesh.position.x,
+                y: playerNumberblock.mesh.position.y,
+                z: playerNumberblock.mesh.position.z,
+                rotation: playerNumberblock.mesh.rotation.y
+            });
+        }
     }
 }
 
@@ -479,7 +508,7 @@ function createStaticNumberblockVisual(id, blockData) {
         const blockMesh = new window.Numberblock(blockData.value);
         
         // Calculate the correct Y position (ground level + half height for proper alignment)
-        const yPos = blockData.y + (blockData.value / 2);
+        const yPos = 0;
         
         // Set position based on server data with adjusted y position
         blockMesh.mesh.position.set(blockData.x, yPos, blockData.z);

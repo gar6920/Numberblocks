@@ -1,310 +1,104 @@
-To address your query about enhancing the Numberblocks game with multiplayer features, I’ll outline a comprehensive plan based on the current single-player codebase. The goals are to separate client and server logic with a local development server, set up local multiplayer with split screens (still server-connected), add gamepad controls, and expand to network/internet multiplayer. Let’s tackle each step methodically.
+# Numberblocks Game - Multiplayer Implementation Plan
 
-# 1. Separate Client/Server Logic and Set Up a Local Development Server
+**Note: This is an updated implementation plan that focuses on the remaining tasks. The client-server setup with Colyseus has already been successfully implemented as documented in the architecture.md and progress.md files.**
 
-## Current State:
-The game is entirely client-side, running in the browser with Three.js handling rendering, and all logic (e.g., movement, collisions, operator interactions) executed locally in files like main.js, controls.js, numberblock.js, and operator.js. There’s no server component yet.
+## Completed Tasks:
+- ✅ Separate client and server logic
+- ✅ Set up local development server with Node.js
+- ✅ Implement Colyseus for WebSocket communication
+- ✅ Create room-based multiplayer structure
+- ✅ Establish server authority for game state
+- ✅ Implement player position synchronization
+- ✅ Set up basic player session management
+- ✅ Create client-side network module (network.js)
+- ✅ Integrate network state with Three.js rendering
+- ✅ Fix camera view synchronization issues
 
-## Goal:
-Separate the game into client and server components, with the server managing the authoritative game state and the client focusing on rendering and input handling. Set up a local development server to test this setup, preparing for future scalability.
+## Remaining Implementation Tasks:
 
-## Solution: Using Colyseus
-
-I recommend using Colyseus, a Node.js-based multiplayer game server framework that integrates well with JavaScript and Three.js. Here’s why:
-
-- **Real-Time Support**: Colyseus uses WebSockets for low-latency communication, ideal for real-time multiplayer.
-
-- **State Synchronization**: It provides built-in tools for syncing game state across clients, reducing the need to reinvent this logic.
-
-- **Scalability**: Designed for multiplayer games, it supports room management and can scale to network play later.
-
-- **Community and Docs**: It has solid documentation and examples, easing implementation.
-
-## Implementation Steps:
-
-### Server Setup
-
-1. **Initialize a Node.js Project**:
-   In your project root, run:
-   ```bash
-   npm init -y
-   npm install colyseus express
-   ```
-
-2. **Update package.json** with a start script:
-   ```json
-   "scripts": {
-     "start": "node server.js"
-   }
-   ```
-
-3. **Create server.js**:
-   ```javascript
-   const { Server } = require("colyseus");
-   const { Room } = require("colyseus");
-   const express = require("express");
-   const app = express();
-   const httpServer = require("http").createServer(app);
-
-   const gameServer = new Server({ server: httpServer });
-
-   // Define the game room
-   class NumberblocksRoom extends Room {
-     onCreate(options) {
-       this.setState({
-         players: {},
-         operators: []
-       });
-       this.maxClients = 4; // Adjust as needed
-     }
-
-     onJoin(client, options) {
-       this.state.players[client.sessionId] = {
-         x: 0,
-         y: 1,
-         z: 0,
-         value: 1,
-         operator: null
-       };
-       console.log(`${client.sessionId} joined`);
-     }
-
-     onMessage(client, message) {
-       const player = this.state.players[client.sessionId];
-       if (message.type === "move") {
-         // Validate movement
-         const speedLimit = 5 * 0.016; // Assuming 60 FPS
-         const dx = message.x - player.x;
-         const dz = message.z - player.z;
-         if (Math.sqrt(dx * dx + dz * dz) <= speedLimit) {
-           player.x = message.x;
-           player.y = message.y;
-           player.z = message.z;
-         }
-       } else if (message.type === "operator") {
-         player.operator = message.operator;
-       }
-     }
-
-     onLeave(client) {
-       delete this.state.players[client.sessionId];
-       console.log(`${client.sessionId} left`);
-     }
-   }
-
-   gameServer.define("numberblocks", NumberblocksRoom);
-   app.use(express.static(".")); // Serve client files
-   httpServer.listen(3000, () => console.log("Server running on port 3000"));
-
-4. **Directory Structure Update**:
-   - Move client files (index.html, css/, js/) under a client/ folder.
-   - Place server.js in the root.
-
-### Client Modifications
-
-1. **Install Colyseus Client**:
-   In the client/ folder:
-   ```bash
-   npm install colyseus.js
-   ```
-
-2. **Update main.js**:
-   Connect to the server and sync state:
-   ```javascript
-   const { Client } = require("colyseus.js");
-   const client = new Client("ws://localhost:3000");
-   let room;
-
-   async function init() {
-     room = await client.joinOrCreate("numberblocks");
-     console.log("Joined room:", room.sessionId);
-
-     room.onStateChange((state) => {
-       // Update local player and other players from server state
-       Object.entries(state.players).forEach(([id, data]) => {
-         if (id === room.sessionId) {
-           playerNumberblock.setValue(data.value);
-           playerNumberblock.mesh.position.set(data.x, data.y, data.z);
-         } else {
-           // Update or create other Numberblocks
-         }
-       });
-     });
-
-     // Existing scene setup...
-   }
-
-   function updateControls(controls, delta) {
-     if (controls.isLocked) {
-       const pos = controls.getObject().position;
-       room.send({ type: "move", x: pos.x, y: pos.y, z: pos.z });
-     }
-   }
-   ```
-
-3. **Run the Server**:
-   From the root:
-   ```bash
-   npm start
-   ```
-
-4. **Access the game** at http://localhost:3000/client/index.html.
-
-### Benefits:  
-- The server now holds the authoritative state, preventing client-side cheating.
-- Local testing is streamlined, and the setup scales to network play later.
-
-## Server Authority: Handling Discrepancies Between Client-Side Predictions and Server-Side Validation
-
-To handle discrepancies between client-side physics predictions and server-side validation, especially when operator collection changes a player's Numberblock value:
-
-- **Client-Side Prediction**: When a player collects an operator, the client immediately updates the Numberblock's value locally for instant feedback, making the game feel responsive.
-
-- **Server Validation**: The client sends the collection event to the server, which checks if the operator was available (e.g., not already collected). If valid, the server updates the game state and broadcasts the new value to all clients.
-
-- **Reconciliation**: If the server rejects the action (e.g., another player collected it first), it sends a correction to the client, which then adjusts the local state to match the server's authoritative version.
-
-This method ensures a balance between responsiveness and consistency, preventing cheating while keeping gameplay smooth.
-
-# 2. Set Up Local Multiplayer with Split Screens (Server-Connected)
+# 1. Player Customization and Identification
 
 ## Goal:
-Enable multiple players on one machine using split screens, each connecting to the local server as separate clients.
+Allow players to customize their Numberblocks with names and potential visual indicators.
 
 ## Implementation:
 
-### Modify Client for Multiple Instances:
-
-1. **Update index.html** to support multiple viewports:
+1. **Add Player Name Input**:
    ```html
-   <canvas id="player1-canvas" style="width: 50%; height: 100%; position: absolute; left: 0;"></canvas>
-   <canvas id="player2-canvas" style="width: 50%; height: 100%; position: absolute; right: 0;"></canvas>
+   <div id="player-setup">
+     <input type="text" id="player-name" placeholder="Enter your name" maxlength="15">
+     <button id="start-game">Join Game</button>
+   </div>
    ```
 
-2. **Update main.js** for Split Screens:
-   Create separate renderers and cameras for each player:
+2. **Send Player Info to Server**:
    ```javascript
-   let players = [];
-
-   async function init() {
-     for (let i = 0; i < 2; i++) {
-       const canvas = document.getElementById(`player${i + 1}-canvas`);
-       const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-       renderer.setSize(canvas.clientWidth, canvas.clientHeight);
-
-       const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
-       const controls = initControls(camera, canvas);
-
-       const room = await client.joinOrCreate("numberblocks");
-       const player = { renderer, camera, controls, room, numberblock: null };
-       players.push(player);
-
-       room.onStateChange((state) => {
-         const data = state.players[room.sessionId];
-         if (!player.numberblock) {
-           player.numberblock = new Numberblock(data.value);
-           scene.add(player.numberblock.mesh);
-         }
-         player.numberblock.setValue(data.value);
-         player.numberblock.mesh.position.set(data.x, data.y, data.z);
+   document.getElementById('start-game').addEventListener('click', () => {
+     const playerName = document.getElementById('player-name').value || 'Player';
+     client.joinOrCreate("numberblocks", { name: playerName })
+       .then(room => {
+         // Store room reference and continue with game setup
+         window.room = room;
+         document.getElementById('player-setup').style.display = 'none';
+         initGame();
        });
-     }
-     animate();
-   }
-
-   function animate() {
-     requestAnimationFrame(animate);
-     const delta = clock.getDelta();
-     players.forEach((p, i) => {
-       updateControls(p.controls, delta);
-       p.renderer.render(scene, p.camera);
-       p.room.send({ type: "move", x: p.controls.getObject().position.x, y: p.controls.getObject().position.y, z: p.controls.getObject().position.z });
-     });
-   }
+   });
    ```
 
-3. **Input Handling**:
-   Assign different keys:
-   - Player 1: WASD, Space
+3. **Visual Player Identifiers**:
+   - Add name tags above each Numberblock
+   - Assign each player a distinct color accent
+   - Display player list in a corner of the screen
 
-   - Player 2: Arrow keys, Enter
+## Benefits:
+- Players can easily identify each other in the game world
+- Enhanced social experience with personalized characters
+- Improved communication in multiplayer
 
-4. **Update controls.js**:
+# 2. Enhanced Multiplayer Interactions
+
+## Goal:
+Create more engaging player-to-player interactions beyond basic collision.
+
+## Implementation:
+
+1. **Cooperative Mechanics**:
+   - Allow players to form "teams" by standing close to each other
+   - Implement cooperative puzzles requiring multiple player values
+   - Create shared objectives that scale with player count
+
+2. **Competitive Challenges**:
+   - Add timed challenges to reach specific number values
+   - Implement race courses with mathematical checkpoints
+   - Create areas where players compete to solve math puzzles
+
+3. **Trading System**:
    ```javascript
-   function onKeyDown(event, playerId) {
-     if (playerId === 0) {
-       switch (event.code) {
-         case 'KeyW': moveForward = true; break;
-         case 'KeyA': moveLeft = true; break;
-         case 'KeyS': moveBackward = true; break;
-         case 'KeyD': moveRight = true; break;
-         case 'Space': if (canJump) velocity.y += jumpHeight; canJump = false; break;
-       }
-     } else if (playerId === 1) {
-       switch (event.code) {
-         case 'ArrowUp': moveForward = true; break;
-         case 'ArrowLeft': moveLeft = true; break;
-         case 'ArrowDown': moveBackward = true; break;
-         case 'ArrowRight': moveRight = true; break;
-         case 'Enter': if (canJump) velocity.y += jumpHeight; canJump = false; break;
-       }
-     }
+   function requestTrade(targetPlayerId) {
+     room.send("tradeRequest", { targetId: targetPlayerId });
    }
+   
+   room.onMessage("tradeResponse", (message) => {
+     if (message.accepted) {
+       // Show trade interface
+       showTradeInterface(message.playerId);
+     }
+   });
    ```
 
-## Resource Management: Optimizing Performance for Split-Screen Multiplayer
-
-When using split-screen multiplayer, these optimizations will help maintain performance given the doubled rendering workload:
-
-- **Simplify Models**: Reduce the polygon count of Numberblock models and use simpler textures.
-
-- **Level of Detail (LOD)**: Render less detailed models for distant objects to lower the rendering cost.
-
-- **Batching**: Combine draw calls for static or repeated objects (e.g., operators) to minimize overhead.
-
-- **Shared Calculations**: Reuse camera updates where possible across viewports to avoid redundant processing.
-
-- **Profiling**: Regularly monitor performance (e.g., with browser tools or Three.js stats) to identify and fix bottlenecks.
-
-These steps ensure the game runs smoothly even with multiple players on a single screen.
-
-## Player Identification: Visual Indicators for Players
-
-Beyond session IDs, these visual indicators will help players identify their own and other players' Numberblocks in the game world:
-
-- **Unique Colors**: Assign each player a distinct color, applied to their Numberblock's base or a visible part.
-
-- **Name Tags**: Display a small name or icon above each Numberblock, visible to all players.
-
-- **Viewport Labels**: In split-screen mode, add a border or label (e.g., "Player 1") to each viewport.
-
-These indicators make it easy to distinguish characters in both networked and split-screen play.
-
-## UI/UX Considerations: Designing the Split-Screen HUD
-
-The HUD for split-screen mode will be designed to display each player's current value without cluttering the interface:
-
-- **Corner Placement**: Put each player's HUD (showing their value and operator) in a corner of their viewport (e.g., top-left for Player 1).
-
-- **Minimal Design**: Use small text or icons to show only essential info, avoiding overlap with gameplay.
-
-- **Transparency**: Apply semi-transparent backgrounds to keep the game world visible.
-
-This layout ensures players can track their status without a cluttered screen.
-
-## Result:
-Two players can play locally with split screens, each viewport rendering their perspective, while the server synchronizes their states.
+## Benefits:
+- More engaging multiplayer experience beyond just "seeing" other players
+- Educational value through cooperation and friendly competition
+- Extended gameplay depth and replayability
 
 # 3. Set Up Gamepad Controls
 
 ## Goal:
-Add gamepad support for local players, enhancing accessibility.
+Add gamepad support for enhanced accessibility.
 
 ## Implementation:
 
-### Use the Gamepad API:
-
-1. **Update controls.js**:
+1. **Gamepad Detection**:
    ```javascript
    let gamepads = [];
 
@@ -321,161 +115,261 @@ Add gamepad support for local players, enhancing accessibility.
      console.log(`Gamepad ${e.gamepad.index} disconnected`);
      updateGamepads();
    });
+   ```
 
-   function updateControls(controls, delta, playerId) {
+2. **Gamepad Controls Mapping**:
+   ```javascript
+   function processGamepadInput() {
      updateGamepads();
-     const gp = gamepads[playerId];
-     if (gp) {
+     if (gamepads.length > 0) {
+       const gp = gamepads[0];
        const axes = gp.axes;
        const buttons = gp.buttons;
 
        // Movement (left stick)
-       moveForward = axes[1] < -0.5;
-       moveBackward = axes[1] > 0.5;
-       moveLeft = axes[0] < -0.5;
-       moveRight = axes[0] > 0.5;
+       const moveForward = -axes[1] > 0.2;
+       const moveBackward = -axes[1] < -0.2;
+       const moveLeft = -axes[0] < -0.2;
+       const moveRight = -axes[0] > 0.2;
+
+       // Apply movement
+       if (moveForward || moveBackward || moveLeft || moveRight) {
+         // Process movement similar to keyboard controls
+         // Update player position accordingly
+       }
 
        // Look (right stick)
-       controls.getObject().rotation.y -= axes[2] * 0.05;
-       pitch -= axes[3] * 0.05;
-       pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
-       controls.getObject().children[0].rotation.x = pitch;
+       if (Math.abs(axes[2]) > 0.1 || Math.abs(axes[3]) > 0.1) {
+         // Rotate camera based on right stick input
+       }
 
        // Jump (A button)
        if (buttons[0].pressed && canJump) {
-         velocity.y += jumpHeight;
-         canJump = false;
+         // Jump logic
        }
+       
+       // View toggle (Y button)
+       if (buttons[3].pressed && !buttons[3].wasPressed) {
+         toggleCameraView();
+       }
+       buttons[3].wasPressed = buttons[3].pressed;
      }
-     // Existing keyboard controls...
    }
    ```
 
-### Gamepad Priority: Assigning Controllers to Players
+3. **Integration with Animation Loop**:
+   ```javascript
+   function animate() {
+     requestAnimationFrame(animate);
+     
+     // Process keyboard input
+     processKeyboardInput();
+     
+     // Process gamepad input
+     processGamepadInput();
+     
+     // Rest of animation loop
+   }
+   ```
 
-For assigning multiple gamepads to players:
+## Benefits:
+- Improved accessibility for players who prefer or require controllers
+- More precise movement control in 3D space
+- Support for multiple input methods without compromising experience
 
-- **Connection Order**: Map gamepads to players based on when they're connected (e.g., first gamepad = Player 1, second = Player 2).
-
-- **Manual Option**: Add a setup screen where players can assign gamepads if needed.
-
-This simple system works out of the box but offers flexibility for customization.
-
-## Result:
-Players can use gamepads instead of keyboards, with movement, looking, and jumping mapped to standard controls (e.g., left stick for movement, right stick for looking, A for jumping).
-
-# 4. Expand to Network/Internet Multiplayer
+# 4. Additional Network Optimizations
 
 ## Goal:
-Enable players on different machines to join the game over the internet.
+Enhance network performance for smoother multiplayer experience.
 
 ## Implementation:
 
-### Host the Server Publicly:
-
-1. **Deploy server.js** to a cloud platform like Heroku:
-   ```bash
-   heroku create numberblocks-game
-   git push heroku main
-   ```
-
-2. **Update client connection**:
+1. **State Interpolation**:
    ```javascript
-   const client = new Client("wss://numberblocks-game.herokuapp.com");
+   // Store previous and current state
+   let prevState = null;
+   let currentState = null;
+   let interpolationTime = 0;
+   
+   room.onStateChange((state) => {
+     prevState = currentState;
+     currentState = JSON.parse(JSON.stringify(state));
+     interpolationTime = 0;
+   });
+   
+   function animateWithInterpolation(deltaTime) {
+     if (prevState && currentState) {
+       // Increment interpolation time (0 to 1)
+       interpolationTime = Math.min(interpolationTime + deltaTime * 15, 1);
+       
+       // Interpolate player positions
+       Object.keys(currentState.players).forEach(id => {
+         if (id !== room.sessionId && prevState.players[id]) {
+           const current = currentState.players[id];
+           const prev = prevState.players[id];
+           
+           // Get or create player representation
+           const playerRep = getPlayerRepresentation(id);
+           
+           // Apply interpolated position
+           playerRep.position.x = lerp(prev.x, current.x, interpolationTime);
+           playerRep.position.y = lerp(prev.y, current.y, interpolationTime);
+           playerRep.position.z = lerp(prev.z, current.z, interpolationTime);
+           playerRep.rotation.y = lerp(prev.rotation, current.rotation, interpolationTime);
+         }
+       });
+     }
+   }
+   
+   // Linear interpolation helper
+   function lerp(a, b, t) {
+     return a + (b - a) * t;
+   }
    ```
 
-### Operator Distribution: Synchronizing Operators Across Clients
+2. **Prediction-Correction System**:
+   ```javascript
+   // When player inputs are processed:
+   function applyPlayerMovement() {
+     // Apply movement locally first (prediction)
+     playerNumberblock.mesh.position.x += moveVector.x;
+     playerNumberblock.mesh.position.z += moveVector.z;
+     
+     // Send to server
+     room.send("updatePosition", {
+       x: playerNumberblock.mesh.position.x,
+       y: playerNumberblock.mesh.position.y,
+       z: playerNumberblock.mesh.position.z,
+       rotation: playerNumberblock.mesh.rotation.y
+     });
+   }
+   
+   // If server corrects us:
+   room.onMessage("positionCorrection", (data) => {
+     // Smoothly correct to server position
+     const correctionTween = new TWEEN.Tween(playerNumberblock.mesh.position)
+       .to({ x: data.x, y: data.y, z: data.z }, 100)
+       .easing(TWEEN.Easing.Quadratic.Out)
+       .start();
+   });
+   ```
 
-Operators must be synchronized to ensure all players see the same game state:
+3. **Interest Management**:
+   ```javascript
+   // Server-side optimization to send only nearby players
+   class NumberblocksRoom extends Room {
+     update() {
+       // For each player, only send updates about nearby players
+       Object.keys(this.state.players).forEach(id => {
+         const player = this.state.players[id];
+         const nearbyPlayers = {};
+         
+         Object.keys(this.state.players).forEach(otherId => {
+           if (id === otherId) {
+             nearbyPlayers[otherId] = this.state.players[otherId];
+             return;
+           }
+           
+           const otherPlayer = this.state.players[otherId];
+           const distance = calculateDistance(player, otherPlayer);
+           
+           if (distance < 50) { // Visibility range
+             nearbyPlayers[otherId] = otherPlayer;
+           }
+         });
+         
+         // Send customized state to this player
+         this.clients.get(id).send("visiblePlayers", nearbyPlayers);
+       });
+     }
+   }
+   ```
 
-- **Server Control**: The server manages operator placement and collection. When a player collects an operator, the client notifies the server.
+## Benefits:
+- Smoother player movement with reduced jitter
+- More responsive gameplay despite network latency
+- Scalability to support more simultaneous players
 
-- **First-Come, First-Served**: If two players attempt to collect the same operator at once, the server processes requests in the order received. The first player gets the operator, and it's removed from the game state.
+# 5. Mobile Compatibility (Optional)
 
-- **Broadcast**: The server updates all clients, ensuring everyone sees the operator disappear and the player's new value.
+## Goal:
+Make the game playable on mobile devices with touch controls.
 
-This approach prevents conflicts and keeps gameplay fair.
+## Implementation:
 
-### Collision Mechanics: Handling Numberblock-to-Numberblock Interactions
+1. **Responsive Design**:
+   ```css
+   @media (max-width: 768px) {
+     /* Mobile-specific styles */
+     #game-container {
+       width: 100%;
+       height: 100%;
+       touch-action: none;
+     }
+     
+     .mobile-controls {
+       display: flex;
+     }
+     
+     .desktop-controls {
+       display: none;
+     }
+   }
+   ```
 
-Collisions between Numberblocks in multiplayer should be consistent and cheat-proof:
+2. **Touch Controls**:
+   ```javascript
+   const touchJoystick = new VirtualJoystick({
+     container: document.getElementById('joystick-area'),
+     strokeStyle: 'white',
+     limitStickTravel: true,
+     stickRadius: 50
+   });
+   
+   function processTouchInput() {
+     if (touchJoystick.up()) moveForward = true;
+     if (touchJoystick.down()) moveBackward = true;
+     if (touchJoystick.left()) moveLeft = true;
+     if (touchJoystick.right()) moveRight = true;
+     
+     // Process touch controls similar to keyboard/gamepad
+   }
+   ```
 
-- **Server-Side Detection**: The server calculates collisions based on Numberblock positions.
+3. **Device Orientation for Camera**:
+   ```javascript
+   window.addEventListener('deviceorientation', (event) => {
+     if (!isMobile) return;
+     
+     const rotationY = event.alpha * (Math.PI/180);
+     const rotationX = event.beta * (Math.PI/180);
+     
+     // Apply rotation to camera
+     camera.rotation.y = -rotationY;
+     camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotationX - Math.PI/2));
+   });
+   ```
 
-- **Mathematical Effects**: If a collision occurs and one player has an operator (e.g., addition), the server applies the effect (e.g., combining values) and updates the game state.
+## Benefits:
+- Expanded player base to include mobile users
+- Flexibility for playing on different devices
+- New control options that might be preferred by some players
 
-- **Broadcast Updates**: The server sends the new state (e.g., updated values or positions) to all clients.
+# Implementation Timeline and Priorities
 
-This server-driven approach ensures fair interactions and allows for fun mathematical gameplay mechanics.
+1. **High Priority (1-2 weeks)**:
+   - Player Customization and Identification
+   - Basic Gamepad Controls
+   - Network Optimizations (interpolation)
 
-### Connection Handling: Managing Player Disconnections and Reconnections
+2. **Medium Priority (2-4 weeks)**:
+   - Enhanced Multiplayer Interactions
+   - Advanced Gamepad Integration
+   - Improved Network Prediction-Correction
 
-Stable connection handling enhances the multiplayer experience:
+3. **Lower Priority (4+ weeks)**:
+   - Mobile Compatibility
+   - Interest Management Optimizations
+   - Additional Customization Options
 
-- **Disconnection**: When a player disconnects, the server removes their Numberblock and notifies all clients to update their views.
-
-- **Reconnection**: If a player reconnects within a short time (e.g., 30 seconds), the server can restore their previous state (position, value). Otherwise, they start anew.
-
-- **State Preservation**: For casual play, a simple action history on the server suffices; for persistence, a database could be added later.
-
-This keeps the game running smoothly despite connection issues.
-
-### Synchronization Enhancements:
-
-Add client-side prediction and server reconciliation in server.js:
-```javascript
-onMessage(client, message) {
-  const player = this.state.players[client.sessionId];
-  if (message.type === "move") {
-    // Validate movement
-    const speedLimit = 5 * 0.016; // Assuming 60 FPS
-    const dx = message.x - player.x;
-    const dz = message.z - player.z;
-    if (Math.sqrt(dx * dx + dz * dz) <= speedLimit) {
-      player.x = message.x;
-      player.y = message.y;
-      player.z = message.z;
-    }
-  }
-}
-```
-
-### Handle Latency:
-Use Colyseus's built-in features for lag compensation.
-
-## Scalability: Player Limits and Gameplay Impact
-
-For managing player limits and their impact on gameplay:
-
-- **Limit**: Start with 4 players for split-screen and 8–10 for networked rooms, adjustable after testing server and game performance.
-
-- **Impact**: More players may create chaotic, crowded gameplay—potentially exciting or overwhelming. Larger maps or adjusted operator spawns can adapt to higher counts.
-
-This starting point allows for a manageable yet engaging experience, with room to scale.
-
-## Result:
-Players can connect over the internet, with the server ensuring consistent state across all clients.
-
-# Testing Framework: Approach to Testing Multiplayer Functionality
-
-Robust testing ensures a reliable multiplayer experience:
-
-- **Automated Tests**: Use tools like Jest to verify core functions (e.g., server connections, message handling, state updates).
-
-- **Manual Tests**: Simulate multiple players with browser tabs or devices, testing operator collection, collisions, and disconnections.
-
-- **Tools**: Leverage Colyseus's debugging features (e.g., colyseus-monitor) to inspect room states.
-
-Combining these methods catches bugs and confirms a consistent player experience.
-
-# Additional Considerations
-
-- **Performance**: Optimize rendering for split screens (e.g., reduce draw calls per viewport).
-
-- **HUD**: Duplicate HUD elements per player in their viewports.
-
-- **Player IDs**: Use Colyseus session IDs to identify players uniquely.
-
-# Conclusion
-
-By using Colyseus to separate client/server logic, you establish a scalable foundation. Local multiplayer with split screens builds on this, maintaining server authority. Gamepad controls enhance accessibility, and deploying the server publicly extends the game to network play. This step-by-step approach leverages the existing codebase while meeting all your requirements.
+This implementation plan builds upon the successful client-server architecture already in place, focusing on enhancing the multiplayer experience with more interactive features, improved controls, and optimized networking.
