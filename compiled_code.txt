@@ -111,6 +111,8 @@ architecture.md:
 
 ### 2. Controls System (controls.js)
 - First-person camera controls using PointerLockControls
+- Third-person camera controls with configurable distance and height
+- Toggle between first-person and third-person views (V key)
 - Movement handling (WASD/Arrow keys)
   - W = Forward movement
   - S = Backward movement
@@ -205,8 +207,10 @@ The game features a minimalist HUD with two key elements:
 1. User input captured via event listeners
 2. Movement state updated
 3. Controls updated in animation loop
-4. Player position updated
-5. Numberblock follows camera with offset
+4. Player position updated based on active view mode:
+   - First-person: Player follows camera position
+   - Third-person: Camera follows player with configurable offset
+5. Numberblock follows player position
 6. Scene rendered
 7. Collision detection checks performed
 8. Operator interactions processed
@@ -765,6 +769,15 @@ FILE: memory bank\progress.md
   - Added more decorative objects (from 30 to 120) to maintain visual density
   - Increased trees from 10 to 40 for better landmarks
   - Expanded spawn protection area for better player experience
+- Implemented third-person camera and controls:
+  - Added toggle between first-person and third-person views with the V key
+  - Implemented camera positioning behind the player with proper height and distance
+  - Created smooth camera transition when changing views
+  - Developed camera-relative movement in third-person mode
+  - Added Q/E rotation controls for the player character in third-person mode
+  - Ensured player character rotation matches movement direction when WASD keys are used
+  - Implemented proper cursor handling in both view modes
+  - Fixed THREE.js error related to camera parenting during view transitions
 
 ## Next Steps
 - Step 10: Add math puzzles and challenges 
@@ -2098,15 +2111,7 @@ function updatePlayerPositionThirdPerson(delta) {
     if (!playerNumberblock || !controls) return;
 
     const moveSpeed = 5.0; // Movement speed
-    const rotationSpeed = 2.0; // Rotation speed for Q/E turning
-
-    // Handle Q and E rotation of player character
-    if (window.turnLeft) {
-        playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
-    }
-    if (window.turnRight) {
-        playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
-    }
+    const rotationSpeed = 2.0; // Rotation speed for Q/E keys
 
     // Get camera's current direction vectors
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).setY(0).normalize();
@@ -2119,14 +2124,17 @@ function updatePlayerPositionThirdPerson(delta) {
     if (moveLeft) movement.sub(right);
     if (moveRight) movement.add(right);
 
-    // Only apply movement if there is some input
-    if (movement.lengthSq() > 0) {
-        movement.normalize().multiplyScalar(moveSpeed * delta);
+    movement.normalize().multiplyScalar(moveSpeed * delta);
 
-        // Update player position
-        playerNumberblock.mesh.position.add(movement);
+    // Update player position
+    playerNumberblock.mesh.position.add(movement);
 
-        // Rotate player to face the movement direction if moving
+    // Rotate player using Q/E keys
+    if (turnLeft) playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
+    if (turnRight) playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
+
+    // Rotate player to face movement direction if moving (and no manual rotation with Q/E)
+    if (movement.lengthSq() > 0.0001 && !turnLeft && !turnRight) {
         const targetAngle = Math.atan2(movement.x, movement.z);
         playerNumberblock.mesh.rotation.y = targetAngle;
     }
@@ -2147,12 +2155,8 @@ function updateThirdPersonCamera() {
     }
 
     // Adjust camera angle with Q/E keys
-    if (window.turnLeft) {
-        window.thirdPersonCameraAngle += rotationSpeed;
-    }
-    if (window.turnRight) {
-        window.thirdPersonCameraAngle -= rotationSpeed;
-    }
+    if (turnLeft) window.thirdPersonCameraAngle += rotationSpeed;
+    if (turnRight) window.thirdPersonCameraAngle -= rotationSpeed;
 
     // Calculate desired camera position explicitly without cumulative interpolation errors
     const playerPos = playerNumberblock.mesh.position.clone();

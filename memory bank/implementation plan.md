@@ -123,33 +123,9 @@ After bumping and changing the number, see the model update (e.g., from 1 cube t
 
 Ensure it doesn’t clip through the ground.
 
-Step 10: Implement basic HUD
-Task: Add a heads-up display showing the player’s number and operator.
+Step 10 / 11: MULTIPLAYER AND CONTROLLER SUPPORT
 
-Details: 
-Use HTML elements (e.g., <div>) overlayed on the canvas.
-
-Update the HUD whenever the number or operator changes.
-
-Test: 
-See the player’s current number and held operator on-screen.
-
-Verify it updates in real-time after changes.
-
-Step 11: Add multiple players (multiplayer)
-Task: Enable basic multiplayer functionality.
-
-Details: 
-Use WebSockets or Socket.io for networking.
-
-Allow multiple players to join and see each other’s Numberblocks.
-
-Sync positions and numbers across clients.
-
-Test: 
-Open two browser tabs as different players.
-
-See each Numberblock move and confirm numbers sync when changed.
+SEE MULTIPLAYER AND CONTROLLER FEATURE.MD
 
 Step 12: Implement game objectives
 Task: Add the Target Number Mode.
