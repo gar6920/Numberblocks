@@ -454,9 +454,14 @@ function animate() {
     const delta = clock.getDelta();
 
     if (controls) updateControls(controls, delta);
+    
+    // In first-person, update Numberblock position to match camera
+    // In third-person, handle camera following Numberblock
     if (window.isFirstPerson) {
         updatePlayerPosition();
     } else {
+        // In third-person, update player position directly
+        updatePlayerPositionThirdPerson(delta);
         updateThirdPersonCamera();
     }
 
@@ -492,35 +497,163 @@ function updatePlayerPosition() {
     playerNumberblock.mesh.rotation.set(0, rotationY, 0);
 }
 
-// Update camera position in third-person mode
-function updateThirdPersonCamera() {
-    if (playerNumberblock && playerNumberblock.mesh) {
-        const offsetDistance = 12;
-        const offsetHeight = 10;
-
-        const playerPos = playerNumberblock.mesh.position.clone();
-        const forwardVector = new THREE.Vector3(0, 0, -1).applyAxisAngle(
-            new THREE.Vector3(0, 1, 0),
-            playerNumberblock.mesh.rotation.y
-        );
-
-        // Calculate desired camera position behind player
-        const desiredCameraPos = playerPos.clone().addScaledVector(forwardVector, -offsetDistance);
-        desiredCameraPos.y = playerPos.y + offsetHeight;
-
-        // Smooth camera movement with lerp
-        camera.position.lerp(desiredCameraPos, 0.1);
+// Update player position in third-person mode
+function updatePlayerPositionThirdPerson(delta) {
+    if (!playerNumberblock || !controls) return;
+    
+    // Get input states from global variables in controls.js
+    const moveSpeed = 5.0 * delta;
+    
+    // Create a movement vector
+    const movement = new THREE.Vector3(0, 0, 0);
+    
+    // Forward/backward movement
+    if (window.moveForward) movement.z -= moveSpeed;
+    if (window.moveBackward) movement.z += moveSpeed;
+    
+    // Left/right movement
+    if (window.moveLeft) movement.x -= moveSpeed;
+    if (window.moveRight) movement.x += moveSpeed;
+    
+    // Apply rotation to movement (match movement to camera orientation)
+    const cameraDirection = new THREE.Vector3(0, 0, 1).applyQuaternion(camera.quaternion);
+    cameraDirection.y = 0; // Keep movement on the horizontal plane
+    cameraDirection.normalize();
+    
+    const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    cameraRight.y = 0;
+    cameraRight.normalize();
+    
+    // Calculate the final movement direction
+    const finalMovement = new THREE.Vector3();
+    finalMovement.addScaledVector(cameraDirection, -movement.z); // Forward is negative Z
+    finalMovement.addScaledVector(cameraRight, movement.x);      // Right is positive X
+    
+    // Apply movement to Numberblock
+    playerNumberblock.mesh.position.add(finalMovement);
+    
+    // Rotate Numberblock to face movement direction if moving
+    if (finalMovement.lengthSq() > 0.001) {
+        const targetRotation = Math.atan2(finalMovement.x, -finalMovement.z);
         
-        // Look at the middle of the Numberblock
-        camera.lookAt(
-            playerPos.x,
-            playerPos.y + playerNumberblock.getHeight() / 2,
-            playerPos.z
-        );
+        // Smoothly rotate towards target direction (lerp rotation)
+        const currentRotation = playerNumberblock.mesh.rotation.y;
+        let rotationDifference = targetRotation - currentRotation;
+        
+        // Handle wraparound for angle difference
+        if (rotationDifference > Math.PI) rotationDifference -= Math.PI * 2;
+        if (rotationDifference < -Math.PI) rotationDifference += Math.PI * 2;
+        
+        // Apply smooth rotation
+        playerNumberblock.mesh.rotation.y = currentRotation + rotationDifference * 0.1;
+    }
+    
+    // Q and E rotation in third person rotates the camera around the player
+    if (window.turnLeft || window.turnRight) {
+        // This will be handled in updateThirdPersonCamera
     }
 }
 
-// Check for collisions between player Numberblock and other Numberblocks
+// Update camera position in third-person mode
+function updateThirdPersonCamera() {
+    if (!playerNumberblock || !playerNumberblock.mesh) return;
+    
+    // Third-person camera parameters
+    const distance = 12;          // Distance behind player
+    const height = 8;             // Height above player
+    const smoothing = 0.1;        // Camera smoothing factor
+    const rotationSpeed = 0.05;  // Manual camera rotation speed
+    
+    // Calculate the orbit angle for the camera
+    if (typeof window.thirdPersonCameraAngle === 'undefined') {
+        window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y;
+    }
+    
+    // Handle Q and E rotation - ONLY process these if keys are pressed
+    if (window.turnLeft) {
+        window.thirdPersonCameraAngle += rotationSpeed;
+    }
+    if (window.turnRight) {
+        window.thirdPersonCameraAngle -= rotationSpeed;
+    }
+    
+    const playerPos = playerNumberblock.mesh.position.clone();
+    
+    // Calculate camera position - using negative sine/cosine to fix orientation
+    const cameraX = playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance;
+    const cameraY = playerPos.y + height;
+    const cameraZ = playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance;
+    
+    // Calculate the target position
+    const targetPos = new THREE.Vector3(cameraX, cameraY, cameraZ);
+    
+    // Only apply smoothing if the distance is significant, to prevent drift
+    if (camera.position.distanceToSquared(targetPos) > 0.01) {
+        camera.position.lerp(targetPos, smoothing);
+    } else {
+        camera.position.copy(targetPos);
+    }
+    
+    // Make sure we're using the correct up vector
+    camera.up.set(0, 1, 0);
+    
+    // Look at the playerNumberblock - target the middle
+    const targetY = playerPos.y + playerNumberblock.getHeight() / 2;
+    camera.lookAt(playerPos.x, targetY, playerPos.z);
+}
+
+// Switch to third-person view
+function switchToThirdPersonView() {
+    // Keep pointer locked but detach camera from controls
+    controls.getObject().remove(camera);
+    scene.add(camera);
+    
+    // Reset camera's up vector to ensure correct orientation
+    camera.up.set(0, 1, 0);
+    
+    // Hide cursor in third-person mode
+    document.body.style.cursor = 'none';
+    
+    // Initialize third-person camera angle based on current player rotation
+    // Use + Math.PI to position camera behind player
+    window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
+    
+    // Set initial camera position immediately to avoid gradual transition
+    const playerPos = playerNumberblock.mesh.position.clone();
+    const distance = 12;
+    const height = 8;
+    
+    camera.position.set(
+        playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance,
+        playerPos.y + height,
+        playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance
+    );
+    
+    // Look at player immediately
+    const targetY = playerPos.y + playerNumberblock.getHeight() / 2;
+    camera.lookAt(playerPos.x, targetY, playerPos.z);
+    
+    // Setup mouse controls for third-person camera rotation
+    if (!window.thirdPersonMouseHandler) {
+        window.thirdPersonMouseHandler = function(event) {
+            // Skip processing extremely small movements to prevent drift
+            if (Math.abs(event.movementX) > 0.5) {
+                window.thirdPersonCameraAngle -= event.movementX * 0.002;
+            }
+        };
+    }
+    
+    // Activate third-person mouse controls using the pointer lock events
+    document.addEventListener('mousemove', window.thirdPersonMouseHandler);
+    window.thirdPersonMouseControlsActive = true;
+    
+    // Make sure pointer is locked
+    if (!controls.isLocked) {
+        controls.lock();
+    }
+}
+
+// Check for collisions between player's Numberblock and other Numberblocks
 function checkNumberblockCollisions() {
     if (!playerNumberblock || !playerNumberblock.mesh) return;
     
@@ -690,32 +823,37 @@ document.addEventListener('keydown', (event) => {
         window.isFirstPerson = !window.isFirstPerson;
 
         const controlsInfo = document.getElementById('controls-info');
-        if (controlsInfo) controlsInfo.style.display = window.isFirstPerson ? 'block' : 'none';
+        if (controlsInfo) controlsInfo.style.display = 'none'; // Always hide in both modes
 
         if (window.isFirstPerson) {
             // Switch to first-person view
+            
+            // Remove any third-person mouse control listeners if they exist
+            if (window.thirdPersonMouseControlsActive) {
+                document.removeEventListener('mousemove', window.thirdPersonMouseHandler);
+                window.thirdPersonMouseControlsActive = false;
+            }
+            
+            // Reset camera and attach to controls
             scene.remove(camera);
             controls.getObject().add(camera);
             camera.position.set(0, 0, 0);
             camera.rotation.set(0, 0, 0);
             
-            // Position controls exactly at numberblock's head position
+            // Position controls at Numberblock's head position
             controls.getObject().position.copy(playerNumberblock.mesh.position);
             controls.getObject().position.y += playerNumberblock.getHeight() / 2;
             
-            // Set rotation to match numberblock exactly
+            // Set rotation to match Numberblock exactly
             controls.getObject().rotation.y = playerNumberblock.mesh.rotation.y;
             
-            // Immediately lock pointer
-            controls.lock();
+            // Make sure pointer is locked
+            if (!controls.isLocked) {
+                controls.lock();
+            }
         } else {
-            // Switch to third-person view
-            controls.unlock();
-            controls.getObject().remove(camera);
-            scene.add(camera);
-
-            // Immediately update camera position for third-person view
-            updateThirdPersonCamera();
+            // Use dedicated function for switching to third-person
+            switchToThirdPersonView();
         }
 
         camera.updateProjectionMatrix();

@@ -33,11 +33,19 @@ window.initControls = function(camera, domElement) {
     });
 
     controls.addEventListener('lock', () => {
-        document.getElementById('controls-info').style.display = 'none';
+        if (window.isFirstPerson) {
+            document.getElementById('controls-info').style.display = 'none';
+        }
+        // Always hide cursor when locked, regardless of view mode
+        document.body.style.cursor = 'none';
     });
 
     controls.addEventListener('unlock', () => {
-        document.getElementById('controls-info').style.display = 'block';
+        if (window.isFirstPerson) {
+            document.getElementById('controls-info').style.display = 'block';
+        }
+        // Always show cursor when unlocked, regardless of view mode
+        document.body.style.cursor = 'auto';
     });
 
     // Keyboard listeners for movement remain as-is
