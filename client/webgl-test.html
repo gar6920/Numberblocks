@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Compatibility Test</title>
+    <style>
+        body { 
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            background: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .pass { color: green; font-weight: bold; }
+        .fail { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>WebGL Compatibility Test</h1>
+    <div id="status">Testing WebGL compatibility...</div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        function log(message, isError = false) {
+            const p = document.createElement('p');
+            p.innerHTML = message;
+            if (isError) p.className = 'fail';
+            statusDiv.appendChild(p);
+            console.log(message);
+        }
+        
+        // Test WebGL directly
+        function testWebGL() {
+            try {
+                const canvas = document.createElement('canvas');
+                let gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                
+                if (!gl) {
+                    log('❌ WebGL is not supported in this browser.', true);
+                    log('This likely explains why Three.js cannot render anything.', true);
+                } else {
+                    log('✅ WebGL is supported in this browser. <span class="pass">PASS</span>');
+                    
+                    // Get WebGL information
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (debugInfo) {
+                        const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                        const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                        log(`Graphics card vendor: ${vendor}`);
+                        log(`Graphics renderer: ${renderer}`);
+                    }
+                    
+                    // Test WebGL2
+                    const gl2 = canvas.getContext('webgl2');
+                    if (gl2) {
+                        log('✅ WebGL 2 is supported. <span class="pass">PASS</span>');
+                    } else {
+                        log('⚠️ WebGL 2 is not supported, but WebGL 1 should be sufficient for Three.js.');
+                    }
+                    
+                    loadThreeJs();
+                }
+            } catch (error) {
+                log(`❌ Error testing WebGL: ${error.message}`, true);
+            }
+        }
+        
+        // Test Three.js loading and basic rendering
+        function loadThreeJs() {
+            log('Loading Three.js...');
+            
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js';
+            script.onload = function() {
+                log('✅ Three.js loaded successfully. <span class="pass">PASS</span>');
+                testThreeJsRendering();
+            };
+            script.onerror = function() {
+                log('❌ Failed to load Three.js library', true);
+            };
+            document.head.appendChild(script);
+        }
+        
+        // Test basic Three.js rendering
+        function testThreeJsRendering() {
+            try {
+                log('Testing basic Three.js rendering...');
+                
+                // Create container
+                const container = document.createElement('div');
+                container.style.width = '300px';
+                container.style.height = '200px';
+                container.style.margin = '20px 0';
+                document.body.appendChild(container);
+                
+                // Create scene
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x6495ED);
+                
+                // Create camera
+                const camera = new THREE.PerspectiveCamera(75, 300 / 200, 0.1, 1000);
+                camera.position.z = 5;
+                
+                // Create renderer
+                const renderer = new THREE.WebGLRenderer();
+                renderer.setSize(300, 200);
+                container.appendChild(renderer.domElement);
+                
+                // Create a cube
+                const geometry = new THREE.BoxGeometry();
+                const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const cube = new THREE.Mesh(geometry, material);
+                scene.add(cube);
+                
+                // Render once
+                renderer.render(scene, camera);
+                
+                log('✅ Three.js rendering successful. <span class="pass">PASS</span>');
+                log('If you can see a red cube on a blue background below, Three.js is working correctly.');
+                
+                // Animate for better visibility
+                function animate() {
+                    requestAnimationFrame(animate);
+                    cube.rotation.x += 0.01;
+                    cube.rotation.y += 0.01;
+                    renderer.render(scene, camera);
+                }
+                animate();
+                
+                // Try loading the pointer lock controls for further testing
+                const controlsScript = document.createElement('script');
+                controlsScript.src = 'https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js';
+                controlsScript.onload = function() {
+                    log('✅ PointerLockControls loaded successfully. <span class="pass">PASS</span>');
+                };
+                controlsScript.onerror = function() {
+                    log('❌ Failed to load PointerLockControls', true);
+                };
+                document.head.appendChild(controlsScript);
+                
+            } catch (error) {
+                log(`❌ Three.js rendering error: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+        
+        // Start tests
+        testWebGL();
+    </script>
+</body>
+</html>

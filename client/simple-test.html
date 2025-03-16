@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numberblocks Basic Test</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
+    </style>
+</head>
+<body>
+    <div id="info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; z-index: 100;">Initializing...</div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script>
+        // Debug logger
+        const info = document.getElementById('info');
+        function log(msg) {
+            console.log(msg);
+            info.innerHTML += '<br>' + msg;
+        }
+        
+        // Basic Three.js setup
+        let scene, camera, renderer;
+        let cube;
+        
+        function init() {
+            log('Creating scene');
+            scene = new THREE.Scene();
+            
+            log('Creating camera');
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+            
+            log('Creating renderer');
+            try {
+                renderer = new THREE.WebGLRenderer({
+                    antialias: true,
+                    precision: "mediump",
+                    powerPreference: "default",
+                    preserveDrawingBuffer: true
+                });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setClearColor(0x87CEEB, 1); // Sky blue
+                document.body.appendChild(renderer.domElement);
+                log('Renderer created');
+            } catch (e) {
+                log('ERROR creating renderer: ' + e.message);
+                return;
+            }
+            
+            log('Creating cube');
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            
+            log('Starting animation');
+            animate();
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (cube) {
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01;
+            }
+            
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // Start initialization
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

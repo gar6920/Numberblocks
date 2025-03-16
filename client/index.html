@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numberblocks Game</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+        #game-canvas { display: block; width: 100vw; height: 100vh; }
+        #debug-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            max-width: 500px;
+            overflow: auto;
+            z-index: 1000;
+        }
+        #lock-instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+    
+    <div id="debug-panel"></div>
+    
+    <div id="lock-instructions">
+        <h2>Numberblocks Game</h2>
+        <p>Click anywhere to enable controls</p>
+        <ul>
+            <li>Move: WASD or Arrow Keys</li>
+            <li>Jump: Space</li>
+            <li>Look: Mouse</li>
+            <li>Turn: Q & E Keys</li>
+        </ul>
+    </div>
+    
+    <!-- Game HUD -->
+    <div id="game-hud" class="hud">
+    </div>
+    
+    <!-- Multiplayer panel -->
+    <div id="multiplayer-panel" class="overlay" style="display: none; top: 10px; right: 10px; text-align: right; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;">
+        <h3>Players</h3>
+        <div id="player-list"></div>
+    </div>
+    
+    <!-- Three.js library via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
+    
+    <!-- Colyseus client library -->
+    <script src="https://unpkg.com/colyseus.js@0.14.13/dist/colyseus.js"></script>
+    
+    <!-- Game JavaScript files -->
+    <script src="js/collision.js"></script>
+    <script src="js/numberblock.js"></script>
+    <script src="js/operator.js"></script>
+    <script src="js/network.js"></script>
+    <script src="js/main-fixed.js"></script>
+</body>
+</html>
