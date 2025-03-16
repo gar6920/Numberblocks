@@ -101,5 +101,17 @@
   - Ensured the HUD updates in real-time when the player's number changes
   - Made the HUD non-intrusive with pointer-events set to none
 
+## March 16, 2025
+- Improved HUD display:
+  - Added clear number display in top-left that changes color based on Numberblock value
+  - Added operator display in top-right showing "+ Add" or "- Subtract"
+  - Added semi-transparent backgrounds and text shadows for better visibility
+  - Removed duplicate displays for cleaner UI
+- Fixed Numberblock positioning:
+  - All Numberblocks now properly stand on the ground
+  - Fixed positioning for random shapes and objects
+  - Improved Y-position calculations for consistent placement
+- Removed redundant number tags from Numberblocks since value is shown in HUD
+
 ## Next Steps
 - Step 10: Add math puzzles and challenges

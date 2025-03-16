@@ -211,6 +211,7 @@ class OperatorManager {
         
         // Store the operator type
         this.heldOperator = operator.type;
+        console.log("Setting held operator type:", this.heldOperator); // Debug log
         
         // Create a smaller version of the operator for holding
         this.heldOperatorMesh = operator.createHeldOperatorMesh();
@@ -262,7 +263,7 @@ class OperatorManager {
         // Remove the original operator from the scene
         this.removeOperator(operator);
         
-        console.log(`Holding ${this.heldOperator} operator`);
+        console.log(`Now holding ${this.heldOperator} operator`); // Debug log
         return this.heldOperator;
     }
     
@@ -279,11 +280,25 @@ class OperatorManager {
             this.heldOperatorMesh = null;
         }
         this.heldOperator = null;
+        console.log("Cleared held operator"); // Debug log
     }
     
     // Get the currently held operator type
     getHeldOperator() {
+        console.log("Getting held operator type:", this.heldOperator); // Debug log
         return this.heldOperator;
+    }
+    
+    // Attach the held operator to a Numberblock
+    attachOperatorToNumberblock(numberblock) {
+        if (this.heldOperatorMesh && numberblock) {
+            // The numberblock will handle the positioning
+            return {
+                type: this.heldOperator,
+                mesh: this.heldOperatorMesh
+            };
+        }
+        return null;
     }
     
     // Clear all operators
@@ -297,18 +312,6 @@ class OperatorManager {
     // Get all operators for collision checking
     getOperators() {
         return this.operators;
-    }
-    
-    // Attach the held operator to a Numberblock
-    attachOperatorToNumberblock(numberblock) {
-        if (this.heldOperatorMesh && numberblock) {
-            // The numberblock will handle the positioning
-            return {
-                type: this.heldOperator,
-                mesh: this.heldOperatorMesh
-            };
-        }
-        return null;
     }
 }
 

@@ -111,19 +111,47 @@ architecture.md:
 - Debug logging for control states
 
 ### 3. Numberblock System (numberblock.js)
-- Numberblock class for player and NPCs
-- Geometry and material management
-- Position and rotation handling
-- Height-based properties
-- Camera offset calculations
-- Ground collision detection
+#### Visual Components
+- Stacked blocks based on numeric value
+- Color-coded blocks following Numberblocks scheme
+- Face on top block with eyes and mouth
+- Arms on middle or second block
+- Feet on bottom block
+- No number display (shown in HUD instead)
+
+#### Positioning System
+- Base Y-position calculated from block size
+- Consistent ground-level placement
+- Proper collision boundaries
+- Random placement with spawn area restrictions
 
 ### 4. Operator System (operator.js)
-- Operator class for mathematical operations
-- OperatorManager for spawning and lifecycle
-- Position and rotation management
-- Billboarding for operator symbols
-- Integration with player movement
+#### Visual Design
+- Floating semi-transparent spheres
+- Clear plus/minus symbols
+- Color-coded feedback (green/red)
+- Soft glow effect for visibility
+
+#### Behavior
+- Face camera for constant visibility
+- Gentle floating animation
+- Spawn randomly in valid areas
+- Limited to maximum count
+- Clear pickup and application feedback
+
+## HUD System
+The game features a minimalist HUD with two key elements:
+1. Number Display (Top-Left)
+   - Shows current Numberblock value
+   - Color changes to match Numberblock color scheme
+   - Uses semi-transparent background for visibility
+   - Updates in real-time with player changes
+
+2. Operator Display (Top-Right)
+   - Shows current held operator ("+ Add" or "- Subtract")
+   - Green for addition, red for subtraction
+   - Shows "No operator" when none held
+   - Semi-transparent background for visibility
 
 ## File Structure
 ```

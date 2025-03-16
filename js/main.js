@@ -31,13 +31,13 @@ if (typeof updateAABB !== 'function' || typeof checkCollision !== 'function') {
 }
 
 // Global variables
-let scene, camera, renderer;
+let scene, camera, renderer, controls;
 let ground;
-let controls;
-let clock;
 let playerNumberblock; // Player's Numberblock
 let staticNumberblock; // Static Numberblock for interaction
 let operatorManager; // Operator system manager
+let numberblocks = []; // Array to track random Numberblocks
+let operatorDisplay; // Add operator display element
 
 // Initialize the Three.js scene
 function init() {
@@ -74,12 +74,10 @@ function init() {
     playerNumberblock = createPlayerNumberblock(scene, 1);
 
     // Initialize the HUD display with the starting value
-    updatePlayerDisplay(playerNumberblock.value);
-
+    updatePlayerDisplay(1);
+    
     // Create static Numberblock for operator application
-    staticNumberblock = new Numberblock(2);
-    staticNumberblock.mesh.position.set(0, staticNumberblock.getHeight() / 2, -5);
-    scene.add(staticNumberblock.mesh);
+    staticNumberblock = createStaticNumberblock(2, { x: 0, z: -5 });
     console.log("Static Numberblock created with value: 2");
 
     // Initialize operator system
@@ -106,6 +104,12 @@ function init() {
     
     // CRITICAL FIX: Explicitly call onWindowResize to ensure camera's projection matrix is correct initially
     onWindowResize();
+    
+    // Create HUD elements
+    createHUD();
+    
+    // Create random Numberblocks around the map
+    createRandomNumberblocks();
     
     animate();
 }
@@ -180,22 +184,14 @@ function createLandscapeElements() {
         mesh = new THREE.Mesh(geometry, material);
         
         // Position randomly on the ground plane (within a 40x40 area)
-        const posX = (Math.random() * 40) - 20;
-        const posZ = (Math.random() * 40) - 20;
+        // Keep away from center where player spawns
+        let posX, posZ;
+        do {
+            posX = (Math.random() * 40) - 20;
+            posZ = (Math.random() * 40) - 20;
+        } while (Math.abs(posX) < 5 && Math.abs(posZ) < 5); // Keep away from spawn area
         
-        // Calculate Y position based on the shape's height
-        let posY;
-        if (shapeType === 0) { // Cube
-            posY = mesh.geometry.parameters.height / 2;
-        } else if (shapeType === 1) { // Cylinder
-            posY = mesh.geometry.parameters.height / 2;
-        } else if (shapeType === 2) { // Sphere
-            posY = mesh.geometry.parameters.radius;
-        } else { // Cone
-            posY = mesh.geometry.parameters.height / 2;
-        }
-        
-        mesh.position.set(posX, posY, posZ);
+        mesh.position.set(posX, 0, posZ);
         
         // Add random rotation for more variety
         mesh.rotation.y = Math.random() * Math.PI * 2;
@@ -248,6 +244,197 @@ function createTrees() {
     }
 }
 
+// Create HUD elements
+function createHUD() {
+    // Create player value display
+    const playerDisplay = document.createElement('div');
+    playerDisplay.id = 'playerDisplay';
+    playerDisplay.style.position = 'absolute';
+    playerDisplay.style.left = '20px';
+    playerDisplay.style.top = '20px';
+    playerDisplay.style.color = 'white';
+    playerDisplay.style.fontSize = '32px';
+    playerDisplay.style.fontFamily = 'Arial, sans-serif';
+    playerDisplay.style.fontWeight = 'bold';
+    playerDisplay.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+    playerDisplay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    playerDisplay.style.padding = '10px 20px';
+    playerDisplay.style.borderRadius = '10px';
+    document.body.appendChild(playerDisplay);
+    
+    // Create operator display
+    operatorDisplay = document.createElement('div');
+    operatorDisplay.id = 'operatorDisplay';
+    operatorDisplay.style.position = 'absolute';
+    operatorDisplay.style.right = '20px';
+    operatorDisplay.style.top = '20px';
+    operatorDisplay.style.color = 'white';
+    operatorDisplay.style.fontSize = '32px';
+    operatorDisplay.style.fontFamily = 'Arial, sans-serif';
+    operatorDisplay.style.fontWeight = 'bold';
+    operatorDisplay.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+    operatorDisplay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    operatorDisplay.style.padding = '10px 20px';
+    operatorDisplay.style.borderRadius = '10px';
+    document.body.appendChild(operatorDisplay);
+    
+    // Initial update
+    updatePlayerDisplay(1);
+    updateOperatorDisplay(null);
+}
+
+// Update the player's number display in the HUD
+function updatePlayerDisplay(value) {
+    const playerValueDisplay = document.getElementById('playerDisplay');
+    if (playerValueDisplay) {
+        playerValueDisplay.textContent = `Number: ${value}`;
+        
+        // Update color based on the value
+        const colors = {
+            1: '#FF0000',   // Red
+            2: '#FFA500',   // Orange
+            3: '#FFFF00',   // Yellow
+            4: '#00FF00',   // Green
+            5: '#0000FF',   // Blue
+            6: '#800080',   // Purple
+            7: '#FFC0CB',   // Pink
+            8: '#A52A2A',   // Brown
+            9: '#808080'    // Grey
+        };
+        
+        // Get color based on value, cycling through colors for values > 9
+        const color = colors[value % 9] || '#FFFFFF';
+        playerValueDisplay.style.color = color;
+    }
+}
+
+// Update operator display
+function updateOperatorDisplay(operatorType) {
+    if (operatorDisplay) {
+        if (operatorType) {
+            operatorDisplay.textContent = operatorType === 'plus' ? '+ Add' : '- Subtract';
+            operatorDisplay.style.color = operatorType === 'plus' ? '#00FF00' : '#FF0000';
+        } else {
+            operatorDisplay.textContent = 'No operator';
+            operatorDisplay.style.color = 'white';
+        }
+    }
+}
+
+// Create random Numberblocks around the map
+function createRandomNumberblocks() {
+    const numBlocks = 15; // Create 15 random Numberblocks
+    
+    for (let i = 0; i < numBlocks; i++) {
+        // Create a Numberblock with random value between 1 and 20
+        const value = Math.floor(Math.random() * 20) + 1;
+        const numberblock = new Numberblock(value);
+        
+        // Position randomly, away from player spawn
+        let posX, posZ;
+        do {
+            posX = (Math.random() * 40) - 20;
+            posZ = (Math.random() * 40) - 20;
+        } while (Math.abs(posX) < 5 && Math.abs(posZ) < 5);
+        
+        // Position the Numberblock with its base at ground level
+        numberblock.mesh.position.set(posX, numberblock.blockSize / 2, posZ);
+        scene.add(numberblock.mesh);
+        numberblocks.push(numberblock);
+        
+        if (typeof addCollidableObject === 'function') {
+            addCollidableObject(numberblock.mesh);
+        }
+    }
+}
+
+// Create a static Numberblock for testing
+function createStaticNumberblock(value = 2, position = { x: 0, z: -5 }) {
+    const numberblock = new Numberblock(value);
+    numberblock.mesh.position.set(position.x, numberblock.blockSize / 2, position.z);
+    scene.add(numberblock.mesh);
+    return numberblock;
+}
+
+// Create random shapes for the landscape
+function createRandomShapes() {
+    const numShapes = 30;
+    const shapes = [];
+    
+    for (let i = 0; i < numShapes; i++) {
+        let geometry, mesh;
+        const shapeType = Math.floor(Math.random() * 4); // 0: cube, 1: cylinder, 2: sphere, 3: cone
+        
+        // Create random shape
+        switch (shapeType) {
+            case 0: // Cube
+                geometry = new THREE.BoxGeometry(1, 1, 1);
+                break;
+            case 1: // Cylinder
+                geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+                break;
+            case 2: // Sphere
+                geometry = new THREE.SphereGeometry(0.5, 16, 16);
+                break;
+            case 3: // Cone
+                geometry = new THREE.ConeGeometry(0.5, 1, 16);
+                break;
+        }
+        
+        // Create material with random color
+        const material = new THREE.MeshStandardMaterial({
+            color: Math.random() * 0xFFFFFF,
+            roughness: 0.7,
+            metalness: 0.3
+        });
+        
+        mesh = new THREE.Mesh(geometry, material);
+        
+        // Position randomly on the ground plane (within a 40x40 area)
+        // Keep away from center where player spawns
+        let posX, posZ;
+        do {
+            posX = (Math.random() * 40) - 20;
+            posZ = (Math.random() * 40) - 20;
+        } while (Math.abs(posX) < 5 && Math.abs(posZ) < 5); // Keep away from spawn area
+        
+        // Calculate Y position based on the shape's height
+        let posY;
+        if (shapeType === 0) { // Cube
+            posY = mesh.geometry.parameters.height / 2;
+        } else if (shapeType === 1) { // Cylinder
+            posY = mesh.geometry.parameters.height / 2;
+        } else if (shapeType === 2) { // Sphere
+            posY = mesh.geometry.parameters.radius;
+        } else { // Cone
+            posY = mesh.geometry.parameters.height / 2;
+        }
+        
+        mesh.position.set(posX, posY, posZ);
+        
+        // Add random rotation for more variety
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        
+        scene.add(mesh);
+        shapes.push(mesh);
+        
+        // Make it collidable
+        if (typeof addCollidableObject === 'function') {
+            addCollidableObject(mesh);
+        }
+    }
+    
+    return shapes;
+}
+
+// Create player Numberblock and add it to the scene
+function createPlayerNumberblock(scene, value = 1) {
+    const playerBlock = new Numberblock(value);
+    playerBlock.mesh.position.set(0, playerBlock.blockSize / 2, 0); // Start at origin, on ground
+    scene.add(playerBlock.mesh);
+    return playerBlock;
+}
+
 // Handle window resize
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -278,7 +465,7 @@ function animate() {
     // Check for collisions between playerNumberblock and operators
     checkOperatorCollisions();
     
-    // Check for collisions between playerNumberblock and staticNumberblock
+    // Check for collisions between playerNumberblock and other Numberblocks
     checkNumberblockCollisions();
     
     // Render the scene
@@ -324,54 +511,118 @@ function updatePlayerPosition() {
     }
 }
 
-// Check for collisions between player Numberblock and static Numberblock
+// Check for collisions between player Numberblock and other Numberblocks
 function checkNumberblockCollisions() {
-    if (!playerNumberblock || !staticNumberblock || !operatorManager) return;
+    if (!playerNumberblock || !playerNumberblock.mesh) return;
     
-    // Update bounding boxes
-    try {
-        const playerBox = updateAABB(playerNumberblock.mesh);
-        const staticBox = updateAABB(staticNumberblock.mesh);
-        
-        if (playerBox && staticBox && checkCollision(playerBox, staticBox)) {
-            handleNumberblockCollision(playerNumberblock, staticNumberblock, operatorManager);
+    const playerBox = new THREE.Box3().setFromObject(playerNumberblock.mesh);
+    
+    // Check collision with static Numberblock
+    if (staticNumberblock && staticNumberblock.mesh) {
+        const staticBox = new THREE.Box3().setFromObject(staticNumberblock.mesh);
+        if (playerBox.intersectsBox(staticBox)) {
+            // Only handle collision if we have an operator
+            if (operatorManager && operatorManager.getHeldOperator()) {
+                handleNumberblockCollision(staticNumberblock);
+                
+                // Remove the static Numberblock
+                scene.remove(staticNumberblock.mesh);
+                staticNumberblock = null;
+                
+                // Create a new static Numberblock
+                const value = Math.floor(Math.random() * 20) + 1;
+                staticNumberblock = createStaticNumberblock(value, { x: 0, z: -5 });
+                
+                // Position it randomly, away from the player
+                let posX, posZ;
+                do {
+                    posX = (Math.random() * 40) - 20;
+                    posZ = (Math.random() * 40) - 20;
+                } while (
+                    Math.abs(posX - playerNumberblock.mesh.position.x) < 5 && 
+                    Math.abs(posZ - playerNumberblock.mesh.position.z) < 5
+                );
+                
+                staticNumberblock.mesh.position.set(posX, staticNumberblock.blockSize / 2, posZ);
+                scene.add(staticNumberblock.mesh);
+                
+                if (typeof addCollidableObject === 'function') {
+                    addCollidableObject(staticNumberblock.mesh);
+                }
+            }
         }
-    } catch (error) {
-        console.error("Error in collision detection:", error);
+    }
+    
+    // Check collisions with random Numberblocks
+    for (let i = numberblocks.length - 1; i >= 0; i--) {
+        const numberblock = numberblocks[i];
+        if (!numberblock || !numberblock.mesh) continue;
+        
+        const blockBox = new THREE.Box3().setFromObject(numberblock.mesh);
+        if (playerBox.intersectsBox(blockBox)) {
+            // Only handle collision if we have an operator
+            if (operatorManager && operatorManager.getHeldOperator()) {
+                handleNumberblockCollision(numberblock);
+                
+                // Remove the collided Numberblock
+                scene.remove(numberblock.mesh);
+                numberblocks.splice(i, 1);
+                
+                // Create a new Numberblock to replace it
+                const value = Math.floor(Math.random() * 20) + 1;
+                const newBlock = new Numberblock(value);
+                
+                // Position it randomly, away from the player
+                let posX, posZ;
+                do {
+                    posX = (Math.random() * 40) - 20;
+                    posZ = (Math.random() * 40) - 20;
+                } while (
+                    Math.abs(posX - playerNumberblock.mesh.position.x) < 5 && 
+                    Math.abs(posZ - playerNumberblock.mesh.position.z) < 5
+                );
+                
+                newBlock.mesh.position.set(posX, newBlock.blockSize / 2, posZ);
+                scene.add(newBlock.mesh);
+                numberblocks.push(newBlock);
+                
+                if (typeof addCollidableObject === 'function') {
+                    addCollidableObject(newBlock.mesh);
+                }
+            }
+        }
     }
 }
 
-// Handle collision between player and another numberblock
-function handleNumberblockCollision(player, targetNumberblock, operatorManager) {
-    // Check if player is holding an operator
-    if (operatorManager.getHeldOperator()) {
-        const heldOperator = operatorManager.getHeldOperator();
-        const originalValue = player.value;
+// Handle collision with a Numberblock
+function handleNumberblockCollision(hitNumberblock) {
+    // Only apply operation if we have an operator
+    const operatorType = operatorManager.getHeldOperator();
+    if (operatorType) {
+        const oldValue = playerNumberblock.value;
+        let newValue;
         
-        if (heldOperator === 'plus') {
-            player.value += targetNumberblock.value;
-            console.log(`Applied + operator: ${originalValue} + ${targetNumberblock.value} = ${player.value}`);
-        } else if (heldOperator === 'minus') {
-            player.value -= targetNumberblock.value;
-            player.value = Math.max(player.value, 1); // Ensure minimum value of 1
-            console.log(`Applied - operator: ${originalValue} - ${targetNumberblock.value} = ${player.value}`);
+        if (operatorType === 'plus') {
+            newValue = oldValue + hitNumberblock.value;
+        } else {
+            newValue = oldValue - hitNumberblock.value;
         }
         
-        // Update the HUD display with the new value
-        updatePlayerDisplay(player.value);
+        // Ensure value stays positive
+        newValue = Math.max(1, newValue);
         
-        // Clear the held operator after use
+        // Update player's Numberblock
+        playerNumberblock.setValue(newValue);
+        updatePlayerDisplay(newValue);
+        
+        // Clear the held operator
         operatorManager.clearHeldOperator();
+        updateOperatorDisplay(null);
         
-        // Rebuild the player's Numberblock to reflect the new number visually
-        player.createNumberblock();
-        
-        // Apply dynamic camera positioning after number change
+        // Update camera position for new height
         updateCameraForNumberblockChange();
         
-        // Apply a small push to prevent continuous collisions
-        const pushForce = 1.0;
-        controls.getObject().position.z += pushForce;
+        console.log(`Applied ${operatorType} operation: ${oldValue} ${operatorType === 'plus' ? '+' : '-'} ${hitNumberblock.value} = ${newValue}`);
     }
 }
 
@@ -396,56 +647,29 @@ function updateCameraForNumberblockChange() {
     }
 }
 
-// Update the player's number display in the HUD
-function updatePlayerDisplay(value) {
-    // Update any UI elements that display the player's current number
-    console.log(`Player Numberblock value updated to: ${value}`);
-    
-    // If there's an HTML element for the display, update it
-    const playerValueDisplay = document.getElementById('player-value');
-    if (playerValueDisplay) {
-        playerValueDisplay.textContent = value;
-    }
-}
-
 // Check for collisions between player's Numberblock and operators
 function checkOperatorCollisions() {
     try {
         if (!playerNumberblock || !operatorManager) return;
         
-        const operators = operatorManager.getOperators();
-        if (!operators || operators.length === 0) return;
-        
-        // Get the player's AABB
-        const playerBox = updateAABB(playerNumberblock.mesh);
+        const playerBox = new THREE.Box3().setFromObject(playerNumberblock.mesh);
         if (!playerBox) {
             console.warn("Could not create player's bounding box");
             return;
         }
         
+        // Get all operators
+        const operators = operatorManager.getOperators();
+        
         // Check collision with each operator
-        for (let i = 0; i < operators.length; i++) {
-            const operator = operators[i];
-            if (!operator || !operator.mesh) continue;
-            
-            // Get the operator's AABB
-            const operatorBox = updateAABB(operator.mesh);
-            if (!operatorBox) {
-                console.warn(`Could not create bounding box for operator ${i}`);
-                continue;
-            }
-            
-            // Check if there's a collision
-            if (checkCollision(playerBox, operatorBox)) {
-                console.log(`Collision detected with ${operator.type} operator`);
-                
-                // Pickup the operator and attach it to the Numberblock
+        operators.forEach(operator => {
+            const operatorBox = new THREE.Box3().setFromObject(operator.mesh);
+            if (playerBox.intersectsBox(operatorBox)) {
+                // Set the held operator and update display
                 operatorManager.setHeldOperator(operator, playerNumberblock);
-                
-                // No need to check further after picking up an operator
-                break;
+                updateOperatorDisplay(operator.type);
             }
-        }
+        });
     } catch (error) {
         console.error("Error in checkOperatorCollisions:", error);
     }

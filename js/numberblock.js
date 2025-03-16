@@ -55,11 +55,14 @@ class Numberblock {
             if (i === this.value - 1) {
                 const face = this.createFace();
                 block.add(face);
-                
-                // Add number tag on top of the top block
-                const numberTag = this.createNumberTag();
-                numberTag.position.y = this.blockSize / 2 + 0.1; // Position just above the top block
-                block.add(numberTag);
+            }
+            
+            // Add feet to the bottom block
+            if (i === 0) {
+                const leftFoot = this.createFoot('left');
+                const rightFoot = this.createFoot('right');
+                block.add(leftFoot);
+                block.add(rightFoot);
             }
         }
         
@@ -73,16 +76,7 @@ class Numberblock {
             this.mesh.children[armBlockIndex].add(rightArm);
         }
         
-        // Add feet to the bottom block
-        if (this.value > 0) {
-            const leftFoot = this.createFoot('left');
-            const rightFoot = this.createFoot('right');
-            
-            this.mesh.children[0].add(leftFoot);
-            this.mesh.children[0].add(rightFoot);
-        }
-        
-        // Adjust the entire Numberblock position so the bottom is at y=0
+        // Set initial position to 0 - we'll handle positioning in the game logic
         this.mesh.position.y = 0;
     }
     
@@ -163,48 +157,6 @@ class Numberblock {
         eye.add(pupil);
         
         return eye;
-    }
-    
-    // Create a number tag to display on top of the Numberblock
-    createNumberTag() {
-        const tag = new THREE.Group();
-        
-        // Create a circular background for the number
-        const tagRadius = this.blockSize * 0.3;
-        const tagGeometry = new THREE.CylinderGeometry(tagRadius, tagRadius, 0.05, 32);
-        const tagMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0xFFFFFF,
-            transparent: true,
-            opacity: 0.9,
-            side: THREE.DoubleSide
-        });
-        const tagMesh = new THREE.Mesh(tagGeometry, tagMaterial);
-        tagMesh.rotation.x = Math.PI / 2; // Make it horizontal
-        tag.add(tagMesh);
-        
-        // Create text geometry for the number
-        // Using a simple approach since Three.js TextGeometry requires font loading
-        
-        // For now, we'll create a simple representation
-        const numberSize = this.blockSize * 0.2;
-        const numberThickness = 0.05;
-        
-        // Create a simple cube for the number (in a real implementation, use TextGeometry)
-        const numberGeometry = new THREE.BoxGeometry(numberSize, numberSize * 1.5, numberThickness);
-        const numberMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.9
-        });
-        const numberMesh = new THREE.Mesh(numberGeometry, numberMaterial);
-        
-        // Position the number just above the tag background
-        numberMesh.position.z = 0.03;
-        tag.add(numberMesh);
-        
-        // No longer creating HTML elements for the number display
-        
-        return tag;
     }
     
     // Create an arm (left or right)
