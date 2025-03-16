@@ -9,6 +9,7 @@ let turnLeft = false;    // New variable for Q key turning
 let turnRight = false;   // New variable for E key turning
 let canJump = false;
 let pitch = 0;  // Track vertical rotation separately
+// isFirstPerson is a global variable attached to the window object in main.js
 
 let prevTime = performance.now();
 let velocity = new THREE.Vector3();
@@ -25,7 +26,7 @@ const gravity = 9.8;                  // Gravity force
 const forceFallbackControls = false;
 
 // Initialize controls for the camera
-function initControls(camera, domElement) {
+window.initControls = function(camera, domElement) {
     console.log("Initializing controls...");
     
     // Always use fallback controls in browser preview environments
@@ -377,38 +378,58 @@ function updateControls(controls, delta) {
         return;
     }
 
-    // If using PointerLockControls and not locked, return
-    if (controls.isLocked === false && !forceFallbackControls) {
-        return;
-    }
-
-    // Update velocity
+    // Always update physics regardless of lock state
     velocity.x -= velocity.x * 10.0 * delta;
     velocity.z -= velocity.z * 10.0 * delta;
-    velocity.y -= gravity * delta; // Apply gravity
+    velocity.y -= gravity * delta;
 
-    // Apply movement based on key states - fixed direction
-    if (moveForward) controls.moveForward(moveSpeed * delta);
-    if (moveBackward) controls.moveForward(-moveSpeed * delta);
-    if (moveLeft) controls.moveRight(-moveSpeed * delta);
-    if (moveRight) controls.moveRight(moveSpeed * delta);
-    
-    // Apply turning based on Q and E keys
-    if (turnLeft && controls.getObject) {
-        controls.getObject().rotation.y += turnSpeed * delta;
-    }
-    if (turnRight && controls.getObject) {
-        controls.getObject().rotation.y -= turnSpeed * delta;
-    }
-
-    // Update Y position with gravity
-    if (controls.getObject) {
+    // First person mode - camera attached to controls
+    if (window.isFirstPerson) {
+        // Only check control lock in first-person mode
+        if (controls.isLocked === false && !forceFallbackControls) {
+            return;
+        }
+        
+        // Regular FPS controls using PointerLockControls
+        if (moveForward) controls.moveForward(-moveSpeed * delta);  // Negative for forward
+        if (moveBackward) controls.moveForward(moveSpeed * delta);  // Positive for backward
+        if (moveLeft) controls.moveRight(-moveSpeed * delta);
+        if (moveRight) controls.moveRight(moveSpeed * delta);
+        if (turnLeft) controls.getObject().rotation.y += turnSpeed * delta;
+        if (turnRight) controls.getObject().rotation.y -= turnSpeed * delta;
+        
+        // Handle vertical movement (jumping)
         controls.getObject().position.y += velocity.y * delta;
-
-        // Ground collision
         if (controls.getObject().position.y < playerHeight) {
             velocity.y = 0;
             controls.getObject().position.y = playerHeight;
+            canJump = true;
+        }
+    } 
+    // Third person mode - direct control of the numberblock
+    else if (playerNumberblock && playerNumberblock.mesh) {
+        // Get the current look direction 
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerNumberblock.mesh.rotation.y);
+        const right = new THREE.Vector3(1, 0, 0);
+        right.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerNumberblock.mesh.rotation.y);
+        
+        // Apply movement relative to numberblock's facing direction
+        if (moveForward) playerNumberblock.mesh.position.addScaledVector(forward, -moveSpeed * delta); // Negative for forward
+        if (moveBackward) playerNumberblock.mesh.position.addScaledVector(forward, moveSpeed * delta); // Positive for backward
+        if (moveLeft) playerNumberblock.mesh.position.addScaledVector(right, -moveSpeed * delta);
+        if (moveRight) playerNumberblock.mesh.position.addScaledVector(right, moveSpeed * delta);
+        
+        // Apply turning - from Q/E keys
+        if (turnLeft) playerNumberblock.mesh.rotation.y += turnSpeed * delta;
+        if (turnRight) playerNumberblock.mesh.rotation.y -= turnSpeed * delta;
+        
+        // Apply jumping physics
+        playerNumberblock.mesh.position.y += velocity.y * delta;
+        const groundLevel = playerNumberblock.getHeight() / 2;
+        if (playerNumberblock.mesh.position.y < groundLevel) {
+            velocity.y = 0;
+            playerNumberblock.mesh.position.y = groundLevel;
             canJump = true;
         }
     }

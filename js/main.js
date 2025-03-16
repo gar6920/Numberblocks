@@ -38,6 +38,7 @@ let staticNumberblock; // Static Numberblock for interaction
 let operatorManager; // Operator system manager
 let numberblocks = []; // Array to track random Numberblocks
 let operatorDisplay; // Add operator display element
+window.isFirstPerson = true; // Make isFirstPerson truly global by attaching to window
 
 // Initialize the Three.js scene
 function init() {
@@ -84,8 +85,9 @@ function init() {
     window.camera = camera; // Make camera available for operator billboarding
     operatorManager = new OperatorManager(scene);
 
+    // Initialize FPS controls with proper look
     controls = initControls(camera, renderer.domElement);
-
+    
     // CRITICAL FIX: Explicitly set position on controls object (not camera directly)
     controls.getObject().position.set(0, 2, 5);
     scene.add(controls.getObject());
@@ -246,65 +248,63 @@ function createTrees() {
 
 // Create HUD elements
 function createHUD() {
-    // Create player value display
-    const playerDisplay = document.createElement('div');
-    playerDisplay.id = 'playerDisplay';
-    playerDisplay.style.position = 'absolute';
-    playerDisplay.style.left = '20px';
-    playerDisplay.style.top = '20px';
-    playerDisplay.style.color = 'white';
-    playerDisplay.style.fontSize = '32px';
-    playerDisplay.style.fontFamily = 'Arial, sans-serif';
-    playerDisplay.style.fontWeight = 'bold';
-    playerDisplay.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
-    playerDisplay.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    playerDisplay.style.padding = '10px 20px';
-    playerDisplay.style.borderRadius = '10px';
-    document.body.appendChild(playerDisplay);
-    
-    // Create operator display
+    // Player's number display
+    const valueDisplay = document.createElement('div');
+    valueDisplay.id = 'value-display';
+    valueDisplay.style.position = 'absolute';
+    valueDisplay.style.bottom = '20px';
+    valueDisplay.style.left = '20px';
+    valueDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    valueDisplay.style.color = 'white';
+    valueDisplay.style.padding = '10px 20px';
+    valueDisplay.style.borderRadius = '5px';
+    valueDisplay.style.fontFamily = 'Arial, sans-serif';
+    valueDisplay.style.fontSize = '24px';
+    valueDisplay.style.fontWeight = 'bold';
+    valueDisplay.innerHTML = 'Value: 1';
+    document.body.appendChild(valueDisplay);
+
+    // Operator display
     operatorDisplay = document.createElement('div');
-    operatorDisplay.id = 'operatorDisplay';
+    operatorDisplay.id = 'operator-display';
     operatorDisplay.style.position = 'absolute';
+    operatorDisplay.style.bottom = '20px';
     operatorDisplay.style.right = '20px';
-    operatorDisplay.style.top = '20px';
+    operatorDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
     operatorDisplay.style.color = 'white';
-    operatorDisplay.style.fontSize = '32px';
-    operatorDisplay.style.fontFamily = 'Arial, sans-serif';
-    operatorDisplay.style.fontWeight = 'bold';
-    operatorDisplay.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
-    operatorDisplay.style.backgroundColor = 'rgba(0,0,0,0.5)';
     operatorDisplay.style.padding = '10px 20px';
-    operatorDisplay.style.borderRadius = '10px';
+    operatorDisplay.style.borderRadius = '5px';
+    operatorDisplay.style.fontFamily = 'Arial, sans-serif';
+    operatorDisplay.style.fontSize = '24px';
+    operatorDisplay.style.fontWeight = 'bold';
+    operatorDisplay.innerHTML = 'Current Operator: None';
     document.body.appendChild(operatorDisplay);
     
-    // Initial update
-    updatePlayerDisplay(1);
-    updateOperatorDisplay(null);
+    // View mode display
+    const viewModeDisplay = document.createElement('div');
+    viewModeDisplay.id = 'view-mode-display';
+    viewModeDisplay.style.position = 'absolute';
+    viewModeDisplay.style.top = '20px';
+    viewModeDisplay.style.left = '50%';
+    viewModeDisplay.style.transform = 'translateX(-50%)';
+    viewModeDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    viewModeDisplay.style.color = 'white';
+    viewModeDisplay.style.padding = '10px 20px';
+    viewModeDisplay.style.borderRadius = '5px';
+    viewModeDisplay.style.fontFamily = 'Arial, sans-serif';
+    viewModeDisplay.style.fontSize = '20px';
+    viewModeDisplay.style.fontWeight = 'bold';
+    viewModeDisplay.style.transition = 'opacity 1s';
+    viewModeDisplay.style.opacity = '0';
+    viewModeDisplay.innerHTML = 'First Person View';
+    document.body.appendChild(viewModeDisplay);
 }
 
 // Update the player's number display in the HUD
 function updatePlayerDisplay(value) {
-    const playerValueDisplay = document.getElementById('playerDisplay');
-    if (playerValueDisplay) {
-        playerValueDisplay.textContent = `Number: ${value}`;
-        
-        // Update color based on the value
-        const colors = {
-            1: '#FF0000',   // Red
-            2: '#FFA500',   // Orange
-            3: '#FFFF00',   // Yellow
-            4: '#00FF00',   // Green
-            5: '#0000FF',   // Blue
-            6: '#800080',   // Purple
-            7: '#FFC0CB',   // Pink
-            8: '#A52A2A',   // Brown
-            9: '#808080'    // Grey
-        };
-        
-        // Get color based on value, cycling through colors for values > 9
-        const color = colors[value % 9] || '#FFFFFF';
-        playerValueDisplay.style.color = color;
+    const valueDisplay = document.getElementById('value-display');
+    if (valueDisplay) {
+        valueDisplay.innerHTML = `Value: ${value}`;
     }
 }
 
@@ -312,10 +312,10 @@ function updatePlayerDisplay(value) {
 function updateOperatorDisplay(operatorType) {
     if (operatorDisplay) {
         if (operatorType) {
-            operatorDisplay.textContent = operatorType === 'plus' ? '+ Add' : '- Subtract';
+            operatorDisplay.innerHTML = operatorType === 'plus' ? '+ Add' : '- Subtract';
             operatorDisplay.style.color = operatorType === 'plus' ? '#00FF00' : '#FF0000';
         } else {
-            operatorDisplay.textContent = 'No operator';
+            operatorDisplay.innerHTML = 'Current Operator: None';
             operatorDisplay.style.color = 'white';
         }
     }
@@ -335,7 +335,10 @@ function createRandomNumberblocks() {
         do {
             posX = (Math.random() * 40) - 20;
             posZ = (Math.random() * 40) - 20;
-        } while (Math.abs(posX) < 5 && Math.abs(posZ) < 5);
+        } while (
+            Math.abs(posX) < 5 && 
+            Math.abs(posZ) < 5
+        );
         
         // Position the Numberblock with its base at ground level
         numberblock.mesh.position.set(posX, numberblock.blockSize / 2, posZ);
@@ -396,7 +399,10 @@ function createRandomShapes() {
         do {
             posX = (Math.random() * 40) - 20;
             posZ = (Math.random() * 40) - 20;
-        } while (Math.abs(posX) < 5 && Math.abs(posZ) < 5); // Keep away from spawn area
+        } while (
+            Math.abs(posX) < 5 && 
+            Math.abs(posZ) < 5
+        );
         
         // Calculate Y position based on the shape's height
         let posY;
@@ -449,65 +455,88 @@ function animate() {
     // Calculate time delta for smooth movement
     const delta = clock.getDelta();
     
-    // Update controls
+    // Always update controls for movement
     if (controls && typeof updateControls === 'function') {
         updateControls(controls, delta);
     }
     
-    // Update the playerNumberblock position to follow the camera
-    updatePlayerPosition();
+    // Update player position based on view mode
+    if (window.isFirstPerson) {
+        // First-person: Numberblock follows the camera/controls
+        updatePlayerPosition();
+    } else {
+        // Third-person: Camera follows the Numberblock
+        updateThirdPersonCamera();
+    }
     
     // Update operator system
     if (operatorManager) {
         operatorManager.update(delta);
     }
     
-    // Check for collisions between playerNumberblock and operators
+    // Check for collisions
     checkOperatorCollisions();
-    
-    // Check for collisions between playerNumberblock and other Numberblocks
     checkNumberblockCollisions();
     
     // Render the scene
     renderer.render(scene, camera);
 }
 
-// Update the player's Numberblock position to follow the camera
+// Update player position in first-person mode
 function updatePlayerPosition() {
     if (playerNumberblock && controls) {
-        // Get the controls object's position
         const controlsObject = controls.getObject();
         
-        // Calculate the forward direction vector
-        const camDirection = new THREE.Vector3(0, 0, -1);
-        camDirection.applyQuaternion(camera.quaternion);
+        // Update Numberblock position to match controls
+        playerNumberblock.mesh.position.x = controlsObject.position.x;
+        playerNumberblock.mesh.position.z = controlsObject.position.z;
         
-        // Dynamically adjust the vertical offset based on Numberblock height
-        // For taller Numberblocks, we need a larger offset to keep the camera at eye level
-        const numberblockHeight = playerNumberblock.getHeight();
-        const verticalOffset = Math.max(1.5, numberblockHeight * 0.6);
+        // Adjust Y position based on Numberblock height
+        const yOffset = playerNumberblock.getHeight() / 2;
+        playerNumberblock.mesh.position.y = controlsObject.position.y - yOffset;
         
-        // Position the Numberblock relative to the camera with dynamic offset
-        const targetPosition = new THREE.Vector3();
-        targetPosition.copy(controlsObject.position);
-        targetPosition.y -= verticalOffset;
+        // Match ONLY horizontal rotation to camera's direction (Y-axis)
+        playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
         
-        // Calculate ground level based on Numberblock height
-        const groundLevel = numberblockHeight / 2; // Bottom of Numberblock should be at y=0
-        
-        // Prevent the Numberblock from falling through the ground
-        // This will also adjust the camera accordingly to maintain the relationship
-        if (targetPosition.y < groundLevel) {
-            targetPosition.y = groundLevel;
-            // Adjust camera position to maintain the fixed relationship
-            controlsObject.position.y = groundLevel + verticalOffset;
+        // We do NOT modify camera rotation here, allowing PointerLockControls to handle it
+    }
+}
+
+// Update camera position in third-person mode
+function updateThirdPersonCamera() {
+    if (playerNumberblock && playerNumberblock.mesh) {
+        // Make sure camera is detached from controls in third-person
+        if (camera.parent !== scene) {
+            const worldPosition = new THREE.Vector3();
+            const worldQuaternion = new THREE.Quaternion();
+            camera.getWorldPosition(worldPosition);
+            camera.getWorldQuaternion(worldQuaternion);
+            
+            camera.parent.remove(camera);
+            scene.add(camera);
+            camera.position.copy(worldPosition);
+            camera.quaternion.copy(worldQuaternion);
         }
         
-        // Update the Numberblock's position immediately (no lerp) to stay aligned with camera
-        playerNumberblock.mesh.position.copy(targetPosition);
+        // Position camera behind and above the Numberblock
+        const distance = 12;
+        const height = 10;
         
-        // Make the Numberblock rotate to match camera's horizontal rotation
-        playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
+        // Get Numberblock's forward direction from rotation
+        const playerAngle = playerNumberblock.mesh.rotation.y;
+        const offsetX = Math.sin(playerAngle) * distance;
+        const offsetZ = Math.cos(playerAngle) * distance;
+        
+        camera.position.x = playerNumberblock.mesh.position.x - offsetX;
+        camera.position.z = playerNumberblock.mesh.position.z - offsetZ;
+        camera.position.y = playerNumberblock.mesh.position.y + height;
+        
+        // Look at the Numberblock
+        camera.lookAt(
+            playerNumberblock.mesh.position.x,
+            playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2,
+            playerNumberblock.mesh.position.z
+        );
     }
 }
 
@@ -674,6 +703,116 @@ function checkOperatorCollisions() {
         console.error("Error in checkOperatorCollisions:", error);
     }
 }
+
+// Add view toggle with V key
+document.addEventListener('keydown', (event) => {
+    if (event.code === 'KeyV') {
+        window.isFirstPerson = !window.isFirstPerson;
+        console.log('View mode toggled to: ' + (window.isFirstPerson ? 'first-person' : 'third-person'));
+        
+        // Always hide the controls info
+        const controlsInfo = document.getElementById('controls-info');
+        if (controlsInfo) {
+            controlsInfo.style.display = 'none';
+        }
+        
+        if (window.isFirstPerson) {
+            // First-person: Properly reattach camera to controls
+            if (controls && playerNumberblock) {
+                // Store the current player position
+                const playerPosition = playerNumberblock.mesh.position.clone();
+                const playerRotation = playerNumberblock.mesh.rotation.y;
+                
+                // Detach camera from scene and reattach to controls if needed
+                if (camera.parent === scene) {
+                    scene.remove(camera);
+                    
+                    // Reset camera local position and rotation
+                    camera.position.set(0, 0, 0);
+                    camera.rotation.set(0, 0, 0);
+                    
+                    // Add back to controls
+                    controls.getObject().add(camera);
+                }
+                
+                // Reposition controls object at the player's head
+                const numberblockHeight = playerNumberblock.getHeight();
+                const verticalOffset = Math.max(1.5, numberblockHeight * 0.6);
+                
+                controls.getObject().position.copy(playerNumberblock.mesh.position);
+                controls.getObject().position.y += verticalOffset;
+                
+                // Match rotation with playerNumberblock but flip 180 degrees to face forward
+                controls.getObject().rotation.y = playerNumberblock.mesh.rotation.y + Math.PI;
+                
+                // Keep controls locked in first-person
+                if (typeof controls.lock === 'function') {
+                    // We call lock() but don't allow it to show the instructions
+                    // This maintains pointer capture without showing the message
+                    controls.isLocked = true; // Manually set locked state
+                    
+                    // Perform lock without showing instructions
+                    if (document.pointerLockElement !== controls.domElement && 
+                        document.mozPointerLockElement !== controls.domElement) {
+                        controls.domElement.requestPointerLock();
+                    }
+                }
+            }
+        } else {
+            // Third-person: Properly detach camera while maintaining control
+            
+            // Detach camera from controls and add to scene
+            if (camera.parent !== scene) {
+                // Get the world position before detaching
+                const worldPosition = new THREE.Vector3();
+                const worldQuaternion = new THREE.Quaternion();
+                camera.getWorldPosition(worldPosition);
+                camera.getWorldQuaternion(worldQuaternion);
+                
+                // Remove camera from parent (controls)
+                camera.parent.remove(camera);
+                
+                // Add to scene at the world position
+                scene.add(camera);
+                camera.position.copy(worldPosition);
+                camera.quaternion.copy(worldQuaternion);
+            }
+            
+            // Force immediate update of camera position for third-person
+            if (playerNumberblock && playerNumberblock.mesh) {
+                // Position camera behind and above the Numberblock
+                const distance = 12;
+                const height = 10;
+                
+                const playerAngle = playerNumberblock.mesh.rotation.y;
+                const offsetX = Math.sin(playerAngle) * distance;
+                const offsetZ = Math.cos(playerAngle) * distance;
+                
+                camera.position.x = playerNumberblock.mesh.position.x - offsetX;
+                camera.position.z = playerNumberblock.mesh.position.z - offsetZ;
+                camera.position.y = playerNumberblock.mesh.position.y + height;
+                
+                camera.lookAt(
+                    playerNumberblock.mesh.position.x,
+                    playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2,
+                    playerNumberblock.mesh.position.z
+                );
+            }
+        }
+        
+        // Show view mode message
+        const viewModeDisplay = document.getElementById('view-mode-display');
+        if (viewModeDisplay) {
+            viewModeDisplay.innerHTML = window.isFirstPerson ? 'First Person View' : 'Third Person View';
+            viewModeDisplay.style.opacity = '1';
+            
+            // Hide the message after 2 seconds
+            setTimeout(() => {
+                viewModeDisplay.style.opacity = '0';
+            }, 2000);
+        }
+    }
+});
 
 // Initialize the scene when the page loads
 document.addEventListener('DOMContentLoaded', init);
