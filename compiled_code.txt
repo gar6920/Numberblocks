@@ -1444,273 +1444,29 @@ const turnSpeed = 2.0;                // Rotation speed for Q/E turning
 const jumpHeight = 5.0;               // Jump impulse force
 const gravity = 9.8;                  // Gravity force 
 
-// Flag to force fallback controls (for environments like browser previews)
-const forceFallbackControls = false;
-
 // Initialize controls for the camera
 window.initControls = function(camera, domElement) {
-    console.log("Initializing controls...");
-    
-    // Always use fallback controls in browser preview environments
-    if (forceFallbackControls) {
-        console.log("Using fallback controls (forced)");
-        return createFallbackControls(camera, domElement);
-    }
-    
-    // For non-preview environments, try to use PointerLockControls
-    try {
-        // Test if Pointer Lock API is supported
-        if (!document.pointerLockElement && 
-            !document.mozPointerLockElement && 
-            !document.webkitPointerLockElement) {
-            console.log("Pointer Lock API not supported, using fallback");
-            return createFallbackControls(camera, domElement);
-        }
-        
-        console.log("Using PointerLockControls");
-        
-        // Create PointerLockControls
-        const controls = new THREE.PointerLockControls(camera, domElement);
-        
-        // Set up click event
-        domElement.addEventListener('click', () => {
-            console.log("Canvas clicked, requesting pointer lock");
-            controls.lock();
-        });
-        
-        // Event listeners for controls state
-        controls.addEventListener('lock', () => {
-            console.log("PointerLock controls LOCKED");
-            document.getElementById('controls-info').style.display = 'none';
-        });
-        
-        controls.addEventListener('unlock', () => {
-            console.log("PointerLock UNLOCKED");
-            document.getElementById('controls-info').style.display = 'block';
-        });
-        
-        // Add keyboard controls with debug logging
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
-        
-        // Store controls object for movement functions
-        controls.moveState = {
-            moveForward: () => controls.moveForward(moveSpeed * clock.getDelta()),
-            moveBackward: () => controls.moveForward(-moveSpeed * clock.getDelta()),
-            moveLeft: () => controls.moveRight(-moveSpeed * clock.getDelta()),
-            moveRight: () => controls.moveRight(moveSpeed * clock.getDelta())
-        };
-        
-        return controls;
-    } catch (e) {
-        console.error('Error initializing controls, using fallback:', e);
-        return createFallbackControls(camera, domElement);
-    }
-}
+    console.log("Initializing PointerLockControls properly...");
 
-// Create improved fallback controls
-function createFallbackControls(camera, domElement) {
-    const pitchObject = new THREE.Object3D();
-    pitchObject.add(camera);
+    const controls = new THREE.PointerLockControls(camera, domElement);
 
-    const controlsObject = new THREE.Object3D();
-    controlsObject.add(pitchObject);
-
-    // Track active event handlers for removal when needed
-    const activeEventListeners = {
-        mousemove: null,
-        mouseleave: null,
-        keydown: null
-    };
-
-    const mockControls = {
-        isLocked: false,
-        getObject: () => controlsObject,
-
-        moveForward: (distance) => {
-            if (!mockControls.isLocked) return;
-            const dir = new THREE.Vector3(0, 0, -1);
-            dir.applyQuaternion(controlsObject.quaternion);
-            controlsObject.position.addScaledVector(dir, distance);
-        },
-        moveRight: (distance) => {
-            if (!mockControls.isLocked) return;
-            const right = new THREE.Vector3(1, 0, 0);
-            right.applyQuaternion(controlsObject.quaternion);
-            controlsObject.position.add(right.multiplyScalar(distance));
-        },
-
-        lock: function() {
-            if (this.isLocked) return;
-
-            this.isLocked = true;
-            document.getElementById('controls-info').style.display = 'none';
-            document.body.style.cursor = 'none';
-            
-            // Attempt to use standard pointer lock if available
-            try {
-                if (domElement.requestPointerLock) {
-                    domElement.requestPointerLock();
-                } else if (domElement.mozRequestPointerLock) {
-                    domElement.mozRequestPointerLock();
-                } else if (domElement.webkitRequestPointerLock) {
-                    domElement.webkitRequestPointerLock();
-                }
-            } catch (e) {
-                console.error('Pointer lock not supported, using fallback cursor hiding');
-            }
-            
-            // Apply cursor containment styles
-            document.body.classList.add('cursor-locked');
-
-            // Add event listeners only when locked
-            this.setupEventListeners();
-            
-            this.dispatchEvent({ type: 'lock' });
-        },
-
-        unlock: function() {
-            if (!this.isLocked) return;
-
-            this.isLocked = false;
-            document.getElementById('controls-info').style.display = 'block';
-            document.body.style.cursor = 'auto';
-            
-            // Exit pointer lock if active
-            try {
-                if (document.exitPointerLock) {
-                    document.exitPointerLock();
-                } else if (document.mozExitPointerLock) {
-                    document.mozExitPointerLock();
-                } else if (document.webkitExitPointerLock) {
-                    document.webkitExitPointerLock();
-                }
-            } catch (e) {
-                console.error('Error exiting pointer lock');
-            }
-            
-            // Remove cursor containment styles
-            document.body.classList.remove('cursor-locked');
-            
-            // Remove event listeners when unlocked to fully disengage
-            this.removeEventListeners();
-            
-            this.dispatchEvent({ type: 'unlock' });
-        },
-        
-        setupEventListeners: function() {
-            // Mouse look event handling
-            const mouseMoveHandler = (event) => {
-                if (!mockControls.isLocked) return;
-
-                // For browsers that don't support pointer lock, we can use this approach
-                // to at least keep processing mouse events even at screen edges
-                const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
-                const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
-                
-                // Only apply reasonable movements to avoid jumps
-                if (Math.abs(movementX) < 100 && Math.abs(movementY) < 100) {
-                    controlsObject.rotation.y -= movementX * 0.002; // Unlimited horizontal rotation (yaw)
-                    
-                    pitch -= movementY * 0.002; // track pitch separately
-                    pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch)); // limit pitch
-                    pitchObject.rotation.x = pitch; // apply limited pitch
-                }
-            };
-
-            // Handle mouseleave to prevent cursor from exiting the window
-            const mouseLeaveHandler = (event) => {
-                if (mockControls.isLocked) {
-                    // If mouse leaves the window, simulate it returning to center
-                    // This keeps the cursor within the window bounds
-                    const rect = domElement.getBoundingClientRect();
-                    const centerX = rect.left + rect.width / 2;
-                    const centerY = rect.top + rect.height / 2;
-                    
-                    // Create a new mouse event to simulate mouse movement
-                    const mouseEvent = new MouseEvent('mousemove', {
-                        clientX: centerX,
-                        clientY: centerY,
-                        screenX: centerX,
-                        screenY: centerY,
-                        movementX: 0,
-                        movementY: 0
-                    });
-                    
-                    // Dispatch the event
-                    document.dispatchEvent(mouseEvent);
-                }
-            };
-
-            // Escape to unlock controls
-            const escKeyHandler = (event) => {
-                if (event.code === 'Escape' && mockControls.isLocked) {
-                    mockControls.unlock();
-                }
-            };
-
-            // Store references to handlers so we can remove them later
-            activeEventListeners.mousemove = mouseMoveHandler;
-            activeEventListeners.mouseleave = mouseLeaveHandler;
-            activeEventListeners.keydown = escKeyHandler;
-
-            // Add the event listeners
-            document.addEventListener('mousemove', mouseMoveHandler);
-            document.addEventListener('mouseleave', mouseLeaveHandler);
-            document.addEventListener('keydown', escKeyHandler);
-        },
-        
-        removeEventListeners: function() {
-            // Remove all active event listeners to fully disengage
-            if (activeEventListeners.mousemove) {
-                document.removeEventListener('mousemove', activeEventListeners.mousemove);
-            }
-            
-            if (activeEventListeners.mouseleave) {
-                document.removeEventListener('mouseleave', activeEventListeners.mouseleave);
-            }
-            
-            if (activeEventListeners.keydown) {
-                document.removeEventListener('keydown', activeEventListeners.keydown);
-            }
-        },
-        
-        _listeners: {},
-        addEventListener: function(type, listener) {
-            this._listeners[type] = this._listeners[type] || [];
-            this._listeners[type].push(listener);
-        },
-        dispatchEvent: function(event) {
-            if (this._listeners[event.type]) {
-                this._listeners[event.type].forEach(listener => listener.call(this, event));
-            }
-        }
-    };
-
-    // Add CSS to trap cursor within game area
-    const style = document.createElement('style');
-    style.textContent = `
-        .cursor-locked {
-            cursor: none !important;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        .cursor-locked * {
-            cursor: none !important;
-        }
-    `;
-    document.head.appendChild(style);
-
-    // Click event handling - this one remains always active
     domElement.addEventListener('click', () => {
-        if (!mockControls.isLocked) mockControls.lock();
+        controls.lock();
     });
 
-    // Add keyboard event listeners for movement - these remain always active
+    controls.addEventListener('lock', () => {
+        document.getElementById('controls-info').style.display = 'none';
+    });
+
+    controls.addEventListener('unlock', () => {
+        document.getElementById('controls-info').style.display = 'block';
+    });
+
+    // Keyboard listeners for movement remain as-is
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
 
-    return mockControls;
+    return controls;
 }
 
 // Key down event handler
@@ -1794,66 +1550,23 @@ function onKeyUp(event) {
 }
 
 // Update controls - call this in the animation loop
-function updateControls(controls, delta) {
-    if (!controls) {
-        console.warn("Controls not initialized");
-        return;
-    }
+window.updateControls = function(controls, delta) {
+    if (!controls.isLocked) return;
 
-    // Always update physics regardless of lock state
-    velocity.x -= velocity.x * 10.0 * delta;
-    velocity.z -= velocity.z * 10.0 * delta;
+    if (moveForward) controls.moveForward(moveSpeed * delta);
+    if (moveBackward) controls.moveForward(-moveSpeed * delta);
+    if (moveLeft) controls.moveRight(-moveSpeed * delta);
+    if (moveRight) controls.moveRight(moveSpeed * delta);
+    if (turnLeft) controls.getObject().rotation.y += turnSpeed * delta;
+    if (turnRight) controls.getObject().rotation.y -= turnSpeed * delta;
+
     velocity.y -= gravity * delta;
+    controls.getObject().position.y += velocity.y * delta;
 
-    // First person mode - camera attached to controls
-    if (window.isFirstPerson) {
-        // Only check control lock in first-person mode
-        if (controls.isLocked === false && !forceFallbackControls) {
-            return;
-        }
-        
-        // Regular FPS controls using PointerLockControls
-        if (moveForward) controls.moveForward(-moveSpeed * delta);  // Negative for forward
-        if (moveBackward) controls.moveForward(moveSpeed * delta);  // Positive for backward
-        if (moveLeft) controls.moveRight(-moveSpeed * delta);
-        if (moveRight) controls.moveRight(moveSpeed * delta);
-        if (turnLeft) controls.getObject().rotation.y += turnSpeed * delta;
-        if (turnRight) controls.getObject().rotation.y -= turnSpeed * delta;
-        
-        // Handle vertical movement (jumping)
-        controls.getObject().position.y += velocity.y * delta;
-        if (controls.getObject().position.y < playerHeight) {
-            velocity.y = 0;
-            controls.getObject().position.y = playerHeight;
-            canJump = true;
-        }
-    } 
-    // Third person mode - direct control of the numberblock
-    else if (playerNumberblock && playerNumberblock.mesh) {
-        // Get the current look direction 
-        const forward = new THREE.Vector3(0, 0, -1);
-        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerNumberblock.mesh.rotation.y);
-        const right = new THREE.Vector3(1, 0, 0);
-        right.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerNumberblock.mesh.rotation.y);
-        
-        // Apply movement relative to numberblock's facing direction
-        if (moveForward) playerNumberblock.mesh.position.addScaledVector(forward, -moveSpeed * delta); // Negative for forward
-        if (moveBackward) playerNumberblock.mesh.position.addScaledVector(forward, moveSpeed * delta); // Positive for backward
-        if (moveLeft) playerNumberblock.mesh.position.addScaledVector(right, -moveSpeed * delta);
-        if (moveRight) playerNumberblock.mesh.position.addScaledVector(right, moveSpeed * delta);
-        
-        // Apply turning - from Q/E keys
-        if (turnLeft) playerNumberblock.mesh.rotation.y += turnSpeed * delta;
-        if (turnRight) playerNumberblock.mesh.rotation.y -= turnSpeed * delta;
-        
-        // Apply jumping physics
-        playerNumberblock.mesh.position.y += velocity.y * delta;
-        const groundLevel = playerNumberblock.getHeight() / 2;
-        if (playerNumberblock.mesh.position.y < groundLevel) {
-            velocity.y = 0;
-            playerNumberblock.mesh.position.y = groundLevel;
-            canJump = true;
-        }
+    if (controls.getObject().position.y < playerHeight) {
+        velocity.y = 0;
+        controls.getObject().position.y = playerHeight;
+        canJump = true;
     }
 }
  
@@ -2315,87 +2028,61 @@ function onWindowResize() {
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
-    
-    // Calculate time delta for smooth movement
     const delta = clock.getDelta();
-    
-    // Always update controls for movement
-    if (controls && typeof updateControls === 'function') {
-        updateControls(controls, delta);
-    }
-    
-    // Update player position based on view mode
+
+    if (controls) updateControls(controls, delta);
     if (window.isFirstPerson) {
-        // First-person: Numberblock follows the camera/controls
         updatePlayerPosition();
     } else {
-        // Third-person: Camera follows the Numberblock
         updateThirdPersonCamera();
     }
-    
-    // Update operator system
-    if (operatorManager) {
-        operatorManager.update(delta);
-    }
-    
-    // Check for collisions
+
     checkOperatorCollisions();
     checkNumberblockCollisions();
-    
-    // Render the scene
+
     renderer.render(scene, camera);
 }
 
-// Update player position in first-person mode
+// Update player position and rotation based on controls - STANDARD FPS MECHANICS
 function updatePlayerPosition() {
     if (playerNumberblock && controls) {
         const controlsObject = controls.getObject();
         
-        // Update Numberblock position to match controls
-        playerNumberblock.mesh.position.x = controlsObject.position.x;
-        playerNumberblock.mesh.position.z = controlsObject.position.z;
+        // Get height of the numberblock for positioning
+        const numberblockHeight = playerNumberblock.getHeight();
         
-        // Adjust Y position based on Numberblock height
-        const yOffset = playerNumberblock.getHeight() / 2;
-        playerNumberblock.mesh.position.y = controlsObject.position.y - yOffset;
+        // Position the numberblock directly under the camera
+        // Position Y needs to account for the height of the numberblock to place it on the ground
+        playerNumberblock.mesh.position.set(
+            controlsObject.position.x,
+            controlsObject.position.y - (numberblockHeight / 2), // Center of numberblock is half its height below camera
+            controlsObject.position.z
+        );
         
-        // Match ONLY horizontal rotation to camera's direction (Y-axis)
+        // Lock numberblock's horizontal rotation to camera's horizontal rotation EXACTLY
+        // This ensures the numberblock turns with the camera like standard FPS games
         playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
-        
-        // We do NOT modify camera rotation here, allowing PointerLockControls to handle it
     }
 }
 
 // Update camera position in third-person mode
 function updateThirdPersonCamera() {
     if (playerNumberblock && playerNumberblock.mesh) {
-        // Make sure camera is detached from controls in third-person
-        if (camera.parent !== scene) {
-            const worldPosition = new THREE.Vector3();
-            const worldQuaternion = new THREE.Quaternion();
-            camera.getWorldPosition(worldPosition);
-            camera.getWorldQuaternion(worldQuaternion);
-            
-            camera.parent.remove(camera);
-            scene.add(camera);
-            camera.position.copy(worldPosition);
-            camera.quaternion.copy(worldQuaternion);
-        }
-        
-        // Position camera behind and above the Numberblock
         const distance = 12;
         const height = 10;
+
+        const forward = new THREE.Vector3(
+            Math.sin(playerNumberblock.mesh.rotation.y),
+            0,
+            -Math.cos(playerNumberblock.mesh.rotation.y)
+        );
+
+        // Correct calculation for camera position behind the player
+        const behind = forward.clone().negate().multiplyScalar(distance);
         
-        // Get Numberblock's forward direction from rotation
-        const playerAngle = playerNumberblock.mesh.rotation.y;
-        const offsetX = Math.sin(playerAngle) * distance;
-        const offsetZ = Math.cos(playerAngle) * distance;
-        
-        camera.position.x = playerNumberblock.mesh.position.x - offsetX;
-        camera.position.z = playerNumberblock.mesh.position.z - offsetZ;
+        camera.position.copy(playerNumberblock.mesh.position).add(behind);
         camera.position.y = playerNumberblock.mesh.position.y + height;
         
-        // Look at the Numberblock
         camera.lookAt(
             playerNumberblock.mesh.position.x,
             playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2,
@@ -2572,108 +2259,51 @@ function checkOperatorCollisions() {
 document.addEventListener('keydown', (event) => {
     if (event.code === 'KeyV') {
         window.isFirstPerson = !window.isFirstPerson;
-        console.log('View mode toggled to: ' + (window.isFirstPerson ? 'first-person' : 'third-person'));
-        
-        // Always hide the controls info
+
         const controlsInfo = document.getElementById('controls-info');
-        if (controlsInfo) {
-            controlsInfo.style.display = 'none';
-        }
-        
+        if (controlsInfo) controlsInfo.style.display = window.isFirstPerson ? 'block' : 'none';
+
         if (window.isFirstPerson) {
-            // First-person: Properly reattach camera to controls
             if (controls && playerNumberblock) {
-                // Store the current player position
-                const playerPosition = playerNumberblock.mesh.position.clone();
-                const playerRotation = playerNumberblock.mesh.rotation.y;
+                // First, detach camera safely from scene
+                scene.remove(camera);
                 
-                // Detach camera from scene and reattach to controls if needed
-                if (camera.parent === scene) {
-                    scene.remove(camera);
-                    
-                    // Reset camera local position and rotation
-                    camera.position.set(0, 0, 0);
-                    camera.rotation.set(0, 0, 0);
-                    
-                    // Add back to controls
-                    controls.getObject().add(camera);
-                }
+                // Reset camera to default state
+                camera.position.set(0, 0, 0);
+                camera.rotation.set(0, 0, 0);
                 
-                // Reposition controls object at the player's head
-                const numberblockHeight = playerNumberblock.getHeight();
-                const verticalOffset = Math.max(1.5, numberblockHeight * 0.6);
+                // Add camera to controls
+                controls.getObject().add(camera);
                 
+                // Position controls exactly at numberblock's head position
                 controls.getObject().position.copy(playerNumberblock.mesh.position);
-                controls.getObject().position.y += verticalOffset;
+                controls.getObject().position.y = playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2;
                 
-                // Match rotation with playerNumberblock but flip 180 degrees to face forward
-                controls.getObject().rotation.y = playerNumberblock.mesh.rotation.y + Math.PI;
+                // Set rotation to match numberblock exactly
+                controls.getObject().rotation.y = playerNumberblock.mesh.rotation.y;
                 
-                // Keep controls locked in first-person
-                if (typeof controls.lock === 'function') {
-                    // We call lock() but don't allow it to show the instructions
-                    // This maintains pointer capture without showing the message
-                    controls.isLocked = true; // Manually set locked state
-                    
-                    // Perform lock without showing instructions
-                    if (document.pointerLockElement !== controls.domElement && 
-                        document.mozPointerLockElement !== controls.domElement) {
-                        controls.domElement.requestPointerLock();
-                    }
-                }
+                // Immediately lock pointer
+                controls.lock();
             }
         } else {
-            // Third-person: Properly detach camera while maintaining control
-            
-            // Detach camera from controls and add to scene
-            if (camera.parent !== scene) {
-                // Get the world position before detaching
-                const worldPosition = new THREE.Vector3();
-                const worldQuaternion = new THREE.Quaternion();
-                camera.getWorldPosition(worldPosition);
-                camera.getWorldQuaternion(worldQuaternion);
-                
-                // Remove camera from parent (controls)
-                camera.parent.remove(camera);
-                
-                // Add to scene at the world position
-                scene.add(camera);
-                camera.position.copy(worldPosition);
-                camera.quaternion.copy(worldQuaternion);
-            }
-            
-            // Force immediate update of camera position for third-person
-            if (playerNumberblock && playerNumberblock.mesh) {
-                // Position camera behind and above the Numberblock
-                const distance = 12;
-                const height = 10;
-                
-                const playerAngle = playerNumberblock.mesh.rotation.y;
-                const offsetX = Math.sin(playerAngle) * distance;
-                const offsetZ = Math.cos(playerAngle) * distance;
-                
-                camera.position.x = playerNumberblock.mesh.position.x - offsetX;
-                camera.position.z = playerNumberblock.mesh.position.z - offsetZ;
-                camera.position.y = playerNumberblock.mesh.position.y + height;
-                
-                camera.lookAt(
-                    playerNumberblock.mesh.position.x,
-                    playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2,
-                    playerNumberblock.mesh.position.z
-                );
-            }
+            // Switch to third-person (as currently implemented, this part looks fine)
+            const worldPosition = new THREE.Vector3();
+            camera.getWorldPosition(worldPosition);
+            controls.getObject().remove(camera);
+            scene.add(camera);
+            camera.position.copy(worldPosition);
+            updateThirdPersonCamera();
+            controls.unlock();
         }
-        
-        // Show view mode message
+
+        camera.updateProjectionMatrix();
+
+        // Update HUD view mode display
         const viewModeDisplay = document.getElementById('view-mode-display');
         if (viewModeDisplay) {
             viewModeDisplay.innerHTML = window.isFirstPerson ? 'First Person View' : 'Third Person View';
             viewModeDisplay.style.opacity = '1';
-            
-            // Hide the message after 2 seconds
-            setTimeout(() => {
-                viewModeDisplay.style.opacity = '0';
-            }, 2000);
+            setTimeout(() => viewModeDisplay.style.opacity = '0', 2000);
         }
     }
 });

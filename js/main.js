@@ -451,91 +451,71 @@ function onWindowResize() {
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
-    
-    // Calculate time delta for smooth movement
     const delta = clock.getDelta();
-    
-    // Always update controls for movement
-    if (controls && typeof updateControls === 'function') {
-        updateControls(controls, delta);
-    }
-    
-    // Update player position based on view mode
+
+    if (controls) updateControls(controls, delta);
     if (window.isFirstPerson) {
-        // First-person: Numberblock follows the camera/controls
         updatePlayerPosition();
     } else {
-        // Third-person: Camera follows the Numberblock
         updateThirdPersonCamera();
     }
-    
-    // Update operator system
-    if (operatorManager) {
-        operatorManager.update(delta);
-    }
-    
-    // Check for collisions
+
     checkOperatorCollisions();
     checkNumberblockCollisions();
-    
-    // Render the scene
+
     renderer.render(scene, camera);
 }
 
-// Update player position in first-person mode
+// Update player position and rotation based on controls - STANDARD FPS MECHANICS
 function updatePlayerPosition() {
-    if (playerNumberblock && controls) {
-        const controlsObject = controls.getObject();
-        
-        // Update Numberblock position to match controls
-        playerNumberblock.mesh.position.x = controlsObject.position.x;
-        playerNumberblock.mesh.position.z = controlsObject.position.z;
-        
-        // Adjust Y position based on Numberblock height
-        const yOffset = playerNumberblock.getHeight() / 2;
-        playerNumberblock.mesh.position.y = controlsObject.position.y - yOffset;
-        
-        // Match ONLY horizontal rotation to camera's direction (Y-axis)
-        playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
-        
-        // We do NOT modify camera rotation here, allowing PointerLockControls to handle it
-    }
+    if (!playerNumberblock || !controls) return;
+
+    const controlsObject = controls.getObject();
+
+    // Position Numberblock under camera based on height
+    const numberblockHeight = playerNumberblock.getHeight();
+    playerNumberblock.mesh.position.set(
+        controlsObject.position.x,
+        controlsObject.position.y - numberblockHeight / 2,
+        controlsObject.position.z
+    );
+
+    // Get camera direction vector and calculate rotation
+    // This addresses axis issues by deriving rotation from direction vector
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(controlsObject.quaternion);
+    direction.y = 0; // Zero out vertical component
+    direction.normalize();
+    
+    // Calculate rotation from direction vector
+    const rotationY = Math.atan2(direction.x, direction.z);
+    playerNumberblock.mesh.rotation.set(0, rotationY, 0);
 }
 
 // Update camera position in third-person mode
 function updateThirdPersonCamera() {
     if (playerNumberblock && playerNumberblock.mesh) {
-        // Make sure camera is detached from controls in third-person
-        if (camera.parent !== scene) {
-            const worldPosition = new THREE.Vector3();
-            const worldQuaternion = new THREE.Quaternion();
-            camera.getWorldPosition(worldPosition);
-            camera.getWorldQuaternion(worldQuaternion);
-            
-            camera.parent.remove(camera);
-            scene.add(camera);
-            camera.position.copy(worldPosition);
-            camera.quaternion.copy(worldQuaternion);
-        }
+        const offsetDistance = 12;
+        const offsetHeight = 10;
+
+        const playerPos = playerNumberblock.mesh.position.clone();
+        const forwardVector = new THREE.Vector3(0, 0, -1).applyAxisAngle(
+            new THREE.Vector3(0, 1, 0),
+            playerNumberblock.mesh.rotation.y
+        );
+
+        // Calculate desired camera position behind player
+        const desiredCameraPos = playerPos.clone().addScaledVector(forwardVector, -offsetDistance);
+        desiredCameraPos.y = playerPos.y + offsetHeight;
+
+        // Smooth camera movement with lerp
+        camera.position.lerp(desiredCameraPos, 0.1);
         
-        // Position camera behind and above the Numberblock
-        const distance = 12;
-        const height = 10;
-        
-        // Get Numberblock's forward direction from rotation
-        const playerAngle = playerNumberblock.mesh.rotation.y;
-        const offsetX = Math.sin(playerAngle) * distance;
-        const offsetZ = Math.cos(playerAngle) * distance;
-        
-        camera.position.x = playerNumberblock.mesh.position.x - offsetX;
-        camera.position.z = playerNumberblock.mesh.position.z - offsetZ;
-        camera.position.y = playerNumberblock.mesh.position.y + height;
-        
-        // Look at the Numberblock
+        // Look at the middle of the Numberblock
         camera.lookAt(
-            playerNumberblock.mesh.position.x,
-            playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2,
-            playerNumberblock.mesh.position.z
+            playerPos.x,
+            playerPos.y + playerNumberblock.getHeight() / 2,
+            playerPos.z
         );
     }
 }
@@ -708,108 +688,44 @@ function checkOperatorCollisions() {
 document.addEventListener('keydown', (event) => {
     if (event.code === 'KeyV') {
         window.isFirstPerson = !window.isFirstPerson;
-        console.log('View mode toggled to: ' + (window.isFirstPerson ? 'first-person' : 'third-person'));
-        
-        // Always hide the controls info
+
         const controlsInfo = document.getElementById('controls-info');
-        if (controlsInfo) {
-            controlsInfo.style.display = 'none';
-        }
-        
+        if (controlsInfo) controlsInfo.style.display = window.isFirstPerson ? 'block' : 'none';
+
         if (window.isFirstPerson) {
-            // First-person: Properly reattach camera to controls
-            if (controls && playerNumberblock) {
-                // Store the current player position
-                const playerPosition = playerNumberblock.mesh.position.clone();
-                const playerRotation = playerNumberblock.mesh.rotation.y;
-                
-                // Detach camera from scene and reattach to controls if needed
-                if (camera.parent === scene) {
-                    scene.remove(camera);
-                    
-                    // Reset camera local position and rotation
-                    camera.position.set(0, 0, 0);
-                    camera.rotation.set(0, 0, 0);
-                    
-                    // Add back to controls
-                    controls.getObject().add(camera);
-                }
-                
-                // Reposition controls object at the player's head
-                const numberblockHeight = playerNumberblock.getHeight();
-                const verticalOffset = Math.max(1.5, numberblockHeight * 0.6);
-                
-                controls.getObject().position.copy(playerNumberblock.mesh.position);
-                controls.getObject().position.y += verticalOffset;
-                
-                // Match rotation with playerNumberblock but flip 180 degrees to face forward
-                controls.getObject().rotation.y = playerNumberblock.mesh.rotation.y + Math.PI;
-                
-                // Keep controls locked in first-person
-                if (typeof controls.lock === 'function') {
-                    // We call lock() but don't allow it to show the instructions
-                    // This maintains pointer capture without showing the message
-                    controls.isLocked = true; // Manually set locked state
-                    
-                    // Perform lock without showing instructions
-                    if (document.pointerLockElement !== controls.domElement && 
-                        document.mozPointerLockElement !== controls.domElement) {
-                        controls.domElement.requestPointerLock();
-                    }
-                }
-            }
+            // Switch to first-person view
+            scene.remove(camera);
+            controls.getObject().add(camera);
+            camera.position.set(0, 0, 0);
+            camera.rotation.set(0, 0, 0);
+            
+            // Position controls exactly at numberblock's head position
+            controls.getObject().position.copy(playerNumberblock.mesh.position);
+            controls.getObject().position.y += playerNumberblock.getHeight() / 2;
+            
+            // Set rotation to match numberblock exactly
+            controls.getObject().rotation.y = playerNumberblock.mesh.rotation.y;
+            
+            // Immediately lock pointer
+            controls.lock();
         } else {
-            // Third-person: Properly detach camera while maintaining control
-            
-            // Detach camera from controls and add to scene
-            if (camera.parent !== scene) {
-                // Get the world position before detaching
-                const worldPosition = new THREE.Vector3();
-                const worldQuaternion = new THREE.Quaternion();
-                camera.getWorldPosition(worldPosition);
-                camera.getWorldQuaternion(worldQuaternion);
-                
-                // Remove camera from parent (controls)
-                camera.parent.remove(camera);
-                
-                // Add to scene at the world position
-                scene.add(camera);
-                camera.position.copy(worldPosition);
-                camera.quaternion.copy(worldQuaternion);
-            }
-            
-            // Force immediate update of camera position for third-person
-            if (playerNumberblock && playerNumberblock.mesh) {
-                // Position camera behind and above the Numberblock
-                const distance = 12;
-                const height = 10;
-                
-                const playerAngle = playerNumberblock.mesh.rotation.y;
-                const offsetX = Math.sin(playerAngle) * distance;
-                const offsetZ = Math.cos(playerAngle) * distance;
-                
-                camera.position.x = playerNumberblock.mesh.position.x - offsetX;
-                camera.position.z = playerNumberblock.mesh.position.z - offsetZ;
-                camera.position.y = playerNumberblock.mesh.position.y + height;
-                
-                camera.lookAt(
-                    playerNumberblock.mesh.position.x,
-                    playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2,
-                    playerNumberblock.mesh.position.z
-                );
-            }
+            // Switch to third-person view
+            controls.unlock();
+            controls.getObject().remove(camera);
+            scene.add(camera);
+
+            // Immediately update camera position for third-person view
+            updateThirdPersonCamera();
         }
-        
-        // Show view mode message
+
+        camera.updateProjectionMatrix();
+
+        // Update HUD view mode display
         const viewModeDisplay = document.getElementById('view-mode-display');
         if (viewModeDisplay) {
-            viewModeDisplay.innerHTML = window.isFirstPerson ? 'First Person View' : 'Third Person View';
+            viewModeDisplay.textContent = window.isFirstPerson ? 'First Person View' : 'Third Person View';
             viewModeDisplay.style.opacity = '1';
-            
-            // Hide the message after 2 seconds
-            setTimeout(() => {
-                viewModeDisplay.style.opacity = '0';
-            }, 2000);
+            setTimeout(() => viewModeDisplay.style.opacity = '0', 2000);
         }
     }
 });
