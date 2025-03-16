@@ -6,6 +6,7 @@ let client = null;
 let players = {}; // Store other player objects by sessionId
 let operators = {}; // Store operators by their id
 let staticNumberblocks = {}; // Store static numberblocks
+let staticNumberblocksVisuals = {}; // Store static numberblock visuals
 let localSessionId = null; // Store our own session ID
 let playerUpdateFrequency = 1000 / 10; // Update server 10 times per second
 let lastUpdateTime = 0;
@@ -20,16 +21,49 @@ async function initNetworking() {
     client = new Colyseus.Client(endpoint);
     
     try {
-        // Join or create a room
-        room = await client.joinOrCreate("numberblocks");
-        console.log("Successfully joined Numberblocks room!");
+        // Try to reconnect with the last session, otherwise create new
+        const reconnectId = localStorage.getItem('numberblocks_session_id');
         
-        // Store our session ID
+        // Join or create a room
+        if (reconnectId) {
+            try {
+                room = await client.reconnect(reconnectId);
+                console.log("Successfully reconnected to previous session!");
+            } catch (reconnectError) {
+                console.log("Reconnection failed, creating new session");
+                room = await client.joinOrCreate("numberblocks");
+            }
+        } else {
+            room = await client.joinOrCreate("numberblocks");
+            console.log("Successfully joined Numberblocks room!");
+        }
+        
+        // Store our session ID for potential reconnection
         localSessionId = room.sessionId;
+        localStorage.setItem('numberblocks_session_id', room.sessionId);
         console.log("My session ID:", localSessionId);
+        
+        // Expose room to global scope for debugging
+        window.room = room;
         
         // Set up event listeners for room state changes
         setupRoomHandlers();
+        
+        // Add basic error handler
+        room.onError((code, message) => {
+            console.error(`Room error (${code}): ${message}`);
+            
+            // Handle fatal connection errors by clearing session and reloading
+            if (code === 1006 || message.includes("serializer")) {
+                console.log("Serialization error detected, clearing session and reloading");
+                localStorage.removeItem('numberblocks_session_id');
+                
+                // Reload after a small delay
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            }
+        });
         
         return true;
     } catch (error) {
@@ -105,6 +139,29 @@ function setupRoomHandlers() {
         }
     });
     
+    // Handle static numberblocks
+    room.state.staticNumberblocks.onAdd((numberblock, id) => {
+        console.log(`Static numberblock ${id} added with value ${numberblock.value}`);
+        staticNumberblocks[id] = numberblock;
+        
+        // Create visual representation if in main module
+        if (typeof createStaticNumberblockVisual === 'function') {
+            createStaticNumberblockVisual(id, numberblock);
+        }
+    });
+    
+    // Handle static numberblock changes
+    room.state.staticNumberblocks.onChange((numberblock, id) => {
+        console.log(`Static numberblock ${id} changed`);
+        
+        // If the value changed, update the visual
+        if (staticNumberblocksVisuals[id] && staticNumberblocksVisuals[id].value !== numberblock.value) {
+            if (typeof updateStaticNumberblockVisual === 'function') {
+                updateStaticNumberblockVisual(id, numberblock);
+            }
+        }
+    });
+    
     // Handle operators being added
     room.state.operators.onAdd((operator, operatorId) => {
         console.log(`Operator ${operatorId} (${operator.type}) added`);
@@ -128,33 +185,6 @@ function setupRoomHandlers() {
         if (operators[operatorId]) {
             operators[operatorId].operator.remove();
             delete operators[operatorId];
-        }
-    });
-    
-    // Handle static numberblocks
-    room.state.staticNumberblocks.onAdd((staticBlock, blockId) => {
-        console.log(`Static numberblock ${blockId} added with value ${staticBlock.value}`);
-        
-        // Create a new numberblock and add it to the scene
-        const numberblock = new Numberblock(staticBlock.value);
-        numberblock.mesh.position.set(staticBlock.x, staticBlock.y, staticBlock.z);
-        scene.add(numberblock.mesh);
-        
-        // Store the static numberblock
-        staticNumberblocks[blockId] = {
-            id: blockId,
-            numberblock: numberblock
-        };
-    });
-    
-    // Handle static numberblocks being removed
-    room.state.staticNumberblocks.onRemove((staticBlock, blockId) => {
-        console.log(`Static numberblock ${blockId} removed`);
-        
-        // Clean up static numberblock if it exists
-        if (staticNumberblocks[blockId]) {
-            scene.remove(staticNumberblocks[blockId].numberblock.mesh);
-            delete staticNumberblocks[blockId];
         }
     });
 }
@@ -302,7 +332,7 @@ function checkNumberblockCollisions(playerPosition, playerRadius) {
     
     // Check collision with static numberblocks
     for (const [blockId, blockData] of Object.entries(staticNumberblocks)) {
-        const blockMesh = blockData.numberblock.mesh;
+        const blockMesh = staticNumberblocksVisuals[blockId].mesh;
         const blockPos = blockMesh.position;
         
         // Simple distance check (could be improved with bounding box)

@@ -85,6 +85,10 @@ class NumberblocksRoom extends Room {
         
         // Setup static numberblocks
         this.createStaticNumberblock("static1", 2, 0, 0, -5);
+        this.createStaticNumberblock("static2", 3, 5, 0, -5);
+        this.createStaticNumberblock("static3", 4, -5, 0, -5);
+        this.createStaticNumberblock("static4", 5, 0, 0, -10);
+        this.createStaticNumberblock("static5", 1, 5, 0, -10);
         
         // Listen for messages from clients
         this.onMessage("move", (client, message) => {
@@ -198,11 +202,13 @@ class NumberblocksRoom extends Room {
         const staticBlock = new Player();
         staticBlock.value = value;
         staticBlock.x = x;
-        staticBlock.y = y;
+        // Set Y position to 0 (ground level)
+        // The client will adjust the visual height based on the value
+        staticBlock.y = 0;
         staticBlock.z = z;
         
         this.state.staticNumberblocks[id] = staticBlock;
-        console.log(`Created static numberblock with ID ${id}, value ${value} at (${x}, ${y}, ${z})`);
+        console.log(`Created static numberblock with ID ${id}, value ${value} at (${x}, ${staticBlock.y}, ${z})`);
     }
     
     onJoin(client, options) {

@@ -22,12 +22,15 @@ function debug(message, isError = false) {
 }
 
 // Game variables
-let scene, camera, renderer;
-let controls;
+let scene, camera, renderer, controls;
 let playerNumberblock;
 let operatorManager;
 let prevTime = performance.now();
 let playerValue = 1;
+
+// Add operator tracking without redeclaring variables
+let heldOperator = null;
+let lastOperatorSpawn = 0;
 
 // Movement keys state
 let moveForward = false;
@@ -53,6 +56,9 @@ window.isFirstPerson = true;
 // HUD elements
 const gameHUD = document.getElementById('game-hud');
 
+// Global variables and UI elements
+let viewToggleBtn = null; // Global reference for the view toggle button
+
 // Initialize the game
 window.onload = function() {
     debug('Window loaded, initializing game...');
@@ -65,25 +71,34 @@ window.onload = function() {
 
 // Add view toggle button to switch between first and third person
 function addViewToggleButton() {
-    const viewToggleBtn = document.createElement('button');
-    viewToggleBtn.id = 'view-toggle';
-    viewToggleBtn.innerText = 'Switch to Third Person';
-    viewToggleBtn.style.position = 'absolute';
-    viewToggleBtn.style.bottom = '20px';
-    viewToggleBtn.style.right = '20px';
-    viewToggleBtn.style.zIndex = '1000';
-    viewToggleBtn.style.padding = '10px';
-    viewToggleBtn.style.backgroundColor = 'rgba(0,0,0,0.7)';
-    viewToggleBtn.style.color = 'white';
-    viewToggleBtn.style.border = 'none';
-    viewToggleBtn.style.borderRadius = '5px';
-    viewToggleBtn.style.cursor = 'pointer';
-    
-    // Append to body
-    document.body.appendChild(viewToggleBtn);
-    
-    // Add toggle functionality
-    viewToggleBtn.addEventListener('click', toggleCameraView);
+    try {
+        // Create button if it doesn't exist
+        viewToggleBtn = document.getElementById('view-toggle');
+        
+        if (!viewToggleBtn) {
+            viewToggleBtn = document.createElement('button');
+            viewToggleBtn.id = 'view-toggle';
+            viewToggleBtn.textContent = 'Third Person View';
+            viewToggleBtn.style.position = 'absolute';
+            viewToggleBtn.style.bottom = '20px';
+            viewToggleBtn.style.left = '20px';
+            viewToggleBtn.style.zIndex = '100';
+            viewToggleBtn.style.padding = '8px 12px';
+            viewToggleBtn.style.backgroundColor = '#4CAF50';
+            viewToggleBtn.style.color = 'white';
+            viewToggleBtn.style.border = 'none';
+            viewToggleBtn.style.borderRadius = '4px';
+            viewToggleBtn.style.cursor = 'pointer';
+            document.body.appendChild(viewToggleBtn);
+        }
+        
+        // Add click event listener
+        viewToggleBtn.addEventListener('click', toggleCameraView);
+        
+        debug('View toggle button added');
+    } catch (error) {
+        debug(`Error adding view toggle button: ${error.message}`, true);
+    }
 }
 
 // Toggle between first and third person views
@@ -106,78 +121,84 @@ function toggleCameraView() {
 
 // Switch to first-person view
 function switchToFirstPersonView() {
-    // Make sure camera is only in one place
-    if (camera.parent === scene) {
-        scene.remove(camera);
-    }
-    
-    // Add camera to controls
-    if (camera.parent !== controls.getObject()) {
-        // First reset camera position and rotation to avoid invalid transforms
+    try {
+        debug('Switched to first-person view');
+        
+        // Set global flag
+        window.isFirstPerson = true;
+        
+        // Check if camera is already a child of controls
+        // First make sure we're not trying to add camera as a child of itself
+        if (camera.parent !== controls.getObject() && camera !== controls.getObject()) {
+            // Remove camera from any previous parent
+            if (camera.parent) {
+                camera.parent.remove(camera);
+            }
+            
+            // Add camera to controls (only if not already there)
+            controls.getObject().add(camera);
+        }
+        
+        // Reset camera position relative to controls
         camera.position.set(0, 0, 0);
-        camera.rotation.set(0, 0, 0);
-        controls.getObject().add(camera);
-    }
-    
-    // Remove third-person mouse handler if active
-    if (window.thirdPersonMouseHandler) {
-        document.removeEventListener('mousemove', window.thirdPersonMouseHandler);
-        window.thirdPersonMouseControlsActive = false;
+        
+        // Update button text
+        if (viewToggleBtn) {
+            viewToggleBtn.textContent = 'Third Person View';
+        }
+    } catch (error) {
+        debug(`Error switching to first-person view: ${error.message}`, true);
     }
 }
 
 // Switch to third-person view
 function switchToThirdPersonView() {
-    // Make sure the camera is only in one place at a time
-    if (camera.parent === controls.getObject()) {
-        // If camera is attached to controls, remove it first
-        controls.getObject().remove(camera);
-    }
-    
-    // Only add to scene if it's not already there
-    if (camera.parent !== scene) {
-        scene.add(camera);
-    }
-    
-    // Reset camera's up vector to ensure correct orientation
-    camera.up.set(0, 1, 0);
-    
-    // Initialize third-person camera angle based on current player rotation
-    // Use + Math.PI to position camera behind player
-    window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
-    
-    // Set initial camera position immediately to avoid gradual transition
-    const playerPos = playerNumberblock.mesh.position.clone();
-    const distance = 12;
-    const height = 8;
-    
-    camera.position.set(
-        playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance,
-        playerPos.y + height,
-        playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance
-    );
-    
-    // Look at player immediately
-    const targetY = playerPos.y + (playerNumberblock.getHeight ? playerNumberblock.getHeight() / 2 : 1);
-    camera.lookAt(playerPos.x, targetY, playerPos.z);
-    
-    // Setup mouse controls for third-person camera rotation
-    if (!window.thirdPersonMouseHandler) {
-        window.thirdPersonMouseHandler = function(event) {
-            // Skip processing extremely small movements to prevent drift
-            if (Math.abs(event.movementX) > 0.5) {
-                window.thirdPersonCameraAngle -= event.movementX * 0.002;
-            }
-        };
-    }
-    
-    // Activate third-person mouse controls using the pointer lock events
-    document.addEventListener('mousemove', window.thirdPersonMouseHandler);
-    window.thirdPersonMouseControlsActive = true;
-    
-    // Make sure pointer is locked
-    if (!controls.isLocked) {
-        controls.lock();
+    try {
+        debug('Switched to third-person view');
+        
+        // Set global flag
+        window.isFirstPerson = false;
+        
+        // Remove camera from controls
+        if (camera.parent) {
+            const cameraWorldPosition = new THREE.Vector3();
+            camera.getWorldPosition(cameraWorldPosition);
+            camera.parent.remove(camera);
+            
+            // Add camera directly to scene
+            scene.add(camera);
+            
+            // Maintain world position
+            camera.position.copy(cameraWorldPosition);
+        }
+        
+        // Set up third-person mouse handler if it doesn't exist
+        if (!window.thirdPersonMouseHandler) {
+            window.thirdPersonMouseHandler = function(event) {
+                // Only process if we're in third-person mode and pointer is locked
+                if (!window.isFirstPerson && controls.isLocked) {
+                    // Skip processing extremely small movements to prevent drift
+                    if (Math.abs(event.movementX) > 0.5) {
+                        window.thirdPersonCameraAngle -= event.movementX * 0.002;
+                    }
+                }
+            };
+        }
+        
+        // Add mouse movement handler
+        document.addEventListener('mousemove', window.thirdPersonMouseHandler);
+        
+        // Initialize camera angle if it's not set yet
+        if (typeof window.thirdPersonCameraAngle === 'undefined') {
+            window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
+        }
+        
+        // Update button text
+        if (viewToggleBtn) {
+            viewToggleBtn.textContent = 'First Person View';
+        }
+    } catch (error) {
+        debug(`Error switching to third-person view: ${error.message}`, true);
     }
 }
 
@@ -289,23 +310,198 @@ function setupPointerLockControls() {
     }
 }
 
-// Function to create the floor
+// Initialize the floor
 function initFloor() {
     debug('Creating floor');
     
     try {
-        const floorGeometry = new THREE.PlaneGeometry(100, 100);
+        // Create a larger green floor
+        const floorGeometry = new THREE.PlaneGeometry(100, 100); // Extended size (was 20, 20)
         const floorMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x7EC0EE, // Light blue color that matches sky theme
-            roughness: 0.8
+            color: 0x33aa33,  // Green color
+            roughness: 0.8, 
+            metalness: 0.2 
         });
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        
+        // Rotate and position the floor
         floor.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-        floor.position.y = -0.5; // Position below the player
+        floor.position.y = 0;
+        floor.receiveShadow = true;
         scene.add(floor);
-        debug('Floor created');
+        
+        // Add a grid helper for visual reference
+        const gridHelper = new THREE.GridHelper(100, 100, 0x000000, 0x444444);
+        scene.add(gridHelper);
+        
+        // Add some decorative objects
+        addDecorativeObjects();
+        
+        // Add static Numberblocks
+        addStaticNumberblocks();
+        
+        debug('Floor and environment created');
     } catch (error) {
         debug(`Error creating floor: ${error.message}`, true);
+    }
+}
+
+// Add decorative objects to the scene
+function addDecorativeObjects() {
+    debug('Adding decorative objects');
+    
+    try {
+        // Add some trees
+        const treePositions = [
+            { x: 10, z: 10 },
+            { x: -15, z: 5 },
+            { x: 7, z: -12 },
+            { x: -8, z: -10 },
+            { x: 20, z: -15 }
+        ];
+        
+        treePositions.forEach(pos => {
+            // Create tree trunk
+            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.5, 5, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x885522 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.set(pos.x, 2.5, pos.z);
+            scene.add(trunk);
+            
+            // Create tree top
+            const topGeometry = new THREE.ConeGeometry(2, 4, 8);
+            const topMaterial = new THREE.MeshStandardMaterial({ color: 0x005500 });
+            const top = new THREE.Mesh(topGeometry, topMaterial);
+            top.position.set(pos.x, 6, pos.z);
+            scene.add(top);
+        });
+        
+        // Add some rocks
+        const rockPositions = [
+            { x: 5, z: -5, scale: 1.5 },
+            { x: -10, z: 12, scale: 1 },
+            { x: 15, z: 8, scale: 2 },
+            { x: -7, z: -15, scale: 0.8 }
+        ];
+        
+        rockPositions.forEach(pos => {
+            const rockGeometry = new THREE.DodecahedronGeometry(pos.scale, 0);
+            const rockMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x888888,
+                roughness: 0.9
+            });
+            const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+            rock.position.set(pos.x, pos.scale, pos.z);
+            scene.add(rock);
+        });
+        
+        // Add some colorful cubes
+        const cubePositions = [
+            { x: 0, z: 15, color: 0xff0000 },
+            { x: -18, z: -3, color: 0x00ff00 },
+            { x: 12, z: -18, color: 0x0000ff }
+        ];
+        
+        cubePositions.forEach(pos => {
+            const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
+            const cubeMaterial = new THREE.MeshStandardMaterial({ color: pos.color });
+            const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+            cube.position.set(pos.x, 1, pos.z);
+            scene.add(cube);
+        });
+        
+        debug('Decorative objects added');
+    } catch (error) {
+        debug(`Error adding decorative objects: ${error.message}`, true);
+    }
+}
+
+// Add static Numberblocks of various values
+function addStaticNumberblocks() {
+    debug('Adding static Numberblocks');
+    
+    try {
+        // Define positions and values for static Numberblocks
+        const numberblockData = [
+            { value: 2, x: 8, z: 3 },
+            { value: 3, x: -5, z: 8 },
+            { value: 4, x: 15, z: -5 },
+            { value: 5, x: -12, z: -8 },
+            { value: 6, x: 5, z: -15 },
+            { value: 7, x: -15, z: 12 },
+            { value: 8, x: 18, z: 10 },
+            { value: 9, x: -18, z: -14 },
+            { value: 10, x: 10, z: -20 }
+        ];
+        
+        // Create each Numberblock
+        numberblockData.forEach(data => {
+            try {
+                const numberblock = new Numberblock(data.value);
+                scene.add(numberblock.mesh);
+                
+                // Fix positioning: Set Y to half the value so bottom is at ground level (y=0)
+                // For a block of value 5, the height is 5, so y=2.5 puts the bottom at ground level
+                numberblock.mesh.position.set(data.x, data.value / 2, data.z);
+                
+                // Rotate randomly for variety
+                numberblock.mesh.rotation.y = Math.random() * Math.PI * 2;
+                
+                // Add a small bounce animation
+                const initialY = numberblock.mesh.position.y;
+                const bounceSpeed = 0.5 + Math.random() * 0.5;
+                const bounceHeight = 0.15;
+                
+                // Store animation data on the mesh for use in animate loop
+                numberblock.mesh.userData = {
+                    initialY: initialY,
+                    bounceSpeed: bounceSpeed,
+                    bounceHeight: bounceHeight,
+                    bounceOffset: Math.random() * Math.PI * 2 // Random offset for varied motion
+                };
+            } catch (error) {
+                debug(`Error creating static Numberblock: ${error.message}`, true);
+            }
+        });
+        
+        debug('Static Numberblocks added');
+    } catch (error) {
+        debug(`Error adding static Numberblocks: ${error.message}`, true);
+    }
+}
+
+// Create a static numberblock visual from server data
+function createStaticNumberblockVisual(id, blockData) {
+    try {
+        debug(`Creating static numberblock visual for ID: ${id} with value ${blockData.value}`);
+        
+        // Create a new numberblock with the value from server
+        const blockMesh = new window.Numberblock(blockData.value);
+        
+        // Calculate the correct Y position (ground level + half height for proper alignment)
+        const yPos = blockData.y + (blockData.value / 2);
+        
+        // Set position based on server data with adjusted y position
+        blockMesh.mesh.position.set(blockData.x, yPos, blockData.z);
+        
+        // Store the initial Y for bounce animation
+        blockMesh.mesh.userData.initialY = yPos;
+        
+        // Add varying bounce parameters for visual interest
+        blockMesh.mesh.userData.bounceOffset = Math.random() * Math.PI;
+        blockMesh.mesh.userData.bounceSpeed = 0.8 + Math.random() * 0.4;
+        blockMesh.mesh.userData.bounceHeight = 0.1 + Math.random() * 0.1;
+        
+        // Add to scene
+        scene.add(blockMesh.mesh);
+        
+        // Store reference to the visual object
+        staticNumberblocksVisuals[id] = blockMesh;
+        
+        return blockMesh;
+    } catch (error) {
+        debug(`Error creating static numberblock visual: ${error.message}`, true);
+        return null;
     }
 }
 
@@ -489,33 +685,188 @@ function onKeyUp(event) {
     }
 }
 
+// Handle animation frame - bounce effect for static blocks
+function animateStaticNumberblocks(deltaTime) {
+    try {
+        // Process all static numberblocks with bounce animation
+        Object.entries(staticNumberblocksVisuals).forEach(([id, blockMesh]) => {
+            if (blockMesh && blockMesh.mesh) {
+                // Apply bounce effect
+                const time = performance.now() / 1000;
+                const offset = blockMesh.mesh.userData.bounceOffset || 0;
+                const speed = blockMesh.mesh.userData.bounceSpeed || 1;
+                const height = blockMesh.mesh.userData.bounceHeight || 0.15;
+                const initialY = blockMesh.mesh.userData.initialY || blockMesh.mesh.position.y;
+                
+                // Apply bounce animation - only move upward from initial position
+                blockMesh.mesh.position.y = initialY + Math.abs(Math.sin(time * speed + offset) * height);
+                
+                // Slow rotation for visual interest
+                blockMesh.mesh.rotation.y += 0.005;
+            }
+        });
+    } catch (error) {
+        debug(`Error in animateStaticNumberblocks: ${error.message}`, true);
+    }
+}
+
 // Animation loop
 function animate() {
     try {
         requestAnimationFrame(animate);
         
-        if (controls) {
-            // Only update player position if pointer lock is enabled
-            if (controls.isLocked) {
-                if (window.isFirstPerson) {
-                    updatePlayerPosition();
-                } else {
-                    updatePlayerPositionThirdPerson();
-                    updateThirdPersonCamera();
-                }
-            }
+        // Update player position based on view mode
+        if (window.isFirstPerson) {
+            updatePlayerPosition();
+        } else {
+            updatePlayerPositionThirdPerson();
+            updateThirdPersonCamera();
         }
         
-        // Rotate operators to face player
-        updateOperators();
+        // Animate static Numberblocks (bounce effect)
+        const deltaTime = 1/60; // Approximate frame time
+        animateStaticNumberblocks(deltaTime);
         
-        // Check for collisions
-        checkCollisions();
+        // Update operators
+        updateOperators();
         
         // Render the scene
         renderer.render(scene, camera);
     } catch (error) {
         debug(`Animation error: ${error.message}`, true);
+    }
+}
+
+// Update and rotate all operators to face the player
+function updateOperators() {
+    try {
+        // Check if enough time has passed to spawn a new operator
+        const currentTime = performance.now();
+        if (currentTime - lastOperatorSpawn > 10000 && operators.length < 10) { // 10 seconds, max 10 operators
+            // Create a new operator
+            const operatorType = Math.random() > 0.5 ? '+' : '-';
+            const operatorGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            const operatorMaterial = new THREE.MeshStandardMaterial({
+                color: operatorType === '+' ? 0x00ff00 : 0xff0000,
+                transparent: true,
+                opacity: 0.8,
+                emissive: operatorType === '+' ? 0x00ff00 : 0xff0000,
+                emissiveIntensity: 0.5
+            });
+            
+            const operator = new THREE.Mesh(operatorGeometry, operatorMaterial);
+            
+            // Random position on the map
+            const x = (Math.random() - 0.5) * 80;
+            const z = (Math.random() - 0.5) * 80;
+            operator.position.set(x, 1.5, z);
+            
+            // Tag with type for collision detection
+            operator.userData = { 
+                type: 'operator',
+                operatorType: operatorType 
+            };
+            
+            // Add to scene and track
+            scene.add(operator);
+            operators.push(operator);
+            lastOperatorSpawn = currentTime;
+            
+            debug(`Spawned ${operatorType} operator`);
+        }
+        
+        // Update existing operators
+        if (playerNumberblock && operators.length > 0) {
+            // Get player position
+            const playerPosition = window.isFirstPerson ? 
+                controls.getObject().position.clone() : 
+                playerNumberblock.mesh.position.clone();
+            
+            // Update each operator
+            for (let i = operators.length - 1; i >= 0; i--) {
+                const operator = operators[i];
+                
+                // Make operator face the player
+                operator.lookAt(playerPosition);
+                
+                // Make operator float
+                const time = performance.now() / 1000;
+                operator.position.y = 1.5 + Math.sin(time * 2) * 0.2;
+                
+                // Check for pickup
+                if (operator.position.distanceTo(playerPosition) < 2) {
+                    // Pickup this operator
+                    heldOperator = operator.userData.operatorType;
+                    scene.remove(operator);
+                    operators.splice(i, 1);
+                    
+                    // Show in HUD
+                    const hudElement = document.getElementById('hud');
+                    if (hudElement) {
+                        hudElement.innerHTML = `Holding: ${heldOperator}`;
+                        hudElement.style.color = heldOperator === '+' ? 'green' : 'red';
+                    } else {
+                        // Create HUD if it doesn't exist
+                        const newHud = document.createElement('div');
+                        newHud.id = 'hud';
+                        newHud.style.position = 'absolute';
+                        newHud.style.bottom = '20px';
+                        newHud.style.right = '20px';
+                        newHud.style.padding = '10px';
+                        newHud.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                        newHud.style.color = heldOperator === '+' ? 'green' : 'red';
+                        newHud.style.fontWeight = 'bold';
+                        newHud.style.fontSize = '20px';
+                        newHud.innerHTML = `Holding: ${heldOperator}`;
+                        document.body.appendChild(newHud);
+                    }
+                    
+                    debug(`Picked up ${heldOperator} operator`);
+                }
+            }
+            
+            // If holding an operator, check for numberblock collisions
+            if (heldOperator) {
+                // Check all scene objects for numberblocks
+                scene.children.forEach(child => {
+                    if (child !== playerNumberblock.mesh && 
+                        child.userData && 
+                        child.userData.initialY !== undefined) { // Identify numberblocks by userData.initialY
+                        
+                        // If close enough to this numberblock
+                        if (child.position.distanceTo(playerPosition) < 2) {
+                            // Extract the value from its position (height = value)
+                            const targetValue = Math.round(child.position.y * 2);
+                            
+                            // Apply operator
+                            let newValue = playerValue;
+                            if (heldOperator === '+') {
+                                newValue += targetValue;
+                            } else if (heldOperator === '-') {
+                                newValue -= targetValue;
+                                if (newValue < 1) newValue = 1; // Minimum value is 1
+                            }
+                            
+                            // Update player value
+                            updatePlayerValue(newValue);
+                            
+                            // Clear held operator
+                            heldOperator = null;
+                            
+                            // Update HUD
+                            const hudElement = document.getElementById('hud');
+                            if (hudElement) {
+                                hudElement.innerHTML = '';
+                            }
+                            
+                            debug(`Used operator on numberblock with value ${targetValue}, new player value: ${newValue}`);
+                        }
+                    }
+                });
+            }
+        }
+    } catch (error) {
+        debug(`Error in updateOperators: ${error.message}`, true);
     }
 }
 
@@ -714,11 +1065,6 @@ function updatePlayerPosition() {
 // Check for collisions with operators and other Numberblocks
 function checkCollisions() {
     // Will be implemented with proper collision detection
-}
-
-// Update and rotate all operators to face the player
-function updateOperators() {
-    // To be implemented
 }
 
 // Update player's Numberblock value
