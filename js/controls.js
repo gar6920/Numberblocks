@@ -135,8 +135,19 @@ window.updateControls = function(controls, delta) {
     if (moveBackward) controls.moveForward(-moveSpeed * delta);
     if (moveLeft) controls.moveRight(-moveSpeed * delta);
     if (moveRight) controls.moveRight(moveSpeed * delta);
-    if (turnLeft) controls.getObject().rotation.y += turnSpeed * delta;
-    if (turnRight) controls.getObject().rotation.y -= turnSpeed * delta;
+    
+    // Proper on-axis rotation using the PointerLockControls object's quaternion
+    if (turnLeft || turnRight) {
+        // Create rotation quaternion for Q/E rotation
+        const rotationAngle = (turnLeft ? 1 : -1) * turnSpeed * delta;
+        const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(0, 1, 0), // Rotate around y-axis only
+            rotationAngle
+        );
+        
+        // Apply rotation to controls object's quaternion
+        controls.getObject().quaternion.premultiply(rotationQuaternion);
+    }
 
     velocity.y -= gravity * delta;
     controls.getObject().position.y += velocity.y * delta;
