@@ -112,6 +112,15 @@
   - Fixed positioning for random shapes and objects
   - Improved Y-position calculations for consistent placement
 - Removed redundant number tags from Numberblocks since value is shown in HUD
+- Enhanced control system:
+  - Added Q and E key functionality for turning left and right in first-person view
+  - Set appropriate rotation speed for smooth turning experience
+  - Maintained backward compatibility with mouse controls
+- Expanded game world:
+  - Increased ground size from 50x50 to 200x200 units (16x larger play area)
+  - Added more decorative objects (from 30 to 120) to maintain visual density
+  - Increased trees from 10 to 40 for better landmarks
+  - Expanded spawn protection area for better player experience
 
 ## Next Steps
 - Step 10: Add math puzzles and challenges

@@ -104,6 +104,9 @@ architecture.md:
   - S = Backward movement
   - A = Strafe left
   - D = Strafe right
+- Rotation controls (Q/E keys)
+  - Q = Turn left (counter-clockwise)
+  - E = Turn right (clockwise)
 - Jump mechanics (Spacebar)
 - Gravity and ground collision
 - Fallback controls for environments without Pointer Lock
@@ -152,6 +155,13 @@ The game features a minimalist HUD with two key elements:
    - Green for addition, red for subtraction
    - Shows "No operator" when none held
    - Semi-transparent background for visibility
+
+## World System
+- Large 200x200 unit ground plane
+- Distributed landscape elements (120 decorative objects)
+- Strategic landmarks with 40 trees for navigation
+- Safe spawn area with buffer zone
+- Ample exploration space for mathematical discoveries
 
 ## File Structure
 ```

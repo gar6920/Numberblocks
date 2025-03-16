@@ -117,7 +117,7 @@ function init() {
 // Create the ground plane
 function createGround() {
     // Create a large flat plane for the ground
-    const groundGeometry = new THREE.BoxGeometry(50, 0.1, 50);
+    const groundGeometry = new THREE.BoxGeometry(200, 0.1, 200);
     const groundMaterial = new THREE.MeshStandardMaterial({ 
         color: 0x7CFC00, // Lawn green color
         roughness: 0.8,
@@ -144,8 +144,8 @@ function createLandscapeElements() {
         0x808080  // Grey (Nine)
     ];
     
-    // Create 30 random objects
-    for (let i = 0; i < 30; i++) {
+    // Create 120 random objects (increased from 30 for the larger world)
+    for (let i = 0; i < 120; i++) {
         let geometry, material, mesh;
         const shapeType = Math.floor(Math.random() * 4); // 0-3 for different shapes
         const colorIndex = Math.floor(Math.random() * colors.length);
@@ -183,13 +183,13 @@ function createLandscapeElements() {
         // Create and position the mesh
         mesh = new THREE.Mesh(geometry, material);
         
-        // Position randomly on the ground plane (within a 40x40 area)
+        // Position randomly on the ground plane (within a 180x180 area)
         // Keep away from center where player spawns
         let posX, posZ;
         do {
-            posX = (Math.random() * 40) - 20;
-            posZ = (Math.random() * 40) - 20;
-        } while (Math.abs(posX) < 5 && Math.abs(posZ) < 5); // Keep away from spawn area
+            posX = (Math.random() * 180) - 90;
+            posZ = (Math.random() * 180) - 90;
+        } while (Math.abs(posX) < 8 && Math.abs(posZ) < 8); // Increased spawn area protection
         
         mesh.position.set(posX, 0, posZ);
         
@@ -206,7 +206,7 @@ function createLandscapeElements() {
 
 // Create simple trees as landmarks
 function createTrees() {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 40; i++) {
         // Create trunk
         const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.5, 2, 8);
         const trunkMaterial = new THREE.MeshStandardMaterial({
@@ -232,10 +232,10 @@ function createTrees() {
         // Position randomly on the ground plane but away from center
         let posX, posZ, distance;
         do {
-            posX = (Math.random() * 40) - 20;
-            posZ = (Math.random() * 40) - 20;
+            posX = (Math.random() * 180) - 90;
+            posZ = (Math.random() * 180) - 90;
             distance = Math.sqrt(posX * posX + posZ * posZ);
-        } while (distance < 8); // Keep trees away from spawn point
+        } while (distance < 10); // Keep trees away from spawn point
         
         tree.position.set(posX, 1, posZ); // Position with trunk base on ground
         

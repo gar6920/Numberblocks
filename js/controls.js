@@ -5,6 +5,8 @@ let moveForward = false;
 let moveBackward = false;
 let moveLeft = false;
 let moveRight = false;
+let turnLeft = false;    // New variable for Q key turning
+let turnRight = false;   // New variable for E key turning
 let canJump = false;
 let pitch = 0;  // Track vertical rotation separately
 
@@ -15,6 +17,7 @@ let direction = new THREE.Vector3();
 // Player settings
 const playerHeight = 2.0;             // Height of camera from ground
 const moveSpeed = 5.0;                // Units per second
+const turnSpeed = 2.0;                // Rotation speed for Q/E turning
 const jumpHeight = 5.0;               // Jump impulse force
 const gravity = 9.8;                  // Gravity force 
 
@@ -316,6 +319,14 @@ function onKeyDown(event) {
             moveRight = true;
             break;
             
+        case 'KeyQ':
+            turnLeft = true;
+            break;
+            
+        case 'KeyE':
+            turnRight = true;
+            break;
+            
         case 'Space':
             if (canJump) {
                 // Apply a physically accurate jump velocity
@@ -348,6 +359,14 @@ function onKeyUp(event) {
         case 'KeyD':
             moveRight = false;
             break;
+            
+        case 'KeyQ':
+            turnLeft = false;
+            break;
+            
+        case 'KeyE':
+            turnRight = false;
+            break;
     }
 }
 
@@ -373,6 +392,14 @@ function updateControls(controls, delta) {
     if (moveBackward) controls.moveForward(-moveSpeed * delta);
     if (moveLeft) controls.moveRight(-moveSpeed * delta);
     if (moveRight) controls.moveRight(moveSpeed * delta);
+    
+    // Apply turning based on Q and E keys
+    if (turnLeft && controls.getObject) {
+        controls.getObject().rotation.y += turnSpeed * delta;
+    }
+    if (turnRight && controls.getObject) {
+        controls.getObject().rotation.y -= turnSpeed * delta;
+    }
 
     // Update Y position with gravity
     if (controls.getObject) {
