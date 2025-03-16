@@ -557,49 +557,43 @@ function updatePlayerPositionThirdPerson(delta) {
 // Update camera position in third-person mode
 function updateThirdPersonCamera() {
     if (!playerNumberblock || !playerNumberblock.mesh) return;
-    
-    // Third-person camera parameters
-    const distance = 12;          // Distance behind player
-    const height = 8;             // Height above player
-    const smoothing = 0.1;        // Camera smoothing factor
-    const rotationSpeed = 0.05;  // Manual camera rotation speed
-    
-    // Calculate the orbit angle for the camera
+
+    const distance = 12;      // Camera distance behind the player
+    const heightOffset = 8;   // Height offset above the player
+    const smoothing = 0.1;    // Smooth camera motion factor
+    const rotationSpeed = 0.05;
+
+    // Initialize the angle if not set
     if (typeof window.thirdPersonCameraAngle === 'undefined') {
-        window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y;
+        window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
     }
-    
-    // Handle Q and E rotation - ONLY process these if keys are pressed
+
+    // Adjust camera angle with Q/E keys
     if (window.turnLeft) {
         window.thirdPersonCameraAngle += rotationSpeed;
     }
     if (window.turnRight) {
         window.thirdPersonCameraAngle -= rotationSpeed;
     }
-    
+
+    // Calculate desired camera position explicitly without cumulative interpolation errors
     const playerPos = playerNumberblock.mesh.position.clone();
+    const targetX = playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance;
+    const targetZ = playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance;
     
-    // Calculate camera position - using negative sine/cosine to fix orientation
-    const cameraX = playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance;
-    const cameraY = playerPos.y + height;
-    const cameraZ = playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance;
-    
-    // Calculate the target position
-    const targetPos = new THREE.Vector3(cameraX, cameraY, cameraZ);
-    
-    // Only apply smoothing if the distance is significant, to prevent drift
-    if (camera.position.distanceToSquared(targetPos) > 0.01) {
-        camera.position.lerp(targetPos, smoothing);
-    } else {
-        camera.position.copy(targetPos);
-    }
-    
-    // Make sure we're using the correct up vector
-    camera.up.set(0, 1, 0);
-    
-    // Look at the playerNumberblock - target the middle
-    const targetY = playerPos.y + playerNumberblock.getHeight() / 2;
-    camera.lookAt(playerPos.x, targetY, playerPos.z);
+    // Ensure camera Y position is always exactly at height offset plus player's midpoint height
+    const targetY = playerNumberblock.mesh.position.y + heightOffset;
+
+    // Set camera position explicitly without smoothing vertically to prevent drift
+    camera.position.set(
+        THREE.MathUtils.lerp(camera.position.x, targetX, 0.1),
+        targetY, // No vertical smoothing
+        THREE.MathUtils.lerp(camera.position.z, targetZ, 0.1)
+    );
+
+    // Always look at the player's midpoint height directly
+    const lookAtY = playerNumberblock.mesh.position.y + playerNumberblock.getHeight() / 2;
+    camera.lookAt(playerNumberblock.mesh.position.x, targetY - (heightOffset / 2), playerNumberblock.mesh.position.z);
 }
 
 // Switch to third-person view
