@@ -73,6 +73,9 @@ function init() {
     // Create player's Numberblock
     playerNumberblock = createPlayerNumberblock(scene, 1);
 
+    // Initialize the HUD display with the starting value
+    updatePlayerDisplay(playerNumberblock.value);
+
     // Create static Numberblock for operator application
     staticNumberblock = new Numberblock(2);
     staticNumberblock.mesh.position.set(0, staticNumberblock.getHeight() / 2, -5);
@@ -292,16 +295,17 @@ function updatePlayerPosition() {
         const camDirection = new THREE.Vector3(0, 0, -1);
         camDirection.applyQuaternion(camera.quaternion);
         
-        // Position the Numberblock at the exact same position as the camera, but slightly lower
+        // Dynamically adjust the vertical offset based on Numberblock height
+        // For taller Numberblocks, we need a larger offset to keep the camera at eye level
+        const numberblockHeight = playerNumberblock.getHeight();
+        const verticalOffset = Math.max(1.5, numberblockHeight * 0.6);
+        
+        // Position the Numberblock relative to the camera with dynamic offset
         const targetPosition = new THREE.Vector3();
         targetPosition.copy(controlsObject.position);
-        
-        // Fixed vertical offset to maintain strict relationship between camera and Numberblock
-        const verticalOffset = 1.5;
         targetPosition.y -= verticalOffset;
         
-        // Get the height of the Numberblock for ground collision
-        const numberblockHeight = playerNumberblock.getHeight();
+        // Calculate ground level based on Numberblock height
         const groundLevel = numberblockHeight / 2; // Bottom of Numberblock should be at y=0
         
         // Prevent the Numberblock from falling through the ground
@@ -312,7 +316,7 @@ function updatePlayerPosition() {
             controlsObject.position.y = groundLevel + verticalOffset;
         }
         
-        // Update the Numberblock's position immediately (no lerp) to stay perfectly aligned with camera
+        // Update the Numberblock's position immediately (no lerp) to stay aligned with camera
         playerNumberblock.mesh.position.copy(targetPosition);
         
         // Make the Numberblock rotate to match camera's horizontal rotation
@@ -349,31 +353,45 @@ function handleNumberblockCollision(player, targetNumberblock, operatorManager) 
             console.log(`Applied + operator: ${originalValue} + ${targetNumberblock.value} = ${player.value}`);
         } else if (heldOperator === 'minus') {
             player.value -= targetNumberblock.value;
-            // Prevent negative or zero values (depending on game rules)
-            player.value = Math.max(player.value, 1);
+            player.value = Math.max(player.value, 1); // Ensure minimum value of 1
             console.log(`Applied - operator: ${originalValue} - ${targetNumberblock.value} = ${player.value}`);
         }
         
-        // Update the player HUD or display
+        // Update the HUD display with the new value
         updatePlayerDisplay(player.value);
         
-        // Consume the operator after use
+        // Clear the held operator after use
         operatorManager.clearHeldOperator();
         
         // Rebuild the player's Numberblock to reflect the new number visually
         player.createNumberblock();
         
-        // Slightly push back the player to prevent continuous collisions
-        if (controls && controls.getObject()) {
-            const direction = new THREE.Vector3();
-            direction.subVectors(
-                controls.getObject().position,
-                targetNumberblock.mesh.position
-            ).normalize();
-            
-            // Move back by a small amount
-            controls.getObject().position.x += direction.x * 0.5;
-            controls.getObject().position.z += direction.z * 0.5;
+        // Apply dynamic camera positioning after number change
+        updateCameraForNumberblockChange();
+        
+        // Apply a small push to prevent continuous collisions
+        const pushForce = 1.0;
+        controls.getObject().position.z += pushForce;
+    }
+}
+
+// Update camera position after Numberblock changes size
+function updateCameraForNumberblockChange() {
+    if (controls && playerNumberblock) {
+        const controlsObject = controls.getObject();
+        const numberblockHeight = playerNumberblock.getHeight();
+        
+        // Calculate new appropriate camera height
+        const verticalOffset = Math.max(1.5, numberblockHeight * 0.6);
+        const desiredCameraHeight = playerNumberblock.mesh.position.y + verticalOffset;
+        
+        // Set camera to new height
+        controlsObject.position.y = desiredCameraHeight;
+        
+        // Ensure camera doesn't go below minimum height
+        const minCameraHeight = 1.0;
+        if (controlsObject.position.y < minCameraHeight) {
+            controlsObject.position.y = minCameraHeight;
         }
     }
 }

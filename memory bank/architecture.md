@@ -160,6 +160,8 @@ architecture.md:
 6. Scene rendered
 7. Collision detection checks performed
 8. Operator interactions processed
+9. HUD information updated to reflect current state
+10. Camera position dynamically adjusted based on Numberblock size
 
 ## Implemented Components
 - Collision system for detecting Numberblock-to-Numberblock collisions
@@ -167,6 +169,9 @@ architecture.md:
 - Operator pickup and attachment to Numberblock's hand
 - Number operations via bumping interaction (plus/minus)
 - Visual number updating with dynamic reconstruction
+- Heads-up display (HUD) showing current player number
+- Dynamic camera positioning system that adjusts based on Numberblock height
+- Transparent materials for better visual presentation
 
 ## Future Components
 - UI system

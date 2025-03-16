@@ -172,45 +172,37 @@ class Numberblock {
         // Create a circular background for the number
         const tagRadius = this.blockSize * 0.3;
         const tagGeometry = new THREE.CylinderGeometry(tagRadius, tagRadius, 0.05, 32);
-        const tagMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+        const tagMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xFFFFFF,
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide
+        });
         const tagMesh = new THREE.Mesh(tagGeometry, tagMaterial);
         tagMesh.rotation.x = Math.PI / 2; // Make it horizontal
         tag.add(tagMesh);
         
         // Create text geometry for the number
-        // Note: Using a simple approach since Three.js TextGeometry requires font loading
-        // In production, use Three.js TextGeometry with a loaded font
+        // Using a simple approach since Three.js TextGeometry requires font loading
         
         // For now, we'll create a simple representation
         const numberSize = this.blockSize * 0.2;
         const numberThickness = 0.05;
-        let numberMesh;
         
         // Create a simple cube for the number (in a real implementation, use TextGeometry)
         const numberGeometry = new THREE.BoxGeometry(numberSize, numberSize * 1.5, numberThickness);
-        const numberMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        numberMesh = new THREE.Mesh(numberGeometry, numberMaterial);
+        const numberMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.9
+        });
+        const numberMesh = new THREE.Mesh(numberGeometry, numberMaterial);
         
         // Position the number just above the tag background
         numberMesh.position.z = 0.03;
         tag.add(numberMesh);
         
-        // Add a text object using HTML and CSS (will be updated in the render loop)
-        const valueDiv = document.createElement('div');
-        valueDiv.className = 'numberblock-value';
-        valueDiv.innerHTML = this.value.toString();
-        valueDiv.style.position = 'absolute';
-        valueDiv.style.display = 'none'; // Will be positioned in render loop
-        valueDiv.style.color = 'black';
-        valueDiv.style.fontWeight = 'bold';
-        valueDiv.style.fontSize = '24px';
-        valueDiv.style.fontFamily = 'Arial, sans-serif';
-        valueDiv.style.textAlign = 'center';
-        valueDiv.style.userSelect = 'none';
-        document.body.appendChild(valueDiv);
-        
-        // Store the div element for later positioning
-        this.valueDiv = valueDiv;
+        // No longer creating HTML elements for the number display
         
         return tag;
     }
@@ -305,40 +297,13 @@ class Numberblock {
     
     // Update the position of the HTML number tag in render loop
     updateNumberTagPosition(camera, renderer) {
-        if (this.valueDiv && this.mesh.children.length > 0) {
-            // Get the top block
-            const topBlock = this.mesh.children[this.value - 1];
-            
-            // Calculate position in screen space
-            const position = new THREE.Vector3();
-            position.copy(topBlock.position);
-            position.y += this.blockSize / 2 + 0.2; // Position above the top block
-            
-            // Convert 3D position to 2D screen coordinates
-            const worldPos = new THREE.Vector3();
-            topBlock.getWorldPosition(worldPos);
-            worldPos.y += this.blockSize / 2 + 0.2;
-            
-            const screenPos = worldPos.clone();
-            screenPos.project(camera);
-            
-            // Convert to CSS coordinates
-            const x = (screenPos.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
-            const y = (-screenPos.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
-            
-            // Update the position of the div
-            this.valueDiv.style.display = 'block';
-            this.valueDiv.style.left = `${x}px`;
-            this.valueDiv.style.top = `${y}px`;
-            this.valueDiv.innerHTML = this.value.toString();
-        }
+        // Previous functionality disabled - no longer using HTML elements for tags
+        // Now fully using the HUD we created in index.html and main.js
     }
     
-    // Clean up resources when no longer needed
+    // Dispose any allocated resources
     dispose() {
-        if (this.valueDiv && this.valueDiv.parentNode) {
-            this.valueDiv.parentNode.removeChild(this.valueDiv);
-        }
+        // We no longer need to remove HTML elements since we aren't creating them
     }
 }
 
