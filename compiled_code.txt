@@ -10,229 +10,127 @@ SECTION: MEMORY BANK
 FILE: memory bank\architecture.md 
 ----------------------------------------------------- 
  
-Root
-├── index.html
-├── package.json
-├── README.md
-├── assets
-│   ├── images
-│   ├── models
-│   └── sounds
-├── css
-│   └── styles.css
-├── js
-│   ├── main.js
-│   ├── controls.js
-│   ├── numberblock.js
-│   ├── player.js
-│   ├── operators.js
-│   ├── network.js
-│   ├── hud.js
-│   ├── gameModes.js
-│   └── operator.js
-└── lib
-    └── three.min.js
+Core Components
+1. Server (server.js)
+Technology: Built with Node.js and Colyseus.
 
-    Explanation of the Structure
-Root: The top-level directory containing essential project files:
-index.html: The main HTML file that serves as the entry point for your application or game.
+Responsibilities:
+Manages game rooms and player connections/disconnections.
 
-package.json: (Optional) A file for managing project dependencies if you're using Node.js or a package manager like npm.
+Maintains the authoritative game state, including player positions, Numberblock values, and operator states.
 
-README.md: A Markdown file for project documentation, instructions, and notes.
+Processes player inputs (e.g., movement, operator usage) and updates the game state.
 
-assets/: A folder for all static resources:
-images/: Stores image files like textures, icons, or sprites.
+Broadcasts state updates to all connected clients at a fixed interval.
 
-models/: Holds 3D model files (if applicable, e.g., for a 3D game).
+Key Features:
+Handles spawning and management of operators.
 
-sounds/: Contains audio files such as sound effects or background music.
+Ensures scalability for up to 20 networked players.
 
-css/: A folder for styling:
-styles.css: The primary CSS file for styling your UI, HUD, or other visual elements.
+2. Client (client/)
+The client is responsible for rendering the game, capturing user inputs, and communicating with the server. Key files include:
+main.js:
+Initializes the Three.js scene, renderer, and cameras for each local player.
 
-js/: A folder for all JavaScript files, each serving a specific purpose:
-main.js: The core script that initializes the project (e.g., sets up the scene or game loop).
+Establishes a WebSocket connection to the server via Colyseus.
 
-controls.js: Handles user input and controls (e.g., keyboard or mouse events). Features:
-  - Robust fallback mechanisms for browser API compatibility
-  - First-person camera controls with parent-child hierarchy for proper rotation
-  - Separated yaw and pitch rotations for natural camera movement
-  - Mouse locking within the game window with proper cursor disengagement
-  - Event handler management for clean switching between locked/unlocked states
-  - Support for WASD/Arrow keys movement and spacebar jumping
+Manages split-screen rendering by creating dynamic viewports for local multiplayer.
 
-numberblock.js: Implements the Numberblock class for creating and managing Numberblock entities. Features:
-  - Dynamic creation of block stacks based on numeric value
-  - Face rendering with eyes and mouth on the top block
-  - Arms with hands on the sides of blocks
-  - Feet on the bottom block
-  - Number tag display on top of the stack
-  - Color mapping based on Numberblocks TV show aesthetics
-  - HTML/CSS overlay for number display
-  - Methods for updating and animating Numberblocks
+Updates the local state based on server broadcasts.
 
-player.js: Manages player-related logic (e.g., movement, health).
+controls.js:
+Captures and processes inputs from keyboards and gamepads using the Gamepad API.
 
-operators.js: Contains logic for operators or game entities (e.g., enemies, NPCs).
+Maps inputs to player actions (e.g., movement, jumping) and sends them to the server.
 
-network.js: Implements networking features (e.g., multiplayer via WebSockets).
+numberblock.js:
+Defines the Numberblock class for rendering player characters in the 3D scene.
 
-hud.js: Updates the heads-up display (e.g., score, health bar).
+Updates visual properties (e.g., size, color) based on server-synced values.
 
-gameModes.js: Defines different game modes or rules.
+operator.js:
+Manages the visualization of operators (e.g., addition, subtraction) in the scene.
 
-operator.js: Manages operator-related logic (e.g., spawning, lifecycle).
+Reflects server-controlled states for operator collection and usage.
 
-lib/: A folder for external libraries:
-three.min.js: The minified Three.js library for 3D rendering (you can add other libraries here as needed).
+hud.js:
+Renders a heads-up display (HUD) for each player, showing their current Numberblock value and held operator.
 
-memory bank/: A folder for documentation and development notes:
-implementation plan: Detailed steps for implementing the game features.
-progress.md: Tracks completed steps and progress notes.
-RULES.md: Contains development guidelines and best practices.
-architecture.md: 
-# Numberblocks Game Architecture
+Adapts to split-screen layouts for local multiplayer.
 
-## Core Components
+3. Networking
+Technology: Uses Colyseus for real-time state synchronization between clients and the server.
 
-### 1. Scene Management (main.js)
-- Scene initialization and setup
-- Camera configuration
-- Lighting setup
-- Animation loop
-- Asset loading
-- Proper initialization order:
-  1. Scene, camera, renderer setup
-  2. Ground and environment
-  3. Player Numberblock creation
-  4. Operator system initialization
-  5. Controls initialization
+Implementation:
+Clients connect to the server via WebSockets using the Colyseus.js library.
 
-### 2. Controls System (controls.js)
-- First-person camera controls using PointerLockControls
-- Third-person camera controls with configurable distance and height
-- Toggle between first-person and third-person views (V key)
-- Movement handling (WASD/Arrow keys)
-  - W = Forward movement
-  - S = Backward movement
-  - A = Strafe left
-  - D = Strafe right
-- Rotation controls (Q/E keys)
-  - Q = Turn left (counter-clockwise)
-  - E = Turn right (clockwise)
-- Jump mechanics (Spacebar)
-- Gravity and ground collision
-- Fallback controls for environments without Pointer Lock
-- Delta time-based smooth movement
-- Debug logging for control states
+The server ensures consistency across all clients and prevents cheating by maintaining authoritative control over the game state.
 
-### 3. Numberblock System (numberblock.js)
-#### Visual Components
-- Stacked blocks based on numeric value
-- Color-coded blocks following Numberblocks scheme
-- Face on top block with eyes and mouth
-- Arms on middle or second block
-- Feet on bottom block
-- No number display (shown in HUD instead)
+State updates are broadcast efficiently to minimize latency.
 
-#### Positioning System
-- Base Y-position calculated from block size
-- Consistent ground-level placement
-- Proper collision boundaries
-- Random placement with spawn area restrictions
+4. Multiplayer Features
+Split-Screen Support:
+Supports up to 4 local players on a single device.
 
-### 4. Operator System (operator.js)
-#### Visual Design
-- Floating semi-transparent spheres
-- Clear plus/minus symbols
-- Color-coded feedback (green/red)
-- Soft glow effect for visibility
+Dynamically creates multiple viewports, each with its own camera and renderer instance, based on the number of local players.
 
-#### Behavior
-- Face camera for constant visibility
-- Gentle floating animation
-- Spawn randomly in valid areas
-- Limited to maximum count
-- Clear pickup and application feedback
+Gamepad Support:
+Integrates the Gamepad API to detect and map gamepad inputs to player actions.
 
-## HUD System
-The game features a minimalist HUD with two key elements:
-1. Number Display (Top-Left)
-   - Shows current Numberblock value
-   - Color changes to match Numberblock color scheme
-   - Uses semi-transparent background for visibility
-   - Updates in real-time with player changes
+Allows seamless use of controllers alongside keyboard inputs.
 
-2. Operator Display (Top-Right)
-   - Shows current held operator ("+ Add" or "- Subtract")
-   - Green for addition, red for subtraction
-   - Shows "No operator" when none held
-   - Semi-transparent background for visibility
+Networked Play:
+Enables multiple clients (local and remote) to join a game session over a network.
 
-## World System
-- Large 200x200 unit ground plane
-- Distributed landscape elements (120 decorative objects)
-- Strategic landmarks with 40 trees for navigation
-- Safe spawn area with buffer zone
-- Ample exploration space for mathematical discoveries
+The server manages synchronization, ensuring all players see the same game state.
 
-## File Structure
-```
+File Structure
+The updated architecture is reflected in the following file structure:
+
 /
-├── index.html          # Main HTML file
-├── js/
-│   ├── main.js        # Main game logic
-│   ├── controls.js    # Movement and camera controls
-│   ├── numberblock.js # Numberblock implementation
-│   └── operator.js    # Operator system
-├── css/
-│   └── style.css      # Game styles
+├── client/
+│   ├── index.html          # Entry point for the browser-based client
+│   ├── css/
+│   │   └── styles.css      # Styles for the game UI
+│   ├── js/
+│   │   ├── main.js         # Core client logic and rendering
+│   │   ├── controls.js     # Input handling
+│   │   ├── numberblock.js  # Numberblock class definition
+│   │   ├── operator.js     # Operator visualization and logic
+│   │   └── hud.js          # HUD rendering
+│   └── lib/
+│       └── three.min.js    # Three.js library
+├── server/
+│   └── server.js           # Server logic with Colyseus
+├── package.json            # Project dependencies
 └── memory bank/
-    ├── progress.md    # Implementation progress
-    └── architecture.md # This file
-```
+    ├── architecture.md     # This file
+    └── progress.md         # Development progress notes
 
-## Initialization Flow
-1. Load Three.js and custom scripts
-2. Initialize WebGL renderer
-3. Create scene and setup lighting
-4. Create ground and environment
-5. Initialize player Numberblock
-6. Setup operator system
-7. Initialize controls
-8. Start animation loop
+Initialization Flow
+Server: Starts and listens for incoming client connections on a specified port.
 
-## Control Flow
-1. User input captured via event listeners
-2. Movement state updated
-3. Controls updated in animation loop
-4. Player position updated based on active view mode:
-   - First-person: Player follows camera position
-   - Third-person: Camera follows player with configurable offset
-5. Numberblock follows player position
-6. Scene rendered
-7. Collision detection checks performed
-8. Operator interactions processed
-9. HUD information updated to reflect current state
-10. Camera position dynamically adjusted based on Numberblock size
+Client: Loads index.html, initializes the Three.js environment, connects to the server, and registers local players (assigning unique IDs).
 
-## Implemented Components
-- Collision system for detecting Numberblock-to-Numberblock collisions
-- Operator application mechanics for mathematical operations
-- Operator pickup and attachment to Numberblock's hand
-- Number operations via bumping interaction (plus/minus)
-- Visual number updating with dynamic reconstruction
-- Heads-up display (HUD) showing current player number
-- Dynamic camera positioning system that adjusts based on Numberblock height
-- Transparent materials for better visual presentation
+Game Loop: Clients send inputs to the server, which updates the game state and broadcasts it back to all clients for rendering.
 
-## Future Components
-- UI system
-- Score tracking
-- Game state management
-- Multiple interactive Numberblocks
-- More complex mathematical operations
+Control Flow
+User inputs (via keyboard or gamepad) are captured by controls.js and sent to the server.
+
+The server processes these inputs, updates the game state (e.g., player positions, operator effects), and broadcasts the new state to all clients.
+
+Each client updates its local state and renders the scene based on the server's authoritative data.
+
+Future Enhancements
+Advanced Operators: Introduce more complex mechanics like multiplication or division.
+
+Game Modes: Add objectives or competitive/cooperative modes.
+
+Customization: Allow players to customize their Numberblocks and save profiles.
+
+This updated architecture.md file provides a detailed and structured overview of the Numberblocks game's architecture after incorporating multiplayer features. It reflects the separation of client and server responsibilities, the integration of local and networked multiplayer, and the addition of gamepad support, making the game both scalable and maintainable.
+
  
  
 ----------------------------------------------------- 
@@ -555,33 +453,9 @@ After bumping and changing the number, see the model update (e.g., from 1 cube t
 
 Ensure it doesn’t clip through the ground.
 
-Step 10: Implement basic HUD
-Task: Add a heads-up display showing the player’s number and operator.
+Step 10 / 11: MULTIPLAYER AND CONTROLLER SUPPORT
 
-Details: 
-Use HTML elements (e.g., <div>) overlayed on the canvas.
-
-Update the HUD whenever the number or operator changes.
-
-Test: 
-See the player’s current number and held operator on-screen.
-
-Verify it updates in real-time after changes.
-
-Step 11: Add multiple players (multiplayer)
-Task: Enable basic multiplayer functionality.
-
-Details: 
-Use WebSockets or Socket.io for networking.
-
-Allow multiple players to join and see each other’s Numberblocks.
-
-Sync positions and numbers across clients.
-
-Test: 
-Open two browser tabs as different players.
-
-See each Numberblock move and confirm numbers sync when changed.
+SEE MULTIPLAYER AND CONTROLLER FEATURE.MD
 
 Step 12: Implement game objectives
 Task: Add the Target Number Mode.
@@ -640,6 +514,493 @@ Use an advanced operator and verify the number change.
 Conclusion
 This implementation plan provides a clear, step-by-step roadmap to develop the Numberblocks FPS game. Each step is simple enough to be handled with a single prompt in the Windsurf IDE, and the accompanying tests ensure that each feature works before moving forward. By following this plan, you can progressively build a fully functional browser-based multiplayer game that aligns with the game design document’s vision.
 
+ 
+ 
+----------------------------------------------------- 
+FILE: memory bank\Multiplayer and controller implementation plan.md 
+----------------------------------------------------- 
+ 
+To address your query about enhancing the Numberblocks game with multiplayer features, I’ll outline a comprehensive plan based on the current single-player codebase. The goals are to separate client and server logic with a local development server, set up local multiplayer with split screens (still server-connected), add gamepad controls, and expand to network/internet multiplayer. Let’s tackle each step methodically.
+
+# 1. Separate Client/Server Logic and Set Up a Local Development Server
+
+## Current State:
+The game is entirely client-side, running in the browser with Three.js handling rendering, and all logic (e.g., movement, collisions, operator interactions) executed locally in files like main.js, controls.js, numberblock.js, and operator.js. There’s no server component yet.
+
+## Goal:
+Separate the game into client and server components, with the server managing the authoritative game state and the client focusing on rendering and input handling. Set up a local development server to test this setup, preparing for future scalability.
+
+## Solution: Using Colyseus
+
+I recommend using Colyseus, a Node.js-based multiplayer game server framework that integrates well with JavaScript and Three.js. Here’s why:
+
+- **Real-Time Support**: Colyseus uses WebSockets for low-latency communication, ideal for real-time multiplayer.
+
+- **State Synchronization**: It provides built-in tools for syncing game state across clients, reducing the need to reinvent this logic.
+
+- **Scalability**: Designed for multiplayer games, it supports room management and can scale to network play later.
+
+- **Community and Docs**: It has solid documentation and examples, easing implementation.
+
+## Implementation Steps:
+
+### Server Setup
+
+1. **Initialize a Node.js Project**:
+   In your project root, run:
+   ```bash
+   npm init -y
+   npm install colyseus express
+   ```
+
+2. **Update package.json** with a start script:
+   ```json
+   "scripts": {
+     "start": "node server.js"
+   }
+   ```
+
+3. **Create server.js**:
+   ```javascript
+   const { Server } = require("colyseus");
+   const { Room } = require("colyseus");
+   const express = require("express");
+   const app = express();
+   const httpServer = require("http").createServer(app);
+
+   const gameServer = new Server({ server: httpServer });
+
+   // Define the game room
+   class NumberblocksRoom extends Room {
+     onCreate(options) {
+       this.setState({
+         players: {},
+         operators: []
+       });
+       this.maxClients = 4; // Adjust as needed
+     }
+
+     onJoin(client, options) {
+       this.state.players[client.sessionId] = {
+         x: 0,
+         y: 1,
+         z: 0,
+         value: 1,
+         operator: null
+       };
+       console.log(`${client.sessionId} joined`);
+     }
+
+     onMessage(client, message) {
+       const player = this.state.players[client.sessionId];
+       if (message.type === "move") {
+         // Validate movement
+         const speedLimit = 5 * 0.016; // Assuming 60 FPS
+         const dx = message.x - player.x;
+         const dz = message.z - player.z;
+         if (Math.sqrt(dx * dx + dz * dz) <= speedLimit) {
+           player.x = message.x;
+           player.y = message.y;
+           player.z = message.z;
+         }
+       } else if (message.type === "operator") {
+         player.operator = message.operator;
+       }
+     }
+
+     onLeave(client) {
+       delete this.state.players[client.sessionId];
+       console.log(`${client.sessionId} left`);
+     }
+   }
+
+   gameServer.define("numberblocks", NumberblocksRoom);
+   app.use(express.static(".")); // Serve client files
+   httpServer.listen(3000, () => console.log("Server running on port 3000"));
+
+4. **Directory Structure Update**:
+   - Move client files (index.html, css/, js/) under a client/ folder.
+   - Place server.js in the root.
+
+### Client Modifications
+
+1. **Install Colyseus Client**:
+   In the client/ folder:
+   ```bash
+   npm install colyseus.js
+   ```
+
+2. **Update main.js**:
+   Connect to the server and sync state:
+   ```javascript
+   const { Client } = require("colyseus.js");
+   const client = new Client("ws://localhost:3000");
+   let room;
+
+   async function init() {
+     room = await client.joinOrCreate("numberblocks");
+     console.log("Joined room:", room.sessionId);
+
+     room.onStateChange((state) => {
+       // Update local player and other players from server state
+       Object.entries(state.players).forEach(([id, data]) => {
+         if (id === room.sessionId) {
+           playerNumberblock.setValue(data.value);
+           playerNumberblock.mesh.position.set(data.x, data.y, data.z);
+         } else {
+           // Update or create other Numberblocks
+         }
+       });
+     });
+
+     // Existing scene setup...
+   }
+
+   function updateControls(controls, delta) {
+     if (controls.isLocked) {
+       const pos = controls.getObject().position;
+       room.send({ type: "move", x: pos.x, y: pos.y, z: pos.z });
+     }
+   }
+   ```
+
+3. **Run the Server**:
+   From the root:
+   ```bash
+   npm start
+   ```
+
+4. **Access the game** at http://localhost:3000/client/index.html.
+
+### Benefits:  
+- The server now holds the authoritative state, preventing client-side cheating.
+- Local testing is streamlined, and the setup scales to network play later.
+
+## Server Authority: Handling Discrepancies Between Client-Side Predictions and Server-Side Validation
+
+To handle discrepancies between client-side physics predictions and server-side validation, especially when operator collection changes a player's Numberblock value:
+
+- **Client-Side Prediction**: When a player collects an operator, the client immediately updates the Numberblock's value locally for instant feedback, making the game feel responsive.
+
+- **Server Validation**: The client sends the collection event to the server, which checks if the operator was available (e.g., not already collected). If valid, the server updates the game state and broadcasts the new value to all clients.
+
+- **Reconciliation**: If the server rejects the action (e.g., another player collected it first), it sends a correction to the client, which then adjusts the local state to match the server's authoritative version.
+
+This method ensures a balance between responsiveness and consistency, preventing cheating while keeping gameplay smooth.
+
+# 2. Set Up Local Multiplayer with Split Screens (Server-Connected)
+
+## Goal:
+Enable multiple players on one machine using split screens, each connecting to the local server as separate clients.
+
+## Implementation:
+
+### Modify Client for Multiple Instances:
+
+1. **Update index.html** to support multiple viewports:
+   ```html
+   <canvas id="player1-canvas" style="width: 50%; height: 100%; position: absolute; left: 0;"></canvas>
+   <canvas id="player2-canvas" style="width: 50%; height: 100%; position: absolute; right: 0;"></canvas>
+   ```
+
+2. **Update main.js** for Split Screens:
+   Create separate renderers and cameras for each player:
+   ```javascript
+   let players = [];
+
+   async function init() {
+     for (let i = 0; i < 2; i++) {
+       const canvas = document.getElementById(`player${i + 1}-canvas`);
+       const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+       renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+
+       const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+       const controls = initControls(camera, canvas);
+
+       const room = await client.joinOrCreate("numberblocks");
+       const player = { renderer, camera, controls, room, numberblock: null };
+       players.push(player);
+
+       room.onStateChange((state) => {
+         const data = state.players[room.sessionId];
+         if (!player.numberblock) {
+           player.numberblock = new Numberblock(data.value);
+           scene.add(player.numberblock.mesh);
+         }
+         player.numberblock.setValue(data.value);
+         player.numberblock.mesh.position.set(data.x, data.y, data.z);
+       });
+     }
+     animate();
+   }
+
+   function animate() {
+     requestAnimationFrame(animate);
+     const delta = clock.getDelta();
+     players.forEach((p, i) => {
+       updateControls(p.controls, delta);
+       p.renderer.render(scene, p.camera);
+       p.room.send({ type: "move", x: p.controls.getObject().position.x, y: p.controls.getObject().position.y, z: p.controls.getObject().position.z });
+     });
+   }
+   ```
+
+3. **Input Handling**:
+   Assign different keys:
+   - Player 1: WASD, Space
+
+   - Player 2: Arrow keys, Enter
+
+4. **Update controls.js**:
+   ```javascript
+   function onKeyDown(event, playerId) {
+     if (playerId === 0) {
+       switch (event.code) {
+         case 'KeyW': moveForward = true; break;
+         case 'KeyA': moveLeft = true; break;
+         case 'KeyS': moveBackward = true; break;
+         case 'KeyD': moveRight = true; break;
+         case 'Space': if (canJump) velocity.y += jumpHeight; canJump = false; break;
+       }
+     } else if (playerId === 1) {
+       switch (event.code) {
+         case 'ArrowUp': moveForward = true; break;
+         case 'ArrowLeft': moveLeft = true; break;
+         case 'ArrowDown': moveBackward = true; break;
+         case 'ArrowRight': moveRight = true; break;
+         case 'Enter': if (canJump) velocity.y += jumpHeight; canJump = false; break;
+       }
+     }
+   }
+   ```
+
+## Resource Management: Optimizing Performance for Split-Screen Multiplayer
+
+When using split-screen multiplayer, these optimizations will help maintain performance given the doubled rendering workload:
+
+- **Simplify Models**: Reduce the polygon count of Numberblock models and use simpler textures.
+
+- **Level of Detail (LOD)**: Render less detailed models for distant objects to lower the rendering cost.
+
+- **Batching**: Combine draw calls for static or repeated objects (e.g., operators) to minimize overhead.
+
+- **Shared Calculations**: Reuse camera updates where possible across viewports to avoid redundant processing.
+
+- **Profiling**: Regularly monitor performance (e.g., with browser tools or Three.js stats) to identify and fix bottlenecks.
+
+These steps ensure the game runs smoothly even with multiple players on a single screen.
+
+## Player Identification: Visual Indicators for Players
+
+Beyond session IDs, these visual indicators will help players identify their own and other players' Numberblocks in the game world:
+
+- **Unique Colors**: Assign each player a distinct color, applied to their Numberblock's base or a visible part.
+
+- **Name Tags**: Display a small name or icon above each Numberblock, visible to all players.
+
+- **Viewport Labels**: In split-screen mode, add a border or label (e.g., "Player 1") to each viewport.
+
+These indicators make it easy to distinguish characters in both networked and split-screen play.
+
+## UI/UX Considerations: Designing the Split-Screen HUD
+
+The HUD for split-screen mode will be designed to display each player's current value without cluttering the interface:
+
+- **Corner Placement**: Put each player's HUD (showing their value and operator) in a corner of their viewport (e.g., top-left for Player 1).
+
+- **Minimal Design**: Use small text or icons to show only essential info, avoiding overlap with gameplay.
+
+- **Transparency**: Apply semi-transparent backgrounds to keep the game world visible.
+
+This layout ensures players can track their status without a cluttered screen.
+
+## Result:
+Two players can play locally with split screens, each viewport rendering their perspective, while the server synchronizes their states.
+
+# 3. Set Up Gamepad Controls
+
+## Goal:
+Add gamepad support for local players, enhancing accessibility.
+
+## Implementation:
+
+### Use the Gamepad API:
+
+1. **Update controls.js**:
+   ```javascript
+   let gamepads = [];
+
+   function updateGamepads() {
+     gamepads = navigator.getGamepads().filter(gp => gp && gp.connected);
+   }
+
+   window.addEventListener('gamepadconnected', (e) => {
+     console.log(`Gamepad ${e.gamepad.index} connected`);
+     updateGamepads();
+   });
+
+   window.addEventListener('gamepaddisconnected', (e) => {
+     console.log(`Gamepad ${e.gamepad.index} disconnected`);
+     updateGamepads();
+   });
+
+   function updateControls(controls, delta, playerId) {
+     updateGamepads();
+     const gp = gamepads[playerId];
+     if (gp) {
+       const axes = gp.axes;
+       const buttons = gp.buttons;
+
+       // Movement (left stick)
+       moveForward = axes[1] < -0.5;
+       moveBackward = axes[1] > 0.5;
+       moveLeft = axes[0] < -0.5;
+       moveRight = axes[0] > 0.5;
+
+       // Look (right stick)
+       controls.getObject().rotation.y -= axes[2] * 0.05;
+       pitch -= axes[3] * 0.05;
+       pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+       controls.getObject().children[0].rotation.x = pitch;
+
+       // Jump (A button)
+       if (buttons[0].pressed && canJump) {
+         velocity.y += jumpHeight;
+         canJump = false;
+       }
+     }
+     // Existing keyboard controls...
+   }
+   ```
+
+### Gamepad Priority: Assigning Controllers to Players
+
+For assigning multiple gamepads to players:
+
+- **Connection Order**: Map gamepads to players based on when they're connected (e.g., first gamepad = Player 1, second = Player 2).
+
+- **Manual Option**: Add a setup screen where players can assign gamepads if needed.
+
+This simple system works out of the box but offers flexibility for customization.
+
+## Result:
+Players can use gamepads instead of keyboards, with movement, looking, and jumping mapped to standard controls (e.g., left stick for movement, right stick for looking, A for jumping).
+
+# 4. Expand to Network/Internet Multiplayer
+
+## Goal:
+Enable players on different machines to join the game over the internet.
+
+## Implementation:
+
+### Host the Server Publicly:
+
+1. **Deploy server.js** to a cloud platform like Heroku:
+   ```bash
+   heroku create numberblocks-game
+   git push heroku main
+   ```
+
+2. **Update client connection**:
+   ```javascript
+   const client = new Client("wss://numberblocks-game.herokuapp.com");
+   ```
+
+### Operator Distribution: Synchronizing Operators Across Clients
+
+Operators must be synchronized to ensure all players see the same game state:
+
+- **Server Control**: The server manages operator placement and collection. When a player collects an operator, the client notifies the server.
+
+- **First-Come, First-Served**: If two players attempt to collect the same operator at once, the server processes requests in the order received. The first player gets the operator, and it's removed from the game state.
+
+- **Broadcast**: The server updates all clients, ensuring everyone sees the operator disappear and the player's new value.
+
+This approach prevents conflicts and keeps gameplay fair.
+
+### Collision Mechanics: Handling Numberblock-to-Numberblock Interactions
+
+Collisions between Numberblocks in multiplayer should be consistent and cheat-proof:
+
+- **Server-Side Detection**: The server calculates collisions based on Numberblock positions.
+
+- **Mathematical Effects**: If a collision occurs and one player has an operator (e.g., addition), the server applies the effect (e.g., combining values) and updates the game state.
+
+- **Broadcast Updates**: The server sends the new state (e.g., updated values or positions) to all clients.
+
+This server-driven approach ensures fair interactions and allows for fun mathematical gameplay mechanics.
+
+### Connection Handling: Managing Player Disconnections and Reconnections
+
+Stable connection handling enhances the multiplayer experience:
+
+- **Disconnection**: When a player disconnects, the server removes their Numberblock and notifies all clients to update their views.
+
+- **Reconnection**: If a player reconnects within a short time (e.g., 30 seconds), the server can restore their previous state (position, value). Otherwise, they start anew.
+
+- **State Preservation**: For casual play, a simple action history on the server suffices; for persistence, a database could be added later.
+
+This keeps the game running smoothly despite connection issues.
+
+### Synchronization Enhancements:
+
+Add client-side prediction and server reconciliation in server.js:
+```javascript
+onMessage(client, message) {
+  const player = this.state.players[client.sessionId];
+  if (message.type === "move") {
+    // Validate movement
+    const speedLimit = 5 * 0.016; // Assuming 60 FPS
+    const dx = message.x - player.x;
+    const dz = message.z - player.z;
+    if (Math.sqrt(dx * dx + dz * dz) <= speedLimit) {
+      player.x = message.x;
+      player.y = message.y;
+      player.z = message.z;
+    }
+  }
+}
+```
+
+### Handle Latency:
+Use Colyseus's built-in features for lag compensation.
+
+## Scalability: Player Limits and Gameplay Impact
+
+For managing player limits and their impact on gameplay:
+
+- **Limit**: Start with 4 players for split-screen and 8–10 for networked rooms, adjustable after testing server and game performance.
+
+- **Impact**: More players may create chaotic, crowded gameplay—potentially exciting or overwhelming. Larger maps or adjusted operator spawns can adapt to higher counts.
+
+This starting point allows for a manageable yet engaging experience, with room to scale.
+
+## Result:
+Players can connect over the internet, with the server ensuring consistent state across all clients.
+
+# Testing Framework: Approach to Testing Multiplayer Functionality
+
+Robust testing ensures a reliable multiplayer experience:
+
+- **Automated Tests**: Use tools like Jest to verify core functions (e.g., server connections, message handling, state updates).
+
+- **Manual Tests**: Simulate multiple players with browser tabs or devices, testing operator collection, collisions, and disconnections.
+
+- **Tools**: Leverage Colyseus's debugging features (e.g., colyseus-monitor) to inspect room states.
+
+Combining these methods catches bugs and confirms a consistent player experience.
+
+# Additional Considerations
+
+- **Performance**: Optimize rendering for split screens (e.g., reduce draw calls per viewport).
+
+- **HUD**: Duplicate HUD elements per player in their viewports.
+
+- **Player IDs**: Use Colyseus session IDs to identify players uniquely.
+
+# Conclusion
+
+By using Colyseus to separate client/server logic, you establish a scalable foundation. Local multiplayer with split screens builds on this, maintaining server authority. Gamepad controls enhance accessibility, and deploying the server publicly extends the game to network play. This step-by-step approach leverages the existing codebase while meeting all your requirements.
  
  
 ----------------------------------------------------- 
