@@ -36,6 +36,7 @@ let ground;
 let controls;
 let clock;
 let playerNumberblock; // Player's Numberblock
+let staticNumberblock; // Static Numberblock for interaction
 let operatorManager; // Operator system manager
 
 // Initialize the Three.js scene
@@ -72,6 +73,12 @@ function init() {
     // Create player's Numberblock
     playerNumberblock = createPlayerNumberblock(scene, 1);
 
+    // Create static Numberblock for operator application
+    staticNumberblock = new Numberblock(2);
+    staticNumberblock.mesh.position.set(0, staticNumberblock.getHeight() / 2, -5);
+    scene.add(staticNumberblock.mesh);
+    console.log("Static Numberblock created with value: 2");
+
     // Initialize operator system
     window.camera = camera; // Make camera available for operator billboarding
     operatorManager = new OperatorManager(scene);
@@ -81,6 +88,15 @@ function init() {
     // CRITICAL FIX: Explicitly set position on controls object (not camera directly)
     controls.getObject().position.set(0, 2, 5);
     scene.add(controls.getObject());
+    
+    // Initialize collision detection
+    if (typeof addCollidableObject === 'function') {
+        addCollidableObject(playerNumberblock.mesh);
+        addCollidableObject(staticNumberblock.mesh);
+        console.log("Collision objects registered");
+    } else {
+        console.error("Collision functions not available!");
+    }
     
     clock = new THREE.Clock();
     window.addEventListener('resize', onWindowResize);
@@ -259,6 +275,9 @@ function animate() {
     // Check for collisions between playerNumberblock and operators
     checkOperatorCollisions();
     
+    // Check for collisions between playerNumberblock and staticNumberblock
+    checkNumberblockCollisions();
+    
     // Render the scene
     renderer.render(scene, camera);
 }
@@ -298,6 +317,76 @@ function updatePlayerPosition() {
         
         // Make the Numberblock rotate to match camera's horizontal rotation
         playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
+    }
+}
+
+// Check for collisions between player Numberblock and static Numberblock
+function checkNumberblockCollisions() {
+    if (!playerNumberblock || !staticNumberblock || !operatorManager) return;
+    
+    // Update bounding boxes
+    try {
+        const playerBox = updateAABB(playerNumberblock.mesh);
+        const staticBox = updateAABB(staticNumberblock.mesh);
+        
+        if (playerBox && staticBox && checkCollision(playerBox, staticBox)) {
+            handleNumberblockCollision(playerNumberblock, staticNumberblock, operatorManager);
+        }
+    } catch (error) {
+        console.error("Error in collision detection:", error);
+    }
+}
+
+// Handle collision between player and another numberblock
+function handleNumberblockCollision(player, targetNumberblock, operatorManager) {
+    // Check if player is holding an operator
+    if (operatorManager.getHeldOperator()) {
+        const heldOperator = operatorManager.getHeldOperator();
+        const originalValue = player.value;
+        
+        if (heldOperator === 'plus') {
+            player.value += targetNumberblock.value;
+            console.log(`Applied + operator: ${originalValue} + ${targetNumberblock.value} = ${player.value}`);
+        } else if (heldOperator === 'minus') {
+            player.value -= targetNumberblock.value;
+            // Prevent negative or zero values (depending on game rules)
+            player.value = Math.max(player.value, 1);
+            console.log(`Applied - operator: ${originalValue} - ${targetNumberblock.value} = ${player.value}`);
+        }
+        
+        // Update the player HUD or display
+        updatePlayerDisplay(player.value);
+        
+        // Consume the operator after use
+        operatorManager.clearHeldOperator();
+        
+        // Rebuild the player's Numberblock to reflect the new number visually
+        player.createNumberblock();
+        
+        // Slightly push back the player to prevent continuous collisions
+        if (controls && controls.getObject()) {
+            const direction = new THREE.Vector3();
+            direction.subVectors(
+                controls.getObject().position,
+                targetNumberblock.mesh.position
+            ).normalize();
+            
+            // Move back by a small amount
+            controls.getObject().position.x += direction.x * 0.5;
+            controls.getObject().position.z += direction.z * 0.5;
+        }
+    }
+}
+
+// Update the player's number display in the HUD
+function updatePlayerDisplay(value) {
+    // Update any UI elements that display the player's current number
+    console.log(`Player Numberblock value updated to: ${value}`);
+    
+    // If there's an HTML element for the display, update it
+    const playerValueDisplay = document.getElementById('player-value');
+    if (playerValueDisplay) {
+        playerValueDisplay.textContent = value;
     }
 }
 

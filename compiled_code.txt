@@ -658,10 +658,19 @@ FILE: memory bank\progress.md
   - Integrated with player controls
   - Fixed movement controls after operator integration
   - Ensured proper initialization order
+- Completed Step 7 of implementation plan: Implemented operator collection
+  - Added collision detection between player's Numberblock and operators
+  - Created visual attachment system to make operators attach to Numberblock's hand
+  - Modified Numberblock.createArm method to name hand objects for reference
+  - Enhanced OperatorManager.setHeldOperator to attach operators to the Numberblock
+  - Created smaller version (40% scale) of operator for holding
+  - Added robust error handling in collision detection to prevent game freezes
+  - Properly integrated collision.js with the rest of the codebase
+  - Implemented fallback collision functions for improved stability
 
 ## Next Steps
-- Step 7: Implement collision system
-- Step 8: Implement number operations 
+- Step 8: Implement number operations
+- Step 9: Add math puzzles and challenges 
  
 ----------------------------------------------------- 
 FILE: memory bank\RULES.md 
@@ -979,6 +988,7 @@ FILE: index.html
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
     
     <!-- Game JavaScript files -->
+    <script src="js/collision.js"></script>
     <script src="js/controls.js"></script>
     <script src="js/numberblock.js"></script>
     <script src="js/operator.js"></script>
@@ -1664,6 +1674,35 @@ FILE: js\main.js
 // Numberblocks game - Three.js implementation
 console.log('Numberblocks game initializing...');
 
+// Import collision functions if they're not already globally available
+if (typeof updateAABB !== 'function' || typeof checkCollision !== 'function') {
+    console.log('Importing collision functions...');
+    
+    // Define the functions locally if they're not available globally
+    function updateAABB(mesh) {
+        if (!mesh) return null;
+        
+        // Use Three.js Box3 to create a bounding box from the mesh
+        try {
+            const box = new THREE.Box3().setFromObject(mesh);
+            return box;
+        } catch (error) {
+            console.error("Error creating bounding box:", error);
+            return null;
+        }
+    }
+
+    function checkCollision(boxA, boxB) {
+        if (!boxA || !boxB) return false;
+        try {
+            return boxA.intersectsBox(boxB);
+        } catch (error) {
+            console.error("Error checking collision:", error);
+            return false;
+        }
+    }
+}
+
 // Global variables
 let scene, camera, renderer;
 let ground;
@@ -1890,6 +1929,9 @@ function animate() {
         operatorManager.update(delta);
     }
     
+    // Check for collisions between playerNumberblock and operators
+    checkOperatorCollisions();
+    
     // Render the scene
     renderer.render(scene, camera);
 }
@@ -1929,6 +1971,49 @@ function updatePlayerPosition() {
         
         // Make the Numberblock rotate to match camera's horizontal rotation
         playerNumberblock.mesh.rotation.y = controlsObject.rotation.y;
+    }
+}
+
+// Check for collisions between player's Numberblock and operators
+function checkOperatorCollisions() {
+    try {
+        if (!playerNumberblock || !operatorManager) return;
+        
+        const operators = operatorManager.getOperators();
+        if (!operators || operators.length === 0) return;
+        
+        // Get the player's AABB
+        const playerBox = updateAABB(playerNumberblock.mesh);
+        if (!playerBox) {
+            console.warn("Could not create player's bounding box");
+            return;
+        }
+        
+        // Check collision with each operator
+        for (let i = 0; i < operators.length; i++) {
+            const operator = operators[i];
+            if (!operator || !operator.mesh) continue;
+            
+            // Get the operator's AABB
+            const operatorBox = updateAABB(operator.mesh);
+            if (!operatorBox) {
+                console.warn(`Could not create bounding box for operator ${i}`);
+                continue;
+            }
+            
+            // Check if there's a collision
+            if (checkCollision(playerBox, operatorBox)) {
+                console.log(`Collision detected with ${operator.type} operator`);
+                
+                // Pickup the operator and attach it to the Numberblock
+                operatorManager.setHeldOperator(operator, playerNumberblock);
+                
+                // No need to check further after picking up an operator
+                break;
+            }
+        }
+    } catch (error) {
+        console.error("Error in checkOperatorCollisions:", error);
     }
 }
 
@@ -2196,6 +2281,9 @@ class Numberblock {
         // Position the hand at the end of the arm
         const handX = armLength / 2 * (side === 'left' ? -1 : 1);
         hand.position.set(handX, 0, 0);
+        
+        // Name the hand for easy reference
+        hand.name = side + 'Hand';
         
         armMesh.add(hand);
         
@@ -2515,7 +2603,7 @@ class OperatorManager {
     }
     
     // Set the currently held operator
-    setHeldOperator(operator) {
+    setHeldOperator(operator, numberblock) {
         // Clear any previously held operator
         this.clearHeldOperator();
         
@@ -2525,8 +2613,49 @@ class OperatorManager {
         // Create a smaller version of the operator for holding
         this.heldOperatorMesh = operator.createHeldOperatorMesh();
         
-        // Add to the scene
-        this.scene.add(this.heldOperatorMesh);
+        // Attach the operator to the Numberblock's right hand
+        if (numberblock && numberblock.mesh) {
+            // Find the right hand in the Numberblock's mesh hierarchy
+            let rightHand = null;
+            
+            // Look for the arm block (should be the second block for Numberblocks with more than 3 blocks)
+            const armBlockIndex = numberblock.value <= 3 ? Math.floor(numberblock.value / 2) : 1;
+            
+            // Find the right hand if there are enough blocks
+            if (numberblock.value > 0 && armBlockIndex < numberblock.value) {
+                // Get the arm block
+                const armBlock = numberblock.mesh.children[armBlockIndex];
+                
+                // Search for the rightHand in the arm block's children
+                armBlock.traverse((child) => {
+                    if (child.name === 'rightHand') {
+                        rightHand = child;
+                    }
+                });
+                
+                // If we found the right hand, attach the operator to it
+                if (rightHand) {
+                    // Position the held operator slightly offset from the hand
+                    this.heldOperatorMesh.position.set(0, 0.2, 0);
+                    
+                    // Add the held operator mesh to the right hand
+                    rightHand.add(this.heldOperatorMesh);
+                    
+                    console.log(`Attached ${this.heldOperator} operator to Numberblock's right hand`);
+                } else {
+                    // Fallback: Add to the scene if we can't find the hand
+                    console.warn("Could not find rightHand - adding operator to scene");
+                    this.scene.add(this.heldOperatorMesh);
+                }
+            } else {
+                // Fallback: Add to the scene if Numberblock doesn't have arms
+                console.warn("Numberblock doesn't have enough blocks for arms - adding operator to scene");
+                this.scene.add(this.heldOperatorMesh);
+            }
+        } else {
+            // Add to the scene if no Numberblock is provided
+            this.scene.add(this.heldOperatorMesh);
+        }
         
         // Remove the original operator from the scene
         this.removeOperator(operator);
@@ -2538,7 +2667,13 @@ class OperatorManager {
     // Clear the currently held operator
     clearHeldOperator() {
         if (this.heldOperatorMesh) {
-            this.scene.remove(this.heldOperatorMesh);
+            // Remove from parent (either scene or hand)
+            if (this.heldOperatorMesh.parent) {
+                this.heldOperatorMesh.parent.remove(this.heldOperatorMesh);
+            } else {
+                this.scene.remove(this.heldOperatorMesh);
+            }
+            
             this.heldOperatorMesh = null;
         }
         this.heldOperator = null;

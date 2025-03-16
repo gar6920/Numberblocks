@@ -158,10 +158,19 @@ architecture.md:
 4. Player position updated
 5. Numberblock follows camera with offset
 6. Scene rendered
+7. Collision detection checks performed
+8. Operator interactions processed
+
+## Implemented Components
+- Collision system for detecting Numberblock-to-Numberblock collisions
+- Operator application mechanics for mathematical operations
+- Operator pickup and attachment to Numberblock's hand
+- Number operations via bumping interaction (plus/minus)
+- Visual number updating with dynamic reconstruction
 
 ## Future Components
-- Collision system
-- Number operations
 - UI system
 - Score tracking
 - Game state management
+- Multiple interactive Numberblocks
+- More complex mathematical operations
