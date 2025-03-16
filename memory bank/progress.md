@@ -121,6 +121,15 @@
   - Added more decorative objects (from 30 to 120) to maintain visual density
   - Increased trees from 10 to 40 for better landmarks
   - Expanded spawn protection area for better player experience
+- Implemented third-person camera and controls:
+  - Added toggle between first-person and third-person views with the V key
+  - Implemented camera positioning behind the player with proper height and distance
+  - Created smooth camera transition when changing views
+  - Developed camera-relative movement in third-person mode
+  - Added Q/E rotation controls for the player character in third-person mode
+  - Ensured player character rotation matches movement direction when WASD keys are used
+  - Implemented proper cursor handling in both view modes
+  - Fixed THREE.js error related to camera parenting during view transitions
 
 ## Next Steps
 - Step 10: Add math puzzles and challenges

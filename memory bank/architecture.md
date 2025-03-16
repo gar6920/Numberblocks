@@ -99,6 +99,8 @@ architecture.md:
 
 ### 2. Controls System (controls.js)
 - First-person camera controls using PointerLockControls
+- Third-person camera controls with configurable distance and height
+- Toggle between first-person and third-person views (V key)
 - Movement handling (WASD/Arrow keys)
   - W = Forward movement
   - S = Backward movement
@@ -193,8 +195,10 @@ The game features a minimalist HUD with two key elements:
 1. User input captured via event listeners
 2. Movement state updated
 3. Controls updated in animation loop
-4. Player position updated
-5. Numberblock follows camera with offset
+4. Player position updated based on active view mode:
+   - First-person: Player follows camera position
+   - Third-person: Camera follows player with configurable offset
+5. Numberblock follows player position
 6. Scene rendered
 7. Collision detection checks performed
 8. Operator interactions processed
