@@ -77,6 +77,14 @@ The client is responsible for rendering the game, handling user inputs, and comm
 - Session persistence with reconnection support
 - Room-based multiplayer with shared state
 - Message-based communication for game events
+- Schema-based state synchronization with type annotations
+- Player list UI showing all connected players
+
+**Schema Implementation:**
+- Proper MapSchema collections for players, operators, and static objects
+- Type annotations for all schema properties
+- Structured synchronization patterns for consistent state updates
+- Multiple client-side approaches to handle schema data access
 
 ## File Structure
 ```
@@ -1155,6 +1163,24 @@ FILE: memory bank\progress.md
   - Corrected operator collection and interaction logic in multiplayer context
   - Improved error handling for network-related operations
 
+## March 16, 2025 (evening)
+- Fixed critical Colyseus schema synchronization issues:
+  - Updated schema definitions to use proper MapSchema initialization instead of regular objects
+  - Added proper type annotations for all schema properties
+  - Fixed player list functionality to correctly display connected players
+  - Implemented proper methods for player management (MapSchema .set() and .delete())
+  - Added verification and fallback mechanisms for player data access
+  - Enhanced logging for better debugging of multiplayer state
+  - Improved error handling for schema operations
+
+- Added robust player list UI improvements:
+  - Implemented expandable/collapsible player list with Tab key
+  - Added color indicators matching player Numberblock colors
+  - Improved display with player names and values
+  - Created multiple player data access methods to ensure compatibility
+  - Added real-time updating based on schema changes
+  - Fixed visual formatting and styling of player entries
+
 ## Next Steps
 - Add customizable player names and colors
 - Implement additional operator types (multiplication, division)
@@ -1319,7 +1345,7 @@ const http = require('http');
 const express = require('express');
 const { Server } = require('colyseus');
 const { Room } = require("colyseus");
-const { Schema, type } = require("@colyseus/schema");
+const { Schema, MapSchema, type } = require("@colyseus/schema");
 const path = require('path');
 
 // Define the state schema for Colyseus
@@ -1328,13 +1354,13 @@ class Player extends Schema {
         super();
         this.x = 0;
         this.y = 1;
-        this.z = 0;
+        this.z = 5;
         this.value = 1;
         this.rotationY = 0;
         this.pitch = 0;
         this.operator = null;
-        this.color = null;
-        this.name = null;
+        this.color = "#FFFFFF";
+        this.name = "";
     }
 }
 
@@ -1352,9 +1378,9 @@ class Operator extends Schema {
 class GameState extends Schema {
     constructor() {
         super();
-        this.players = {};
-        this.operators = {};
-        this.staticNumberblocks = {};
+        this.players = new MapSchema();
+        this.operators = new MapSchema();
+        this.staticNumberblocks = new MapSchema();
     }
 }
 
@@ -1407,6 +1433,8 @@ class NumberblocksRoom extends Room {
         this.createStaticNumberblock("static3", 4, -5, 0, -5);
         this.createStaticNumberblock("static4", 5, 0, 0, -10);
         this.createStaticNumberblock("static5", 1, 5, 0, -10);
+        
+        console.log("Room initialized with GameState:", this.state);
         
         // Listen for messages from clients
         this.onMessage("move", (client, message) => {
@@ -1543,26 +1571,37 @@ class NumberblocksRoom extends Room {
     }
     
     onJoin(client, options) {
-        console.log(`${client.sessionId} joined the game`);
+        console.log(`Client joined: ${client.sessionId}`);
         
-        // Create player with initial state
+        // Create a new player instance
         const player = new Player();
+        
+        // Set initial player position
         player.x = 0;
         player.y = 1;
-        player.z = 5; // Starting position
+        player.z = 5; // Start slightly behind origin
+        
+        // Set player value and other properties
         player.value = 1;
-        player.name = options.name || `Player ${Object.keys(this.state.players).length + 1}`;
+        // Use client ID as the player name for now
+        player.name = client.sessionId;
         player.color = this.getColorForPlayer(Object.keys(this.state.players).length);
         
-        // Add player to room state
-        this.state.players[client.sessionId] = player;
+        // Add player to game state - using .set() method for MapSchema
+        this.state.players.set(client.sessionId, player);
+        
+        console.log(`Player ${player.name} (${client.sessionId}) joined with color ${player.color}`);
+        console.log(`Current players in room:`, JSON.stringify(this.state.players));
+        console.log(`Total players:`, this.state.players.size);
     }
     
     onLeave(client, consented) {
         console.log(`${client.sessionId} left the game`);
         
-        // Remove player from room state
-        delete this.state.players[client.sessionId];
+        // Remove player from room state - use delete() method for MapSchema
+        this.state.players.delete(client.sessionId);
+        
+        console.log(`Player ${client.sessionId} removed. Remaining players: ${this.state.players.size}`);
     }
     
     // Get a distinct color for each player
@@ -1768,8 +1807,8 @@ FILE: client\index.html
     
     <!-- Numberblocks game scripts -->
     <script src="js/numberblock.js"></script>
-    <script src="js/network.js"></script>
     <script src="js/main-fixed.js"></script>
+    <script src="js/network.js"></script>
 </body>
 </html>
  
@@ -2292,6 +2331,7 @@ let playerNumberblock;
 let operatorManager;
 let prevTime = performance.now();
 let playerValue = 1;
+const playerHeight = 2.0; // Player height in units (as specified in memory)
 
 // Add operator tracking without redeclaring variables
 let heldOperator = null;
@@ -2311,9 +2351,9 @@ let direction = new THREE.Vector3();
 let canJump = true;
 
 // Rotation variables for Q/E keys
-const rotationQuaternion = new THREE.Quaternion();
-const worldUp = new THREE.Vector3(0, 1, 0);
-const rotationAxis = new THREE.Vector3();
+let rotationQuaternion = new THREE.Quaternion();
+let worldUp = new THREE.Vector3(0, 1, 0);
+let rotationAxis = new THREE.Vector3();
 
 // Add global variable for tracking view mode
 window.isFirstPerson = true;
@@ -2323,6 +2363,12 @@ const gameHUD = document.getElementById('game-hud');
 
 // Global variables and UI elements
 let viewToggleBtn = null; // Global reference for the view toggle button
+
+// Initialize networking variables
+let lastSentPosition = new THREE.Vector3();
+let lastSentRotation = 0;
+let positionUpdateInterval = 100; // ms between position updates
+let lastPositionUpdate = 0;
 
 // Initialize the game
 window.onload = function() {
@@ -2499,132 +2545,116 @@ function switchToThirdPersonView() {
 // Main initialization function
 function init() {
     try {
-        debug('Starting initialization...');
+        debug('Initializing game');
         
-        // Create the scene
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB); // Sky blue
-        debug('Scene created');
+        // Initialize scene
+        initScene();
         
         // Create the camera
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 2, 5);
-        debug('Camera created');
+        camera.position.set(0, 2, 5); // Start a bit back to see the player
         
-        // Create the renderer
-        renderer = new THREE.WebGLRenderer({
-            canvas: document.getElementById('game-canvas'),
-            antialias: true
-        });
+        // Setup renderer
+        debug('Setting up renderer');
+        renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
-        debug('Renderer created');
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputEncoding = THREE.sRGBEncoding; // Better color representation
+        renderer.gammaFactor = 2.2; // Standard gamma correction
         
-        // Add lights
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
+        // Add renderer to document
+        document.body.appendChild(renderer.domElement);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(10, 20, 10);
-        scene.add(directionalLight);
-        debug('Lights added');
+        // Make renderer globally available
+        window.renderer = renderer;
         
-        // Create a test cube to verify rendering
-        const testCube = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1, 1),
-            new THREE.MeshStandardMaterial({ color: 0xff0000 })
-        );
-        testCube.position.set(0, 0, -5);
-        scene.add(testCube);
-        debug('Test cube created');
-        
-        // Render the test cube to verify rendering is working
-        renderer.render(scene, camera);
-        debug('Initial render completed');
-        
-        // Setup Pointer Lock Controls
-        setupPointerLockControls();
-        
-        // Initialize floor
+        // Initialize the floor
         initFloor();
         
-        // Initialize player Numberblock
+        // Add decorative objects back
+        addDecorativeObjects();
+        
+        // Add static Numberblocks
+        addStaticNumberblocks();
+        
+        // Create player's Numberblock
         initPlayerNumberblock();
         
-        // Initialize networking
+        // Setup event listeners
+        window.addEventListener('resize', onWindowResize, false);
+        
+        // Setup controls based on the view mode
+        debug('Setting up controls for initial view mode');
+        setupPointerLockControls();
+        
+        // Initialize networking for multiplayer
         initNetworkingSystem();
         
-        // Event listeners
-        window.addEventListener('resize', onWindowResize);
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
+        // Add button to toggle between first and third person
+        addViewToggleButton();
         
         // Start the animation loop
-        debug('Starting animation loop');
-        animate();
+        requestAnimationFrame(animate);
+        
+        debug('Game successfully initialized');
     } catch (error) {
-        debug(`Initialization error: ${error.message}`, true);
-        console.error(error);
+        debug(`Full initialization error: ${error.message}`, true);
+        console.error('Full initialization error:', error);
         emergencyRender();
     }
 }
 
-// Setup Pointer Lock Controls
-function setupPointerLockControls() {
-    debug('Setting up PointerLock controls');
-    
+// Initialize the scene
+function initScene() {
     try {
-        controls = new THREE.PointerLockControls(camera, document.body);
-        scene.add(controls.getObject());
+        debug('Creating scene');
         
-        const lockInstructions = document.getElementById('lock-instructions');
+        // Create the scene
+        scene = new THREE.Scene();
         
-        const onPointerLockChange = function() {
-            if (document.pointerLockElement === document.body) {
-                debug('Pointer Lock enabled');
-                controls.enabled = true;
-                
-                // Hide the lock instructions overlay when controls are enabled
-                if (lockInstructions) {
-                    lockInstructions.style.display = 'none';
-                }
-            } else {
-                debug('Pointer Lock disabled');
-                controls.enabled = false;
-                
-                // Show the instructions again when controls are disabled
-                if (lockInstructions) {
-                    lockInstructions.style.display = 'block';
-                }
-            }
-        };
+        // Make scene globally available
+        window.scene = scene;
         
-        // Add event listeners for pointer lock
-        document.addEventListener('pointerlockchange', onPointerLockChange);
-        document.addEventListener('pointerlockerror', () => {
-            debug('Pointer Lock error');
-        });
+        // Set background color
+        scene.background = new THREE.Color(0x87CEEB); // Sky blue
         
-        // Click to enable pointer lock
-        document.addEventListener('click', () => {
-            if (document.pointerLockElement !== document.body) {
-                controls.lock();
-            }
-        });
+        // Add fog for depth perception
+        scene.fog = new THREE.Fog(0x87CEEB, 10, 100);
+        
+        // Add proper lighting with reduced intensity
+        // Ambient light - provides overall illumination to the scene
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Reduced from 0.8
+        scene.add(ambientLight);
+        
+        // Directional light - mimics sunlight
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6); // Reduced from 1.0
+        directionalLight.position.set(10, 20, 10);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        scene.add(directionalLight);
+        
+        // Hemisphere light - for natural outdoor lighting (sky/ground gradient)
+        const hemisphereLight = new THREE.HemisphereLight(0xddeeff, 0x3e2200, 0.4); // Reduced from 0.7
+        scene.add(hemisphereLight);
+        
+        debug('Scene created successfully with softer lighting');
     } catch (error) {
-        debug(`Error setting up PointerLock controls: ${error.message}`, true);
+        debug(`Error creating scene: ${error.message}`, true);
     }
 }
 
 // Initialize the floor
 function initFloor() {
-    debug('Creating floor');
-    
     try {
-        // Create a larger green floor
-        const floorGeometry = new THREE.PlaneGeometry(100, 100); // Extended size (was 20, 20)
+        debug('Creating floor');
+        
+        // Create a larger green floor with even darker color
+        const floorGeometry = new THREE.PlaneGeometry(100, 100); // Extended size
         const floorMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x33aa33,  // Green color
+            color: 0x114411,  // Much darker green color (almost forest green)
             roughness: 0.8, 
             metalness: 0.2 
         });
@@ -2640,260 +2670,467 @@ function initFloor() {
         const gridHelper = new THREE.GridHelper(100, 100, 0x000000, 0x444444);
         scene.add(gridHelper);
         
-        // Add some decorative objects
-        addDecorativeObjects();
-        
-        // Add static Numberblocks
-        addStaticNumberblocks();
-        
-        debug('Floor and environment created');
+        debug('Floor and grid created successfully');
     } catch (error) {
         debug(`Error creating floor: ${error.message}`, true);
     }
 }
 
-// Add decorative objects to the scene
-function addDecorativeObjects() {
-    debug('Adding decorative objects');
+// Setup PointerLock controls
+function setupPointerLockControls() {
+    debug('Setting up PointerLock controls');
     
     try {
-        // Add some trees
-        const treePositions = [
-            { x: 10, z: 10 },
-            { x: -15, z: 5 },
-            { x: 7, z: -12 },
-            { x: -8, z: -10 },
-            { x: 20, z: -15 }
-        ];
+        // Create controls
+        controls = new THREE.PointerLockControls(camera, document.body);
+        debug('PointerLockControls initialized: ' + controls);
         
-        treePositions.forEach(pos => {
-            // Create tree trunk
-            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.5, 5, 8);
-            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x885522 });
-            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-            trunk.position.set(pos.x, 2.5, pos.z);
-            scene.add(trunk);
+        // Make controls globally available
+        window.controls = controls;
+        
+        // Use the existing instructions element from HTML
+        let instructions = document.getElementById('lock-instructions');
+        
+        // Function to handle pointer lock change - simplified
+        function onPointerLockChange() {
+            if (document.pointerLockElement === document.body || 
+                document.mozPointerLockElement === document.body ||
+                document.webkitPointerLockElement === document.body) {
+                
+                // Pointer is locked, hide instructions
+                if (instructions) {
+                    instructions.style.display = 'none';
+                }
+                
+                // Set first person active flag
+                window.isFirstPerson = true;
+                debug('Pointer is locked - first person active');
+                
+                // Ensure player starts on the ground when re-entering
+                if (controls && controls.getObject()) {
+                    // Only reset the Y position, not X and Z
+                    const currentPos = controls.getObject().position;
+                    if (currentPos.y > 5) { // If they're way up in the air
+                        currentPos.y = 1.0; // Set to floor level + player height
+                        velocity.y = 0;     // Reset vertical velocity
+                    }
+                }
+            } else {
+                // Only show instructions if we're not in preview mode
+                if (!window.previewControlsMode && instructions) {
+                    instructions.style.display = 'block';
+                }
+                debug('Pointer is unlocked');
+            }
+        }
+        
+        // Function to handle pointer lock error - simplified
+        function onPointerLockError() {
+            debug('Pointer lock error', true);
             
-            // Create tree top
-            const topGeometry = new THREE.ConeGeometry(2, 4, 8);
-            const topMaterial = new THREE.MeshStandardMaterial({ color: 0x005500 });
-            const top = new THREE.Mesh(topGeometry, topMaterial);
-            top.position.set(pos.x, 6, pos.z);
-            scene.add(top);
-        });
+            // Enable preview controls without extra messages
+            window.previewControlsMode = true;
+            
+            // Hide instructions after a delay
+            setTimeout(() => {
+                if (instructions) {
+                    instructions.style.display = 'none';
+                }
+            }, 3000);
+        }
         
-        // Add some rocks
-        const rockPositions = [
-            { x: 5, z: -5, scale: 1.5 },
-            { x: -10, z: 12, scale: 1 },
-            { x: 15, z: 8, scale: 2 },
-            { x: -7, z: -15, scale: 0.8 }
-        ];
-        
-        rockPositions.forEach(pos => {
-            const rockGeometry = new THREE.DodecahedronGeometry(pos.scale, 0);
-            const rockMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x888888,
-                roughness: 0.9
-            });
-            const rock = new THREE.Mesh(rockGeometry, rockMaterial);
-            rock.position.set(pos.x, pos.scale, pos.z);
-            scene.add(rock);
-        });
-        
-        // Add some colorful cubes
-        const cubePositions = [
-            { x: 0, z: 15, color: 0xff0000 },
-            { x: -18, z: -3, color: 0x00ff00 },
-            { x: 12, z: -18, color: 0x0000ff }
-        ];
-        
-        cubePositions.forEach(pos => {
-            const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
-            const cubeMaterial = new THREE.MeshStandardMaterial({ color: pos.color });
-            const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-            cube.position.set(pos.x, 1, pos.z);
-            scene.add(cube);
-        });
-        
-        debug('Decorative objects added');
-    } catch (error) {
-        debug(`Error adding decorative objects: ${error.message}`, true);
-    }
-}
-
-// Add static Numberblocks of various values
-function addStaticNumberblocks() {
-    debug('Adding static Numberblocks');
-    
-    try {
-        // Define positions and values for static Numberblocks
-        const numberblockData = [
-            { value: 2, x: 8, z: 3 },
-            { value: 3, x: -5, z: 8 },
-            { value: 4, x: 15, z: -5 },
-            { value: 5, x: -12, z: -8 },
-            { value: 6, x: 5, z: -15 },
-            { value: 7, x: -15, z: 12 },
-            { value: 8, x: 18, z: 10 },
-            { value: 9, x: -18, z: -14 },
-            { value: 10, x: 10, z: -20 }
-        ];
-        
-        // Create each Numberblock
-        numberblockData.forEach(data => {
-            try {
-                const numberblock = new Numberblock(data.value);
-                scene.add(numberblock.mesh);
-                
-                // Fix positioning: Set Y to half the value so bottom is at ground level (y=0)
-                // For a block of value 5, the height is 5, so y=2.5 puts the bottom at ground level
-                numberblock.mesh.position.set(data.x, data.value / 2, data.z);
-                
-                // Rotate randomly for variety
-                numberblock.mesh.rotation.y = Math.random() * Math.PI * 2;
-                
-                // Add a small bounce animation
-                const initialY = numberblock.mesh.position.y;
-                const bounceSpeed = 0.5 + Math.random() * 0.5;
-                const bounceHeight = 0.15;
-                
-                // Store animation data on the mesh for use in animate loop
-                numberblock.mesh.userData = {
-                    initialY: initialY,
-                    bounceSpeed: bounceSpeed,
-                    bounceHeight: bounceHeight,
-                    bounceOffset: Math.random() * Math.PI * 2 // Random offset for varied motion
-                };
-            } catch (error) {
-                debug(`Error creating static Numberblock: ${error.message}`, true);
+        // Add event listeners for pointer lock
+        document.addEventListener('click', function() {
+            if (instructions && instructions.style.display !== 'none') {
+                controls.lock();
             }
         });
         
-        debug('Static Numberblocks added');
+        // Add pointer lock change and error event listeners
+        document.addEventListener('pointerlockchange', onPointerLockChange);
+        document.addEventListener('mozpointerlockchange', onPointerLockChange);
+        document.addEventListener('webkitpointerlockchange', onPointerLockChange);
+        
+        document.addEventListener('pointerlockerror', onPointerLockError);
+        document.addEventListener('mozpointerlockerror', onPointerLockError);
+        document.addEventListener('webkitpointerlockerror', onPointerLockError);
+        
+        // Add controls to scene
+        scene.add(controls.getObject());
+        
+        // Setup movement
+        moveForward = false;
+        moveBackward = false;
+        moveLeft = false;
+        moveRight = false;
+        canJump = false;
+        
+        // Set up keyboard event listeners
+        document.addEventListener('keydown', onKeyDown, false);
+        document.addEventListener('keyup', onKeyUp, false);
+        
+        debug('PointerLock controls setup complete');
     } catch (error) {
-        debug(`Error adding static Numberblocks: ${error.message}`, true);
+        debug(`Error setting up PointerLock controls: ${error.message}`, true);
     }
 }
 
-// Create a static numberblock visual from server data
-function createStaticNumberblockVisual(id, blockData) {
+// Update player movement physics
+function updatePlayerPhysics(delta) {
     try {
-        debug(`Creating static numberblock visual for ID: ${id} with value ${blockData.value}`);
+        // Skip if controls are disabled or not initialized
+        if (!controls) {
+            console.log("Controls disabled or not initialized");
+            return;
+        }
         
-        // Create a new numberblock with the value from server
-        const blockMesh = new window.Numberblock(blockData.value);
+        // Allow movement in preview mode even without pointer lock
+        const isPreviewMode = window.previewControlsMode === true;
         
-        // Calculate the correct Y position (ground level + half height for proper alignment)
-        const yPos = 0;
+        // Skip if not locked (unless in preview mode)
+        if (!controls.isLocked && !isPreviewMode) {
+            return;
+        }
+
+        // Apply movement damping
+        velocity.x -= velocity.x * 10.0 * delta; 
+        velocity.z -= velocity.z * 10.0 * delta;
         
-        // Set position based on server data with adjusted y position
-        blockMesh.mesh.position.set(blockData.x, yPos, blockData.z);
+        // Apply gravity (9.8 as specified in memory)
+        velocity.y -= 9.8 * delta;
         
-        // Store the initial Y for bounce animation
-        blockMesh.mesh.userData.initialY = yPos;
+        // Calculate movement direction based on input
+        direction.z = Number(moveForward) - Number(moveBackward);
+        direction.x = Number(moveRight) - Number(moveLeft);
         
-        // Add varying bounce parameters for visual interest
-        blockMesh.mesh.userData.bounceOffset = Math.random() * Math.PI;
-        blockMesh.mesh.userData.bounceSpeed = 0.8 + Math.random() * 0.4;
-        blockMesh.mesh.userData.bounceHeight = 0.1 + Math.random() * 0.1;
+        // Only normalize if we're actually moving
+        if (direction.x !== 0 || direction.z !== 0) {
+            direction.normalize(); // Ensure consistent movement regardless of direction
+        }
         
-        // Add to scene
-        scene.add(blockMesh.mesh);
+        // Apply movement force (scaled to achieve 5.0 units/sec)
+        // Using a higher value to compensate for damping
+        const moveSpeed = 50.0;
         
-        // Store reference to the visual object
-        staticNumberblocksVisuals[id] = blockMesh;
+        if (moveForward || moveBackward) {
+            velocity.z -= direction.z * moveSpeed * delta;
+        }
+        if (moveLeft || moveRight) {
+            velocity.x -= direction.x * moveSpeed * delta;
+        }
         
-        return blockMesh;
+        // Apply velocity to controls for movement
+        controls.moveRight(-velocity.x * delta);
+        controls.moveForward(-velocity.z * delta);
+        
+        // Apply jump physics
+        controls.getObject().position.y += velocity.y * delta;
+        
+        // Check for floor collision
+        if (controls.getObject().position.y < 1.0) { // Player height is 2.0 units
+            velocity.y = 0;
+            controls.getObject().position.y = 1.0;
+            canJump = true;
+        }
+        
+        // Update player numberblock position AND ROTATION to match camera
+        if (playerNumberblock) {
+            // Update position
+            playerNumberblock.mesh.position.copy(controls.getObject().position);
+            
+            // Get camera rotation (from controls quaternion)
+            const cameraQuaternion = controls.getObject().quaternion;
+            const euler = new THREE.Euler().setFromQuaternion(cameraQuaternion, 'YXZ');
+            
+            // Update numberblock rotation to match camera's Y rotation (yaw)
+            playerNumberblock.mesh.rotation.y = euler.y;
+            
+            // Offset the numberblock to be at the player's feet
+            const numberblockHeight = playerNumberblock.getHeight ? playerNumberblock.getHeight() : 1;
+            playerNumberblock.mesh.position.y -= (playerHeight / 2) + (numberblockHeight / 2);
+            
+            // Force numberblock to be visible in first-person mode
+            playerNumberblock.mesh.visible = true;
+        }
+        
+        // Send movement to server
+        sendRegularPositionUpdate();
     } catch (error) {
-        debug(`Error creating static numberblock visual: ${error.message}`, true);
-        return null;
+        console.error(`Error updating player movement: ${error.message}`);
     }
 }
 
-// Initialize the player's Numberblock
-function initPlayerNumberblock() {
-    debug('Creating player Numberblock');
-    
+// Main animation loop
+function animate() {
     try {
-        playerNumberblock = new Numberblock(playerValue);
-        scene.add(playerNumberblock.mesh);
-        playerNumberblock.mesh.position.set(0, 0, 0);
-        debug('Player Numberblock created');
+        // Request next animation frame 
+        requestAnimationFrame(animate);
+        
+        // Calculate delta time
+        const time = performance.now();
+        const delta = Math.min((time - prevTime) / 1000, 0.1); // Cap delta to avoid large jumps
+        
+        // Update player movement based on view mode
+        if (window.isFirstPerson) {
+            updatePlayerPhysics(delta);
+        } else {
+            updatePlayerPositionThirdPerson(time, delta);
+            updateThirdPersonCamera();
+        }
+        
+        // Force position updates periodically for network
+        if (time - lastPositionUpdate > positionUpdateInterval) {
+            sendRegularPositionUpdate();
+            lastPositionUpdate = time;
+        }
+        
+        // Update operators
+        updateOperators();
+        
+        // Check for collisions
+        if (playerNumberblock) {
+            checkCollisions();
+        }
+        
+        // Render the scene
+        renderer.render(scene, camera);
+        
+        // Update game loop vars
+        prevTime = time;
+    } catch (error) {
+        debug(`Error in animate loop: ${error.message}`, true);
+    }
+}
+
+// Send regular position updates to the server for multiplayer synchronization
+function sendRegularPositionUpdate() {
+    try {
+        if (!window.room || typeof window.sendPlayerUpdate !== 'function') {
+            return;
+        }
+        
+        let currentPos, currentRot;
+        
+        // Get current position and rotation based on view mode
+        if (window.isFirstPerson && controls) {
+            currentPos = controls.getObject().position;
+            currentRot = controls.getObject().rotation.y;
+        } else if (playerNumberblock && playerNumberblock.mesh) {
+            currentPos = playerNumberblock.mesh.position;
+            currentRot = playerNumberblock.mesh.rotation.y;
+        } else {
+            return; // No valid position
+        }
+        
+        // Always send updates (remove threshold check to ensure frequent updates)
+        // This ensures other players always see your current position
+        
+        // Send update to server
+        window.sendPlayerUpdate(
+            currentPos,
+            currentRot,
+            window.isFirstPerson ? camera.rotation.x : 0,
+            playerValue
+        );
+        
+        // Update last sent values
+        lastSentPosition.copy(currentPos);
+        lastSentRotation = currentRot;
+        
+        // Debug log to confirm sending
+        if (DEBUG) {
+            console.log(`Position update sent: ${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)}, ${currentPos.z.toFixed(2)}`);
+        }
+    } catch (error) {
+        console.error("Error sending regular position update:", error);
+    }
+}
+
+// Update player position in third-person mode
+function updatePlayerPositionThirdPerson(time, delta) {
+    try {
+        if (!playerNumberblock || !controls) return;
+        
+        const moveSpeed = 5.0; // Movement speed as specified in memory
+        const rotationSpeed = 2.0; // Rotation speed for Q/E keys
+        
+        // Get camera's current direction vectors, using proper forward/right orientation
+        const cameraDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        
+        // Project to horizontal plane by zeroing Y and normalizing
+        const forward = cameraDirection.clone().setY(0).normalize();
+        const right = cameraRight.clone().setY(0).normalize();
+        
+        // Calculate desired movement direction from keyboard input
+        const movement = new THREE.Vector3();
+        if (moveForward) movement.add(forward);
+        if (moveBackward) movement.sub(forward);
+        if (moveLeft) movement.sub(right);
+        if (moveRight) movement.add(right);
+        
+        // Apply gravity
+        velocity.y -= 9.8 * delta;
+        
+        if (movement.length() > 0) {
+            movement.normalize().multiplyScalar(moveSpeed * delta);
+            
+            // Update player position
+            playerNumberblock.mesh.position.add(movement);
+            
+            // Rotate player to face movement direction if moving (and no manual rotation with Q/E)
+            if (!turnLeft && !turnRight) {
+                const targetAngle = Math.atan2(movement.x, movement.z);
+                playerNumberblock.mesh.rotation.y = targetAngle;
+            }
+        }
+        
+        // Update vertical position with gravity
+        playerNumberblock.mesh.position.y += velocity.y * delta;
+        
+        // Check for floor collision
+        if (playerNumberblock.mesh.position.y < 0.5) {
+            velocity.y = 0;
+            playerNumberblock.mesh.position.y = 0.5;
+            canJump = true;
+        }
+        
+        // Rotate player using Q/E keys
+        if (turnLeft) playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
+        if (turnRight) playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
+        
+        // Send position to server for multiplayer
+        if (typeof window.room !== 'undefined' && window.room) {
+            window.sendPlayerUpdate(
+                playerNumberblock.mesh.position, 
+                playerNumberblock.mesh.rotation.y,
+                0, // pitch not used in third-person
+                playerValue
+            );
+        }
+    } catch (error) {
+        debug(`Error in updatePlayerPositionThirdPerson: ${error.message}`, true);
+    }
+}
+
+// Update third-person camera position
+function updateThirdPersonCamera() {
+    try {
+        if (!playerNumberblock || !playerNumberblock.mesh) return;
+        
+        const distance = 12;      // Camera distance behind the player
+        const heightOffset = 8;   // Height offset above the player
+        const smoothing = 0.1;    // Smooth camera motion factor
+        const rotationSpeed = 0.05;
+        
+        // Initialize the angle if not set
+        if (typeof window.thirdPersonCameraAngle === 'undefined') {
+            window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
+        }
+        
+        // Adjust camera angle with Q/E keys
+        if (turnLeft) window.thirdPersonCameraAngle += rotationSpeed;
+        if (turnRight) window.thirdPersonCameraAngle -= rotationSpeed;
+        
+        // Calculate desired camera position explicitly without cumulative interpolation errors
+        const playerPos = playerNumberblock.mesh.position.clone();
+        const targetX = playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance;
+        const targetZ = playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance;
+        
+        // Ensure camera Y position is always exactly at height offset plus player's midpoint height
+        const targetY = playerNumberblock.mesh.position.y + heightOffset;
+        
+        // Set camera position explicitly without smoothing vertically to prevent drift
+        camera.position.set(
+            THREE.MathUtils.lerp(camera.position.x, targetX, 0.1),
+            targetY, // No vertical smoothing
+            THREE.MathUtils.lerp(camera.position.z, targetZ, 0.1)
+        );
+        
+        // Always look at the player's midpoint height directly
+        const heightAdjustment = playerNumberblock.getHeight ? playerNumberblock.getHeight() / 2 : 1;
+        camera.lookAt(
+            playerNumberblock.mesh.position.x,
+            targetY - (heightOffset / 2),
+            playerNumberblock.mesh.position.z
+        );
+    } catch (error) {
+        debug(`Error in updateThirdPersonCamera: ${error.message}`, true);
+    }
+}
+
+// Update operators (animate them)
+function updateOperators() {
+    try {
+        if (!window.visuals || !window.visuals.operators) {
+            return;
+        }
+        
+        // Get all operator visuals
+        const operators = window.visuals.operators;
+        
+        // Calculate deltaTime (approximate)
+        const deltaTime = 1/60;
+        
+        // Animate each operator
+        for (const operatorId in operators) {
+            const operator = operators[operatorId];
+            if (operator && typeof operator.animate === 'function') {
+                operator.animate(deltaTime);
+            }
+        }
+    } catch (error) {
+        debug(`Error updating operators: ${error.message}`, true);
+    }
+}
+
+// Check for collisions with operators and other Numberblocks
+function checkCollisions() {
+    // Will be implemented with proper collision detection
+}
+
+// Update player's Numberblock value
+function updatePlayerValue(newValue) {
+    try {
+        playerValue = newValue;
+        
+        // Update the Numberblock
+        if (playerNumberblock) {
+            scene.remove(playerNumberblock.mesh);
+            playerNumberblock = new Numberblock(playerValue);
+            scene.add(playerNumberblock.mesh);
+            
+            // Position it correctly based on camera/controls
+            if (window.isFirstPerson) {
+                playerNumberblock.mesh.position.copy(controls.getObject().position);
+                playerNumberblock.mesh.position.y -= 1.0; // Position below camera
+                playerNumberblock.mesh.rotation.y = controls.getObject().rotation.y;
+            }
+        }
         
         // Update HUD
         updateHUD();
+        
+        debug(`Player value updated to ${playerValue}`);
     } catch (error) {
-        debug(`Error creating player Numberblock: ${error.message}`, true);
+        debug(`Error updating player value: ${error.message}`, true);
     }
 }
 
-// Initialize networking for multiplayer
-function initNetworkingSystem() {
-    debug('Initializing networking system');
-    
-    try {
-        // Check if initNetworking is defined in network.js
-        if (typeof window.initNetworking === 'function') {
-            debug('Found networking module, attempting to connect...');
-            window.initNetworking()
-                .then((roomInstance) => {
-                    debug('Networking initialized successfully');
-                    window.gameRoom = roomInstance; // Store room instance globally
-                    
-                    // Manually trigger player list update after successful connection
-                    if (typeof window.updatePlayerListUI === 'function') {
-                        setTimeout(window.updatePlayerListUI, 500);
-                        setTimeout(window.updatePlayerListUI, 2000);
-                    }
-                })
-                .catch(error => {
-                    debug(`Networking error: ${error.message}`, true);
-                });
-        } else {
-            debug('Networking module not detected, continuing in local mode');
-        }
-    } catch (error) {
-        debug(`Error initializing networking: ${error.message}`, true);
+// Update the HUD display
+function updateHUD() {
+    if (gameHUD) {
+        gameHUD.innerHTML = `<div class="hud-value">Number: ${playerValue}</div>`;
     }
 }
 
-// Emergency render function - displays a simple scene if initialization fails
-function emergencyRender() {
-    debug('Attempting emergency render', true);
-    
-    try {
-        // Create a very basic scene
-        const emergencyScene = new THREE.Scene();
-        emergencyScene.background = new THREE.Color(0x333333);
-        
-        const emergencyCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10);
-        emergencyCamera.position.z = 2;
-        
-        const emergencyGeometry = new THREE.BoxGeometry(1, 1, 1);
-        const emergencyMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-        const emergencyCube = new THREE.Mesh(emergencyGeometry, emergencyMaterial);
-        emergencyScene.add(emergencyCube);
-        
-        // Add text to indicate error
-        const textDiv = document.createElement('div');
-        textDiv.style.position = 'absolute';
-        textDiv.style.top = '10px';
-        textDiv.style.left = '10px';
-        textDiv.style.color = 'white';
-        textDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
-        textDiv.style.padding = '10px';
-        textDiv.style.fontFamily = 'monospace';
-        textDiv.textContent = 'Initialization Error! Check console for details.';
-        document.body.appendChild(textDiv);
-        
-        // Render the emergency scene
-        renderer.render(emergencyScene, emergencyCamera);
-        debug('Emergency render complete');
-    } catch (error) {
-        debug(`Emergency render failed: ${error.message}`, true);
-        alert('Critical rendering error: ' + error.message);
-    }
+// For Numberblock prototype to enable getHeight() method
+if (typeof window.Numberblock === 'undefined') {
+    window.Numberblock = function() {};
+    window.Numberblock.prototype.getHeight = function() {
+        // Default height if not available
+        return 2;
+    };
 }
 
 // Handle window resize
@@ -2908,22 +3145,28 @@ function onKeyDown(event) {
     try {
         if (document.activeElement !== document.body) return; // Skip if focused on input
         
+        console.log(`Key pressed: ${event.code}`); // Debug logging
+        
         switch (event.code) {
             case 'ArrowUp':
             case 'KeyW':
                 moveForward = true;
+                console.log("moveForward = true"); // Debug logging
                 break;
             case 'ArrowLeft':
             case 'KeyA':
                 moveLeft = true;
+                console.log("moveLeft = true"); // Debug logging
                 break;
             case 'ArrowDown':
             case 'KeyS':
                 moveBackward = true;
+                console.log("moveBackward = true"); // Debug logging
                 break;
             case 'ArrowRight':
             case 'KeyD':
                 moveRight = true;
+                console.log("moveRight = true"); // Debug logging
                 break;
             case 'Space':
                 if (canJump) {
@@ -2998,430 +3241,242 @@ function onKeyUp(event) {
     }
 }
 
-// Handle animation frame - bounce effect for static blocks
-function animateStaticNumberblocks(deltaTime) {
+// Add static Numberblocks of various values
+function addStaticNumberblocks() {
+    debug('Adding static Numberblocks');
+    
     try {
-        // Process all static numberblocks with bounce animation
-        Object.entries(staticNumberblocksVisuals).forEach(([id, blockMesh]) => {
-            if (blockMesh && blockMesh.mesh) {
-                // Apply bounce effect
-                const time = performance.now() / 1000;
-                const offset = blockMesh.mesh.userData.bounceOffset || 0;
-                const speed = blockMesh.mesh.userData.bounceSpeed || 1;
-                const height = blockMesh.mesh.userData.bounceHeight || 0.15;
-                const initialY = blockMesh.mesh.userData.initialY || blockMesh.mesh.position.y;
+        // Define positions and values for static Numberblocks
+        const numberblockData = [
+            { value: 2, x: 8, z: 3 },
+            { value: 3, x: -5, z: 8 },
+            { value: 4, x: 15, z: -5 },
+            { value: 5, x: -12, z: -8 },
+            { value: 6, x: 5, z: -15 }
+        ];
+        
+        // Create each Numberblock
+        numberblockData.forEach(data => {
+            try {
+                const numberblock = new Numberblock(data.value);
+                scene.add(numberblock.mesh);
                 
-                // Apply bounce animation - only move upward from initial position
-                blockMesh.mesh.position.y = initialY + Math.abs(Math.sin(time * speed + offset) * height);
+                // Fix positioning: Set Y to half the value so bottom is at ground level (y=0)
+                // For a block of value 5, the height is 5, so y=2.5 puts the bottom at ground level
+                numberblock.mesh.position.set(data.x, data.value / 2, data.z);
                 
-                // Slow rotation for visual interest
-                blockMesh.mesh.rotation.y += 0.005;
+                // Rotate randomly for variety
+                numberblock.mesh.rotation.y = Math.random() * Math.PI * 2;
+                
+                // Add a small bounce animation
+                const initialY = numberblock.mesh.position.y;
+                const bounceSpeed = 0.5 + Math.random() * 0.5;
+                const bounceHeight = 0.15;
+                
+                // Store animation data on the mesh for use in animate loop
+                numberblock.mesh.userData = {
+                    initialY: initialY,
+                    bounceSpeed: bounceSpeed,
+                    bounceHeight: bounceHeight,
+                    bounceOffset: Math.random() * Math.PI * 2 // Random offset for varied motion
+                };
+            } catch (error) {
+                debug(`Error creating static Numberblock: ${error.message}`, true);
             }
         });
+        
+        debug('Static Numberblocks added');
     } catch (error) {
-        debug(`Error in animateStaticNumberblocks: ${error.message}`, true);
+        debug(`Error adding static Numberblocks: ${error.message}`, true);
     }
 }
 
-// Animation loop
-function animate() {
+// Initialize the player's Numberblock
+function initPlayerNumberblock() {
+    debug('Creating player Numberblock');
+    
     try {
-        requestAnimationFrame(animate);
+        playerNumberblock = new Numberblock(playerValue);
+        scene.add(playerNumberblock.mesh);
+        playerNumberblock.mesh.position.set(0, 0, 0);
+        debug('Player Numberblock created');
         
-        // Update player position based on view mode
-        if (window.isFirstPerson) {
-            updatePlayerPosition();
-        } else {
-            updatePlayerPositionThirdPerson();
-            updateThirdPersonCamera();
-        }
-        
-        // Animate static Numberblocks (bounce effect)
-        const deltaTime = 1/60; // Approximate frame time
-        animateStaticNumberblocks(deltaTime);
-        
-        // Update operators
-        updateOperators();
-        
-        // Render the scene
-        renderer.render(scene, camera);
-    } catch (error) {
-        debug(`Animation error: ${error.message}`, true);
-    }
-}
-
-// Update and rotate all operators to face the player
-function updateOperators() {
-    try {
-        // Check if enough time has passed to spawn a new operator
-        const currentTime = performance.now();
-        if (currentTime - lastOperatorSpawn > 10000 && operators.length < 10) { // 10 seconds, max 10 operators
-            // Create a new operator
-            const operatorType = Math.random() > 0.5 ? '+' : '-';
-            const operatorGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-            const operatorMaterial = new THREE.MeshStandardMaterial({
-                color: operatorType === '+' ? 0x00ff00 : 0xff0000,
-                transparent: true,
-                opacity: 0.8,
-                emissive: operatorType === '+' ? 0x00ff00 : 0xff0000,
-                emissiveIntensity: 0.5
-            });
-            
-            const operator = new THREE.Mesh(operatorGeometry, operatorMaterial);
-            
-            // Random position on the map
-            const x = (Math.random() - 0.5) * 80;
-            const z = (Math.random() - 0.5) * 80;
-            operator.position.set(x, 1.5, z);
-            
-            // Tag with type for collision detection
-            operator.userData = { 
-                type: 'operator',
-                operatorType: operatorType 
-            };
-            
-            // Add to scene and track
-            scene.add(operator);
-            operators.push(operator);
-            lastOperatorSpawn = currentTime;
-            
-            debug(`Spawned ${operatorType} operator`);
-        }
-        
-        // Update existing operators
-        if (playerNumberblock && operators.length > 0) {
-            // Get player position
-            const playerPosition = window.isFirstPerson ? 
-                controls.getObject().position.clone() : 
-                playerNumberblock.mesh.position.clone();
-            
-            // Update each operator
-            for (let i = operators.length - 1; i >= 0; i--) {
-                const operator = operators[i];
-                
-                // Make operator face the player
-                operator.lookAt(playerPosition);
-                
-                // Make operator float
-                const time = performance.now() / 1000;
-                operator.position.y = 1.5 + Math.sin(time * 2) * 0.2;
-                
-                // Check for pickup
-                if (operator.position.distanceTo(playerPosition) < 2) {
-                    // Pickup this operator
-                    heldOperator = operator.userData.operatorType;
-                    scene.remove(operator);
-                    operators.splice(i, 1);
-                    
-                    // Show in HUD
-                    const hudElement = document.getElementById('hud');
-                    if (hudElement) {
-                        hudElement.innerHTML = `Holding: ${heldOperator}`;
-                        hudElement.style.color = heldOperator === '+' ? 'green' : 'red';
-                    } else {
-                        // Create HUD if it doesn't exist
-                        const newHud = document.createElement('div');
-                        newHud.id = 'hud';
-                        newHud.style.position = 'absolute';
-                        newHud.style.bottom = '20px';
-                        newHud.style.right = '20px';
-                        newHud.style.padding = '10px';
-                        newHud.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                        newHud.style.color = heldOperator === '+' ? 'green' : 'red';
-                        newHud.style.fontWeight = 'bold';
-                        newHud.style.fontSize = '20px';
-                        newHud.innerHTML = `Holding: ${heldOperator}`;
-                        document.body.appendChild(newHud);
-                    }
-                    
-                    debug(`Picked up ${heldOperator} operator`);
-                }
-            }
-            
-            // If holding an operator, check for numberblock collisions
-            if (heldOperator) {
-                // Check all scene objects for numberblocks
-                scene.children.forEach(child => {
-                    if (child !== playerNumberblock.mesh && 
-                        child.userData && 
-                        child.userData.initialY !== undefined) { // Identify numberblocks by userData.initialY
-                        
-                        // If close enough to this numberblock
-                        if (child.position.distanceTo(playerPosition) < 2) {
-                            // Extract the value from its position (height = value)
-                            const targetValue = Math.round(child.position.y * 2);
-                            
-                            // Apply operator
-                            let newValue = playerValue;
-                            if (heldOperator === '+') {
-                                newValue += targetValue;
-                            } else if (heldOperator === '-') {
-                                newValue -= targetValue;
-                                if (newValue < 1) newValue = 1; // Minimum value is 1
-                            }
-                            
-                            // Update player value
-                            updatePlayerValue(newValue);
-                            
-                            // Clear held operator
-                            heldOperator = null;
-                            
-                            // Update HUD
-                            const hudElement = document.getElementById('hud');
-                            if (hudElement) {
-                                hudElement.innerHTML = '';
-                            }
-                            
-                            debug(`Used operator on numberblock with value ${targetValue}, new player value: ${newValue}`);
-                        }
-                    }
-                });
-            }
-        }
-    } catch (error) {
-        debug(`Error in updateOperators: ${error.message}`, true);
-    }
-}
-
-// Update player position in third-person mode
-function updatePlayerPositionThirdPerson() {
-    try {
-        if (!playerNumberblock || !controls) return;
-        
-        const time = performance.now();
-        
-        if (!prevTime) {
-            prevTime = time;
-            return;
-        }
-        
-        const delta = (time - prevTime) / 1000;
-        const moveSpeed = 5.0; // Movement speed as specified in memory
-        const rotationSpeed = 2.0; // Rotation speed for Q/E keys
-        
-        // Get camera's current direction vectors, using proper forward/right orientation
-        const cameraDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-        const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-        
-        // Project to horizontal plane by zeroing Y and normalizing
-        const forward = cameraDirection.clone().setY(0).normalize();
-        const right = cameraRight.clone().setY(0).normalize();
-        
-        // Calculate desired movement direction from keyboard input
-        const movement = new THREE.Vector3();
-        if (moveForward) movement.add(forward);
-        if (moveBackward) movement.sub(forward);
-        if (moveLeft) movement.sub(right);
-        if (moveRight) movement.add(right);
-        
-        // Apply gravity
-        velocity.y -= 9.8 * delta;
-        
-        if (movement.length() > 0) {
-            movement.normalize().multiplyScalar(moveSpeed * delta);
-            
-            // Update player position
-            playerNumberblock.mesh.position.add(movement);
-            
-            // Rotate player to face movement direction if moving (and no manual rotation with Q/E)
-            if (!turnLeft && !turnRight) {
-                const targetAngle = Math.atan2(movement.x, movement.z);
-                playerNumberblock.mesh.rotation.y = targetAngle;
-            }
-        }
-        
-        // Update vertical position with gravity
-        playerNumberblock.mesh.position.y += velocity.y * delta;
-        
-        // Check for floor collision
-        if (playerNumberblock.mesh.position.y < 0.5) {
-            velocity.y = 0;
-            playerNumberblock.mesh.position.y = 0.5;
-            canJump = true;
-        }
-        
-        // Rotate player using Q/E keys
-        if (turnLeft) playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
-        if (turnRight) playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
-        
-        // Send position to server for multiplayer
-        if (typeof window.room !== 'undefined' && window.room) {
-            window.sendPlayerUpdate(
-                playerNumberblock.mesh.position, 
-                playerNumberblock.mesh.rotation.y,
-                0, // pitch not used in third-person
-                playerValue
-            );
-        }
-        
-        prevTime = time;
-    } catch (error) {
-        debug(`Error in updatePlayerPositionThirdPerson: ${error.message}`, true);
-    }
-}
-
-// Update third-person camera position
-function updateThirdPersonCamera() {
-    try {
-        if (!playerNumberblock || !playerNumberblock.mesh) return;
-        
-        const distance = 12;      // Camera distance behind the player
-        const heightOffset = 8;   // Height offset above the player
-        const smoothing = 0.1;    // Smooth camera motion factor
-        const rotationSpeed = 0.05;
-        
-        // Initialize the angle if not set
-        if (typeof window.thirdPersonCameraAngle === 'undefined') {
-            window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
-        }
-        
-        // Adjust camera angle with Q/E keys
-        if (turnLeft) window.thirdPersonCameraAngle += rotationSpeed;
-        if (turnRight) window.thirdPersonCameraAngle -= rotationSpeed;
-        
-        // Calculate desired camera position explicitly without cumulative interpolation errors
-        const playerPos = playerNumberblock.mesh.position.clone();
-        const targetX = playerPos.x - Math.sin(window.thirdPersonCameraAngle) * distance;
-        const targetZ = playerPos.z - Math.cos(window.thirdPersonCameraAngle) * distance;
-        
-        // Ensure camera Y position is always exactly at height offset plus player's midpoint height
-        const targetY = playerNumberblock.mesh.position.y + heightOffset;
-        
-        // Set camera position explicitly without smoothing vertically to prevent drift
-        camera.position.set(
-            THREE.MathUtils.lerp(camera.position.x, targetX, 0.1),
-            targetY, // No vertical smoothing
-            THREE.MathUtils.lerp(camera.position.z, targetZ, 0.1)
-        );
-        
-        // Always look at the player's midpoint height directly
-        const heightAdjustment = playerNumberblock.getHeight ? playerNumberblock.getHeight() / 2 : 1;
-        camera.lookAt(
-            playerNumberblock.mesh.position.x,
-            targetY - (heightOffset / 2),
-            playerNumberblock.mesh.position.z
-        );
-    } catch (error) {
-        debug(`Error in updateThirdPersonCamera: ${error.message}`, true);
-    }
-}
-
-// Update player position based on controls (first-person mode)
-function updatePlayerPosition() {
-    const time = performance.now();
-    
-    if (!prevTime) {
-        prevTime = time;
-        return;
-    }
-    
-    const delta = (time - prevTime) / 1000;
-    
-    // Apply movement damping
-    velocity.x -= velocity.x * 5.0 * delta; 
-    velocity.z -= velocity.z * 5.0 * delta;
-    
-    // Apply gravity (9.8 as specified in memory)
-    velocity.y -= 9.8 * delta;
-    
-    // Calculate movement direction based on input
-    direction.z = Number(moveForward) - Number(moveBackward);
-    direction.x = Number(moveRight) - Number(moveLeft);
-    direction.normalize(); // Ensure consistent movement regardless of direction
-    
-    // Apply movement force (scaled to achieve 5.0 units/sec)
-    if (moveForward || moveBackward) velocity.z -= direction.z * 5.0 * delta;
-    if (moveLeft || moveRight) velocity.x -= direction.x * 5.0 * delta;
-    
-    // Apply velocity to controls for movement
-    controls.moveRight(-velocity.x * delta);
-    controls.moveForward(-velocity.z * delta);
-    
-    // Apply jump physics
-    controls.getObject().position.y += velocity.y * delta;
-    
-    // Check for floor collision
-    if (controls.getObject().position.y < 1.0) { // Player height is 2.0 units
-        velocity.y = 0;
-        controls.getObject().position.y = 1.0;
-        canJump = true;
-    }
-    
-    // Update position of player's Numberblock to match camera in first-person view
-    if (playerNumberblock) {
-        // Copy position with an adjustment for height
-        const controlsPosition = controls.getObject().position.clone();
-        playerNumberblock.mesh.position.set(
-            controlsPosition.x,
-            controlsPosition.y - 1.0, // Position below camera
-            controlsPosition.z
-        );
-        
-        // Make Numberblock rotation exactly match camera rotation
-        const euler = new THREE.Euler().setFromQuaternion(controls.getObject().quaternion, 'YXZ');
-        playerNumberblock.mesh.rotation.y = euler.y; // Only use Y rotation
-    }
-    
-    // Send position to server for multiplayer
-    if (typeof window.room !== 'undefined' && window.room) {
-        window.sendPlayerUpdate(
-            playerNumberblock.mesh.position, 
-            playerNumberblock.mesh.rotation.y,
-            0, // pitch not used in first-person
-            playerValue
-        );
-    }
-    
-    prevTime = time;
-}
-
-// Check for collisions with operators and other Numberblocks
-function checkCollisions() {
-    // Will be implemented with proper collision detection
-}
-
-// Update player's Numberblock value
-function updatePlayerValue(newValue) {
-    try {
-        playerValue = newValue;
-        
-        // Update the Numberblock
-        if (playerNumberblock) {
-            scene.remove(playerNumberblock.mesh);
-            playerNumberblock = new Numberblock(playerValue);
-            scene.add(playerNumberblock.mesh);
-            
-            // Position it correctly based on camera/controls
-            if (window.isFirstPerson) {
-                playerNumberblock.mesh.position.copy(controls.getObject().position);
-                playerNumberblock.mesh.position.y -= 1.0; // Position below camera
-                playerNumberblock.mesh.rotation.y = controls.getObject().rotation.y;
-            }
-        }
+        // Make player Numberblock globally available for networking
+        window.playerNumberblock = playerNumberblock;
         
         // Update HUD
         updateHUD();
         
-        debug(`Player value updated to ${playerValue}`);
+        // Make Numberblock class available globally
+        window.Numberblock = Numberblock;
     } catch (error) {
-        debug(`Error updating player value: ${error.message}`, true);
+        debug(`Error creating player Numberblock: ${error.message}`, true);
     }
 }
 
-// Update the HUD display
-function updateHUD() {
-    if (gameHUD) {
-        gameHUD.innerHTML = `<div class="hud-value">Number: ${playerValue}</div>`;
+// Initialize networking for multiplayer
+function initNetworkingSystem() {
+    debug('Initializing networking system');
+    
+    try {
+        // Check if initNetworking is defined in network.js
+        if (typeof window.initNetworking === 'function') {
+            debug('Found networking module, attempting to connect...');
+            window.initNetworking()
+                .then((roomInstance) => {
+                    debug('Networking initialized successfully');
+                    window.gameRoom = roomInstance; // Store room instance globally
+                    
+                    // Manually trigger player list update after successful connection
+                    if (typeof window.updatePlayerListUI === 'function') {
+                        setTimeout(window.updatePlayerListUI, 500);
+                        setTimeout(window.updatePlayerListUI, 2000);
+                    }
+                })
+                .catch(error => {
+                    debug(`Networking error: ${error.message}`, true);
+                });
+        } else {
+            debug('Networking module not detected, continuing in local mode');
+        }
+    } catch (error) {
+        debug(`Error initializing networking: ${error.message}`, true);
     }
 }
 
-// For Numberblock prototype to enable getHeight() method
-if (typeof window.Numberblock === 'undefined') {
-    window.Numberblock = function() {};
-    window.Numberblock.prototype.getHeight = function() {
-        // Default height if not available
-        return 2;
-    };
+// Emergency render function - displays a simple scene if initialization fails
+function emergencyRender() {
+    debug('Attempting emergency render', true);
+    
+    try {
+        // Create a very basic scene
+        const emergencyScene = new THREE.Scene();
+        emergencyScene.background = new THREE.Color(0x333333);
+        
+        const emergencyCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10);
+        emergencyCamera.position.z = 2;
+        
+        const emergencyGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const emergencyMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+        const emergencyCube = new THREE.Mesh(emergencyGeometry, emergencyMaterial);
+        emergencyScene.add(emergencyCube);
+        
+        // Add text to indicate error
+        const textDiv = document.createElement('div');
+        textDiv.style.position = 'absolute';
+        textDiv.style.top = '10px';
+        textDiv.style.left = '10px';
+        textDiv.style.color = 'white';
+        textDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
+        textDiv.style.padding = '10px';
+        textDiv.style.fontFamily = 'monospace';
+        textDiv.textContent = 'Initialization Error! Check console for details.';
+        document.body.appendChild(textDiv);
+        
+        // Render the emergency scene
+        renderer.render(emergencyScene, emergencyCamera);
+        debug('Emergency render complete');
+    } catch (error) {
+        debug(`Emergency render failed: ${error.message}`, true);
+        alert('Critical rendering error: ' + error.message);
+    }
+}
+
+// Add decorative objects to the scene
+function addDecorativeObjects() {
+    try {
+        debug('Adding decorative objects');
+        
+        // Add multiple trees scattered around
+        for (let i = 0; i < 20; i++) {
+            // Randomize positions but keep away from center
+            const distance = 15 + Math.random() * 30;
+            const angle = Math.random() * Math.PI * 2;
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            
+            // Create tree
+            createTree(x, 0, z);
+        }
+        
+        // Add some rocks
+        for (let i = 0; i < 15; i++) {
+            // Randomize positions
+            const distance = 10 + Math.random() * 40;
+            const angle = Math.random() * Math.PI * 2;
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            
+            // Create rock
+            createRock(x, 0, z);
+        }
+        
+        debug('Decorative objects added successfully');
+    } catch (error) {
+        debug(`Error adding decorative objects: ${error.message}`, true);
+    }
+}
+
+// Helper function to create a tree
+function createTree(x, y, z) {
+    // Create tree trunk (cylinder)
+    const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.position.set(x, y + 2.5, z);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    scene.add(trunk);
+    
+    // Create tree top (cone for evergreen tree)
+    const topGeometry = new THREE.ConeGeometry(2, 6, 8);
+    const topMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 }); // Green
+    const top = new THREE.Mesh(topGeometry, topMaterial);
+    top.position.set(x, y + 6, z);
+    top.castShadow = true;
+    top.receiveShadow = true;
+    scene.add(top);
+}
+
+// Helper function to create a rock
+function createRock(x, y, z) {
+    // Randomly scale the rock
+    const scale = 0.5 + Math.random() * 1.5;
+    
+    // Create irregular rock shape using a scaled sphere
+    const rockGeometry = new THREE.SphereGeometry(1, 6, 4);
+    
+    // Randomly deform vertices to make it look more like a rock
+    const vertices = rockGeometry.attributes.position;
+    for (let i = 0; i < vertices.count; i++) {
+        const x = vertices.getX(i);
+        const y = vertices.getY(i);
+        const z = vertices.getZ(i);
+        
+        // Apply random offset to vertex
+        vertices.setX(i, x + (Math.random() - 0.5) * 0.3);
+        vertices.setY(i, y + (Math.random() - 0.5) * 0.3);
+        vertices.setZ(i, z + (Math.random() - 0.5) * 0.3);
+    }
+    
+    // Update normals after vertex modification
+    rockGeometry.computeVertexNormals();
+    
+    // Create rock material with random gray shade
+    const grayShade = 0.4 + Math.random() * 0.3;
+    const rockMaterial = new THREE.MeshStandardMaterial({ 
+        color: new THREE.Color(grayShade, grayShade, grayShade),
+        roughness: 0.9,
+        metalness: 0.1
+    });
+    
+    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+    rock.scale.set(scale, scale * 0.7, scale);
+    rock.position.set(x, y + (scale * 0.35), z);
+    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    scene.add(rock);
 }
  
  
@@ -5485,19 +5540,81 @@ const endpoint = 'ws://localhost:3000';
 let client = null;
 let room = null;
 
+// Helper function to generate random colors
+function getRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
+// Import CSS2D renderer for player names if not already defined
+let CSS2DObject;
+try {
+    // Check for THREE.CSS2DObject
+    if (typeof THREE !== 'undefined') {
+        if (THREE.CSS2DObject) {
+            console.log("Using THREE.CSS2DObject directly");
+            CSS2DObject = THREE.CSS2DObject;
+        } 
+        // Check if it's in CSS2DRenderer
+        else if (THREE.CSS2DRenderer) {
+            console.log("Using THREE.CSS2DRenderer.CSS2DObject");
+            CSS2DObject = THREE.CSS2DRenderer.CSS2DObject;
+        }
+        // Try loading from CSS2D namespace if available
+        else if (THREE.CSS2D && THREE.CSS2D.CSS2DObject) {
+            console.log("Using THREE.CSS2D.CSS2DObject");
+            CSS2DObject = THREE.CSS2D.CSS2DObject;
+        }
+        // Last resort - look for it in the window object
+        else if (window.CSS2DObject) {
+            console.log("Using window.CSS2DObject");
+            CSS2DObject = window.CSS2DObject;
+        }
+        else {
+            throw new Error("CSS2DObject not found in THREE");
+        }
+    } else {
+        throw new Error("THREE is not defined");
+    }
+} catch (error) {
+    console.warn("CSS2DObject not available, player name labels will not be shown:", error.message);
+    // Simple fallback that does nothing
+    CSS2DObject = class DummyCSS2DObject {
+        constructor(element) {
+            this.element = element;
+            this.position = { set: () => {} };
+        }
+    };
+}
+
+// Global tracking of all visuals
+const visuals = {
+    players: {},
+    operators: {},
+    staticNumberblocks: {}
+};
+
 // Store references to UI elements for players
 let playerListElement = null;
-let playerCountElement = null;
+let playerListToggleButton = null;
+const playerListUiElements = {};
+let playerListVisible = true;
+
+// Global reference to other players' Numberblock visuals
+window.otherPlayers = {};
 
 // Make sure UI references are available after DOM loads
 document.addEventListener('DOMContentLoaded', () => {
     playerListElement = document.getElementById('player-list');
-    playerCountElement = document.getElementById('player-count');
+    playerListToggleButton = document.getElementById('player-list-header');
     
     // Set up player list toggle via click
-    const playerListHeader = document.getElementById('player-list-header');
-    if (playerListHeader) {
-        playerListHeader.addEventListener('click', togglePlayerList);
+    if (playerListToggleButton) {
+        playerListToggleButton.addEventListener('click', togglePlayerList);
     }
 });
 
@@ -5521,40 +5638,132 @@ function getColorForValue(value) {
     return colors[value - 1]; // Arrays are 0-indexed, but our values start at 1
 }
 
-// Initialize the networking
+// Function to initialize networking for multiplayer
 async function initNetworking() {
     try {
         console.log(`Initializing networking with endpoint: ${endpoint}`);
         client = new Colyseus.Client(endpoint);
         
-        // Join with a player name
-        const playerName = `Player${Math.floor(Math.random() * 1000)}`;
-        room = await client.joinOrCreate("numberblocks", { name: playerName });
+        // Generate random player name and color
+        const playerId = Math.random().toString(36).substring(2, 8).toUpperCase();
+        console.log("Attempting to join room with ID:", playerId);
+        
+        // Join the room
+        room = await client.joinOrCreate("numberblocks", { 
+            name: playerId,
+            color: getRandomColor()
+        });
         console.log(`Connected to server with session ID: ${room.sessionId}`);
         
-        // Setup room event handlers
-        setupRoomHandlers();
+        // Set player name in UI
+        const playerName = document.getElementById('player-name');
+        if (playerName) {
+            playerName.textContent = playerId;
+        }
+        
+        // Wait a brief moment to ensure schemas are initialized
+        setTimeout(() => {
+            // Setup room listeners for all object types
+            setupRoomListeners();
+            
+            // Process existing players
+            processExistingPlayers();
+        }, 500);
         
         return room;
     } catch (error) {
         console.error(`Error connecting to Colyseus server: ${error}`);
         // Don't throw, just log the error and continue - allows game to work in offline mode
         console.log("Continuing in offline mode");
+        return null;
     }
 }
 
-// Set up event listeners to track state changes
-function setupRoomHandlers() {
-    if (!room) {
-        console.error("Cannot setup handlers: room is not initialized");
+// Process players that already exist in the room when joining
+function processExistingPlayers() {
+    if (!room || !room.state || !room.state.players) {
+        console.warn("Cannot process existing players: room or players schema not available");
         return;
     }
-
-    // Initial player list update
-    updatePlayerListUI();
     
-    // Set up schema listeners for player changes
-    setupPlayerListeners();
+    console.log("Processing existing players in room");
+    
+    // Loop through all existing players
+    room.state.players.forEach((player, sessionId) => {
+        // Skip local player
+        if (sessionId === room.sessionId) {
+            console.log("Skipping local player in existing players processing");
+            return;
+        }
+        
+        console.log(`Processing existing player: ${sessionId}`, player);
+        
+        try {
+            // Check if we already have this player
+            if (window.otherPlayers[sessionId]) {
+                console.log(`Player ${sessionId} already has a visual, skipping`);
+                return;
+            }
+            
+            // Verify Numberblock class is available
+            if (typeof window.Numberblock !== 'function') {
+                console.error("Numberblock class not available in window object!");
+                return;
+            }
+            
+            // Verify scene is available
+            if (!window.scene) {
+                console.error("Scene not available in window object!");
+                return;
+            }
+            
+            // Create a new Numberblock for this existing player
+            const numberblock = new window.Numberblock(player.value, player.color, player.name);
+            console.log(`Created Numberblock for existing player ${sessionId}:`, numberblock);
+            
+            // Position and rotate the Numberblock according to server data
+            numberblock.mesh.position.set(player.x, player.y, player.z);
+            numberblock.mesh.rotation.y = player.rotationY;
+            
+            // Add the Numberblock explicitly to the scene
+            window.scene.add(numberblock.mesh);
+            console.log(`Added existing remote player ${sessionId} Numberblock to scene`);
+            
+            // Store reference
+            window.otherPlayers[sessionId] = numberblock;
+            
+            // Setup onChange handler for updates
+            player.onChange = () => {
+                console.log(`Existing player ${sessionId} changed:`, player);
+                
+                // Skip if Numberblock was removed
+                if (!window.otherPlayers[sessionId]) {
+                    console.warn(`Numberblock for player ${sessionId} not found during onChange!`);
+                    return;
+                }
+                
+                // Update position and rotation
+                const nb = window.otherPlayers[sessionId];
+                nb.mesh.position.set(player.x, player.y, player.z);
+                nb.mesh.rotation.y = player.rotationY;
+                
+                // Update value if changed
+                if (nb.value !== player.value) {
+                    console.log(`Updating value for player ${sessionId} from ${nb.value} to ${player.value}`);
+                    nb.updateValue(player.value);
+                }
+            };
+        } catch (error) {
+            console.error(`Error creating visual for existing player ${sessionId}:`, error);
+        }
+    });
+    
+    console.log("Finished processing existing players");
+}
+
+// Setup message handlers
+function setupMessageHandlers() {
+    if (!room) return;
     
     // Handle errors
     room.onError((code, message) => {
@@ -5566,30 +5775,218 @@ function setupRoomHandlers() {
         console.log(`Left room with code ${code}`);
     });
     
-    // Set up key handlers for player list toggle
-    setupPlayerListKeyControls();
+    // Handle messages
+    room.onMessage("*", (type, message) => {
+        console.log(`Received message of type ${type}:`, message);
+    });
 }
 
-// Set up Colyseus Schema listeners for player list
-function setupPlayerListeners() {
-    // Listen for player additions
-    room.state.players.onAdd = (player, sessionId) => {
-        console.log(`Player added: ${sessionId}`, player);
+// Setup room listeners
+function setupRoomListeners() {
+    console.log("Setting up room listeners");
+    
+    if (!room) {
+        console.error("Room not available!");
+        return;
+    }
+    
+    // Set up message handlers
+    setupMessageHandlers();
+    
+    // Debug room state
+    console.log("Room state:", room.state);
+    console.log("Room schemas:", Object.keys(room.state || {}));
+    
+    // Global reference to other players - explicitly initialize
+    window.otherPlayers = window.otherPlayers || {};
+    
+    // Safely access players schema
+    if (room.state && room.state.players) {
+        console.log("Setting up player schema listeners");
         
-        // Listen for changes to this player's properties
-        player.onChange = () => {
-            console.log(`Player ${sessionId} changed`);
-            updatePlayerListUI();
+        // Global tracking of other players' visuals explicitly
+        window.otherPlayers = window.otherPlayers || {};
+
+        // Explicitly handle players joining AFTER local client is connected
+        room.state.players.onAdd = (player, sessionId) => {
+            if (sessionId === room.sessionId) {
+                // Explicitly assign local player's color from server data
+                window.playerNumberblock.color = player.color;
+                window.playerNumberblock.updateColor(player.color);
+                console.log(`Local player color explicitly set to ${player.color}`);
+                return; // skip local player
+            }
+
+            console.log(`Player ${sessionId} joined later; creating visual explicitly.`);
+            const numberblock = new window.Numberblock(player.value, player.color, player.name);
+            numberblock.mesh.position.set(player.x, player.y, player.z);
+            numberblock.mesh.rotation.y = player.rotationY;
+
+            window.scene.add(numberblock.mesh);
+            window.otherPlayers[sessionId] = numberblock;
+
+            player.onChange = (changes) => {
+                changes.forEach(change => {
+                    if (['x', 'y', 'z'].includes(change.field)) {
+                        numberblock.mesh.position.set(player.x, player.y, player.z);
+                    }
+                    if (change.field === "rotationY") {
+                        numberblock.mesh.rotation.y = player.rotationY;
+                    }
+                    if (change.field === "value") {
+                        numberblock.updateValue(player.value);
+                    }
+                    if (change.field === "color") {
+                        numberblock.updateColor(player.color);
+                    }
+                });
+            };
         };
+
+        room.state.players.onRemove = (player, sessionId) => {
+            const numberblock = window.otherPlayers[sessionId];
+            if (numberblock) {
+                window.scene.remove(numberblock.mesh);
+                delete window.otherPlayers[sessionId];
+            }
+        };
+    }
+    
+    // Handle operators if available
+    if (room.state && room.state.operators) {
+        console.log("Setting up operator schema listeners");
+        setupSpecificSchemaListeners('operators', room.state.operators);
+    }
+    
+    // Handle static numberblocks if available
+    if (room.state && room.state.staticNumberblocks) {
+        console.log("Setting up static numberblocks schema listeners");
+        setupSpecificSchemaListeners('staticNumberblocks', room.state.staticNumberblocks);
+    }
+}
+
+// Setup schema listeners for a specific object type
+function setupSpecificSchemaListeners(schemaName, schema) {
+    console.log(`Setting up schema listeners for ${schemaName}`);
+    
+    // Skip if no schema
+    if (!schema) {
+        console.warn(`No schema available for ${schemaName}`);
+        return;
+    }
+    
+    // Get the visual class based on schema name
+    let VisualClass;
+    
+    // Handle special naming cases
+    if (schemaName === 'operators') {
+        VisualClass = window.OperatorsVisual;
+    } else if (schemaName === 'staticNumberblocks') {
+        VisualClass = window.StaticNumberblocksVisual;
+    } else {
+        // Default naming convention
+        const VisualClassName = `${schemaName.charAt(0).toUpperCase() + schemaName.slice(1, -1)}Visual`;
+        VisualClass = window[VisualClassName];
+    }
+    
+    if (!VisualClass) {
+        console.error(`No visual class found for ${schemaName}. Available classes:`, 
+            Object.keys(window).filter(key => key.includes('Visual')));
+        return;
+    }
+    
+    console.log(`Found visual class for ${schemaName}:`, VisualClass.name);
+    
+    // Set up onAdd listener
+    schema.onAdd = function(obj, id) {
+        console.log(`${schemaName} added: ${id}`, obj);
         
-        // Update player list immediately when a player is added
-        updatePlayerListUI();
+        // Skip local player
+        if (schemaName === "players" && id === room.sessionId) {
+            console.log("Skipping visual creation for local player");
+            return;
+        }
+        
+        try {
+            // Create visual
+            const visual = new VisualClass(obj);
+            
+            // Add to scene
+            if (window.scene && visual.mesh) {
+                window.scene.add(visual.mesh);
+                console.log(`Added ${schemaName} visual for ${id} to scene`);
+            } else {
+                console.error(`Scene or mesh not available for ${schemaName} ${id}`);
+            }
+            
+            // Store in visuals tracking
+            visuals[schemaName][id] = visual;
+            
+            // Set up onChange listener
+            obj.onChange = function() {
+                console.log(`${schemaName} ${id} changed:`, obj);
+                
+                if (visuals[schemaName][id]) {
+                    visuals[schemaName][id].update(obj);
+                }
+                
+                // Update player list UI if this is a player
+                if (schemaName === "players") {
+                    updatePlayerListUI();
+                }
+            };
+        } catch (error) {
+            console.error(`Error creating visual for ${schemaName} ${id}:`, error);
+        }
     };
     
-    // Listen for player removals
-    room.state.players.onRemove = (player, sessionId) => {
-        console.log(`Player removed: ${sessionId}`);
-        updatePlayerListUI();
+    // Set up onRemove listener
+    schema.onRemove = function(obj, id) {
+        console.log(`${schemaName} removed: ${id}`);
+        
+        // Skip local player
+        if (schemaName === "players" && id === room.sessionId) {
+            console.log("Skipping visual removal for local player");
+            return;
+        }
+        
+        // Remove visual
+        if (visuals[schemaName][id]) {
+            const visual = visuals[schemaName][id];
+            
+            try {
+                // Remove from scene
+                if (window.scene && visual.mesh) {
+                    window.scene.remove(visual.mesh);
+                }
+                
+                // Dispose resources
+                if (visual.mesh) {
+                    if (visual.mesh.geometry) {
+                        visual.mesh.geometry.dispose();
+                    }
+                    
+                    if (visual.mesh.material) {
+                        if (Array.isArray(visual.mesh.material)) {
+                            visual.mesh.material.forEach(m => m.dispose());
+                        } else {
+                            visual.mesh.material.dispose();
+                        }
+                    }
+                }
+                
+                // Remove from tracking
+                delete visuals[schemaName][id];
+                console.log(`Removed ${schemaName} ${id} visual`);
+            } catch (error) {
+                console.error(`Error removing ${schemaName} ${id} visual:`, error);
+            }
+        }
+        
+        // Update player list UI if this is a player
+        if (schemaName === "players") {
+            updatePlayerListUI();
+        }
     };
 }
 
@@ -5597,9 +5994,9 @@ function setupPlayerListeners() {
 function updatePlayerListUI() {
     // Get references if not yet set
     if (!playerListElement) playerListElement = document.getElementById('player-list');
-    if (!playerCountElement) playerCountElement = document.getElementById('player-count');
+    if (!playerListToggleButton) playerListToggleButton = document.getElementById('player-list-header');
     
-    if (!playerListElement || !playerCountElement) {
+    if (!playerListElement || !playerListToggleButton) {
         console.log("Player list elements not yet available in DOM");
         return;
     }
@@ -5610,38 +6007,56 @@ function updatePlayerListUI() {
     // Default to 0 players
     let playerCount = 0;
     
-    // Add players from room state
+    // Detailed debug for state structure
+    if (room && room.state) {
+        console.log("Current room state:", JSON.stringify(room.state));
+    }
+    
+    // Log the current state of players
+    console.log("Player state:", room?.state?.players);
+    
+    // Try different approaches to get players
     if (room && room.state && room.state.players) {
         try {
-            // Use forEach method for Colyseus schema collections
-            room.state.players.forEach((player, sessionId) => {
-                playerCount++;
-                
-                // Create player entry
-                const playerEntry = document.createElement('div');
-                playerEntry.className = 'player-entry';
-                
-                // Create color indicator
-                const colorIndicator = document.createElement('div');
-                colorIndicator.className = 'player-color';
-                colorIndicator.style.backgroundColor = player.color || getColorForValue(player.value || 1);
-                
-                // Player info - show "You" for local player
-                const playerInfo = document.createElement('div');
-                playerInfo.className = 'player-info';
-                
-                if (sessionId === room.sessionId) {
-                    playerInfo.textContent = `You (${player.value || 1})`;
-                } else {
-                    const displayName = player.name || `P${sessionId.substring(0, 3)}`;
-                    playerInfo.textContent = `${displayName} (${player.value || 1})`;
+            // APPROACH 1: Use schema forEach if available (most reliable for Colyseus schemas)
+            if (typeof room.state.players.forEach === 'function') {
+                console.log("Using forEach method");
+                room.state.players.forEach((player, key) => {
+                    console.log(`Player [${key}]:`, player);
+                    addPlayerToList(player, key);
+                    playerCount++;
+                });
+            }
+            // APPROACH 2: Use manual iteration over entries
+            else if (typeof room.state.players.entries === 'function') {
+                console.log("Using entries method");
+                for (const [key, player] of room.state.players.entries()) {
+                    console.log(`Player [${key}]:`, player);
+                    addPlayerToList(player, key);
+                    playerCount++;
                 }
-                
-                // Add elements to entry
-                playerEntry.appendChild(colorIndicator);
-                playerEntry.appendChild(playerInfo);
-                playerListElement.appendChild(playerEntry);
-            });
+            } 
+            // APPROACH 3: Use standard object iteration
+            else {
+                console.log("Using object iteration");
+                // Get all players
+                try {
+                    // Try to use toJSON first (some versions of Colyseus)
+                    const playersObj = room.state.players.toJSON ? room.state.players.toJSON() : room.state.players;
+                    
+                    // Iterate through players
+                    for (const key in playersObj) {
+                        if (playersObj.hasOwnProperty(key)) {
+                            const player = playersObj[key];
+                            console.log(`Player [${key}}:`, player);
+                            addPlayerToList(player, key);
+                            playerCount++;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error iterating players:", e);
+                }
+            }
         } catch (error) {
             console.error("Error updating player list:", error);
         }
@@ -5650,7 +6065,51 @@ function updatePlayerListUI() {
     console.log(`Total player count: ${playerCount}`);
     
     // Update player count in header
-    playerCountElement.textContent = `(${playerCount})`;
+    playerListToggleButton.textContent = `Players (${playerCount})`;
+}
+
+// Helper function to add a player to the list UI
+function addPlayerToList(player, sessionId) {
+    if (!player) {
+        console.warn(`Skipping undefined player with ID ${sessionId}`);
+        return;
+    }
+    
+    console.log(`Creating UI entry for player ${sessionId}`);
+    
+    // Create player entry
+    const playerEntry = document.createElement('div');
+    playerEntry.className = 'player-entry';
+    
+    // Create color indicator
+    const colorIndicator = document.createElement('div');
+    colorIndicator.className = 'player-color';
+    colorIndicator.style.backgroundColor = player.color || getColorForValue(player.value || 1);
+    
+    // Player info - show "You" for local player
+    const playerInfo = document.createElement('div');
+    playerInfo.className = 'player-info';
+    
+    // Determine display name
+    let displayName;
+    let valueText = player.value || 1;
+    
+    if (room && sessionId === room.sessionId) {
+        displayName = "You";
+    } else {
+        // Use name property if available, fallback to session ID
+        displayName = player.name || `Player-${sessionId.substring(0, 4)}`;
+    }
+    
+    playerInfo.textContent = `${displayName} (${valueText})`;
+    
+    // Log the entry we're adding to the UI
+    console.log(`Adding player entry: ${displayName} with value ${valueText} and color ${colorIndicator.style.backgroundColor}`);
+    
+    // Add elements to entry
+    playerEntry.appendChild(colorIndicator);
+    playerEntry.appendChild(playerInfo);
+    playerListElement.appendChild(playerEntry);
 }
 
 // Get position from player object, with validation
@@ -5694,19 +6153,54 @@ function togglePlayerList() {
     }
 }
 
-// Send player update to server
-function sendPlayerUpdate(position, rotation, pitch, value) {
-    if (!room) return;
+// Send player position updates to the server
+window.sendPlayerUpdate = function(position, rotationY, pitch, value) {
+    if (!room) {
+        console.log("Room not connected, skipping position update");
+        return;
+    }
     
-    // Send position and rotation update to server
-    room.send("move", {
-        x: position.x,
-        y: position.y,
-        z: position.z,
-        rotationY: rotation,
-        pitch: pitch
-    });
-}
+    try {
+        let posX, posY, posZ;
+        
+        // Check if position is a Vector3 or a simple object
+        if (position instanceof THREE.Vector3) {
+            posX = position.x;
+            posY = position.y;
+            posZ = position.z;
+        } else if (typeof position === 'object' && position !== null) {
+            posX = position.x;
+            posY = position.y;
+            posZ = position.z;
+        } else {
+            console.error("Invalid position:", position);
+            return;
+        }
+        
+        // Validate data before sending
+        if (isNaN(posX) || isNaN(posY) || isNaN(posZ)) {
+            console.error("Position contains NaN values:", position);
+            return;
+        }
+        
+        // Send more detailed data to the server
+        room.send("move", {
+            x: posX,
+            y: posY,
+            z: posZ,
+            rotationY: rotationY || 0,
+            pitch: pitch || 0,
+            value: value || 1
+        });
+        
+        // Debug output for position updates
+        if (window.DEBUG) {
+            console.log(`Sent position: (${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}), rot: ${rotationY?.toFixed(2)}`);
+        }
+    } catch (error) {
+        console.error("Error sending player update:", error);
+    }
+};
 
 // Send operator collection message
 function sendOperatorCollect(operatorId) {
@@ -5726,6 +6220,411 @@ function sendNumberblockCollision(targetId) {
     });
 }
 
+// Define visual classes for each object type
+window.PlayersVisual = class PlayersVisual {
+    constructor(playerData) {
+        console.log("Creating player visual with data:", playerData);
+        
+        this.value = playerData.value;
+        this.color = playerData.color || getColorForValue(this.value);
+        
+        // Create a Numberblock for this player
+        const NumberblockClass = window.Numberblock || Numberblock;
+        
+        try {
+            this.numberblock = new NumberblockClass(this.value, this.color);
+            this.mesh = this.numberblock.mesh;
+            
+            // Set initial position
+            this.mesh.position.set(playerData.x, playerData.y, playerData.z);
+            
+            // Set rotation if available
+            if (playerData.rotationY !== undefined) {
+                this.mesh.rotation.y = playerData.rotationY;
+            }
+            
+            // Add player name label above the numberblock
+            if (playerData.name) {
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'player-name-label';
+                nameDiv.textContent = playerData.name;
+                nameDiv.style.color = 'white';
+                nameDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                nameDiv.style.padding = '2px 5px';
+                nameDiv.style.borderRadius = '3px';
+                nameDiv.style.userSelect = 'none';
+                
+                const nameLabel = new CSS2DObject(nameDiv);
+                nameLabel.position.set(0, this.numberblock.getHeight() + 0.5, 0);
+                this.mesh.add(nameLabel);
+            }
+        } catch (error) {
+            console.error("Error creating player visual:", error);
+            // Create a fallback placeholder mesh
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshBasicMaterial({ color: this.color });
+            this.mesh = new THREE.Mesh(geometry, material);
+            this.mesh.position.set(playerData.x, playerData.y, playerData.z);
+        }
+    }
+    
+    update(playerData) {
+        console.log("Updating player visual with data:", playerData);
+        
+        // Skip update for null/undefined data
+        if (!playerData) {
+            console.warn("Received invalid player data");
+            return;
+        }
+        
+        // Update position
+        if (this.mesh) {
+            // Only update position if we have valid coordinates
+            if (playerData.x !== undefined && playerData.y !== undefined && playerData.z !== undefined) {
+                // Check if values are not NaN
+                if (!isNaN(playerData.x) && !isNaN(playerData.y) && !isNaN(playerData.z)) {
+                    this.mesh.position.set(playerData.x, playerData.y, playerData.z);
+                } else {
+                    console.warn("Received NaN position values", playerData);
+                }
+            }
+            
+            // Update rotation if available and valid
+            if (playerData.rotationY !== undefined && !isNaN(playerData.rotationY)) {
+                this.mesh.rotation.y = playerData.rotationY;
+            }
+            
+            // Force the mesh to be visible
+            this.mesh.visible = true;
+        } else {
+            console.warn("No mesh exists for this player visual");
+        }
+        
+        // Update value if changed and we have an updateValue method
+        if (this.value !== playerData.value && playerData.value !== undefined && !isNaN(playerData.value)) {
+            console.log(`Player value changed from ${this.value} to ${playerData.value}`);
+            this.value = playerData.value;
+            
+            if (this.numberblock && typeof this.numberblock.updateValue === 'function') {
+                // Try the elegant update if available
+                this.numberblock.updateValue(this.value);
+            } else {
+                // Fallback to recreate the mesh
+                const oldMesh = this.mesh;
+                const position = oldMesh.position.clone();
+                const rotation = oldMesh.rotation.clone();
+                
+                // Remove old mesh
+                if (window.scene) {
+                    window.scene.remove(oldMesh);
+                }
+                
+                // Create new mesh
+                const NumberblockClass = window.Numberblock || Numberblock;
+                this.numberblock = new NumberblockClass(this.value, this.color);
+                this.mesh = this.numberblock.mesh;
+                
+                // Set position and rotation
+                this.mesh.position.copy(position);
+                this.mesh.rotation.copy(rotation);
+                
+                // Add to scene
+                if (window.scene) {
+                    window.scene.add(this.mesh);
+                }
+                
+                // Dispose old resources
+                if (oldMesh.geometry) oldMesh.geometry.dispose();
+                if (oldMesh.material) {
+                    if (Array.isArray(oldMesh.material)) {
+                        oldMesh.material.forEach(m => m.dispose());
+                    } else {
+                        oldMesh.material.dispose();
+                    }
+                }
+            }
+        }
+    }
+};
+
+window.OperatorsVisual = class OperatorsVisual {
+    constructor(operatorData) {
+        console.log("Creating operator visual with data:", operatorData);
+        
+        this.type = operatorData.type; // "+" or "-"
+        this.value = operatorData.value || 1;
+        
+        // Create a mesh for this operator
+        this.createOperatorMesh();
+        
+        // Set initial position
+        this.mesh.position.set(operatorData.x, operatorData.y, operatorData.z);
+        
+        // Add a rotation animation
+        this.rotationSpeed = 0.01;
+        this.bounceHeight = 0.2;
+        this.bounceSpeed = 0.5;
+        this.initialY = operatorData.y;
+        this.time = Math.random() * 1000; // Randomize starting point in animation
+    }
+    
+    createOperatorMesh() {
+        // Create operator text geometry
+        const operatorSymbol = this.type === "add" ? "+" : "-";
+        const color = this.type === "add" ? 0x00ff00 : 0xff0000; // Green for +, Red for -
+        
+        try {
+            // Check if font loader is available in window
+            if (window.fontLoader) {
+                // Create text geometry for the operator
+                window.fontLoader.load('/fonts/helvetiker_bold.typeface.json', (font) => {
+                    const textGeometry = new THREE.TextGeometry(operatorSymbol, {
+                        font: font,
+                        size: 0.5,
+                        height: 0.1,
+                    });
+                    
+                    const textMaterial = new THREE.MeshStandardMaterial({
+                        color: color,
+                        emissive: color,
+                        emissiveIntensity: 0.5,
+                        transparent: true,
+                        opacity: 0.9
+                    });
+                    
+                    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+                    
+                    // Center the text geometry
+                    textGeometry.computeBoundingBox();
+                    const textSize = textGeometry.boundingBox.getSize(new THREE.Vector3());
+                    textMesh.position.set(-textSize.x/2, -textSize.y/2, -textSize.z/2);
+                    
+                    // Create a group to hold the text and allow for easier rotation
+                    const group = new THREE.Group();
+                    group.add(textMesh);
+                    
+                    // Add a glow effect (sphere with transparent material)
+                    const glowGeometry = new THREE.SphereGeometry(0.4, 16, 16);
+                    const glowMaterial = new THREE.MeshBasicMaterial({
+                        color: color,
+                        transparent: true,
+                        opacity: 0.3
+                    });
+                    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+                    group.add(glowMesh);
+                    
+                    // Replace placeholder if it exists
+                    if (this.mesh && this.mesh.parent) {
+                        const position = this.mesh.position.clone();
+                        const parent = this.mesh.parent;
+                        parent.remove(this.mesh);
+                        this.mesh = group;
+                        this.mesh.position.copy(position);
+                        parent.add(this.mesh);
+                    } else {
+                        this.mesh = group;
+                    }
+                });
+            } else {
+                // Fallback if font loader is not available
+                console.warn("Font loader not available, creating fallback operator mesh");
+                this.createFallbackMesh(color);
+            }
+        } catch (error) {
+            console.error("Error creating operator text mesh:", error);
+            this.createFallbackMesh(color);
+        }
+    }
+    
+    createFallbackMesh(color) {
+        // Create a simple shape as fallback
+        const geometry = this.type === "add" ? 
+            new THREE.OctahedronGeometry(0.3) : 
+            new THREE.BoxGeometry(0.5, 0.2, 0.2);
+        
+        const material = new THREE.MeshStandardMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 0.5,
+            transparent: true,
+            opacity: 0.9
+        });
+        
+        this.mesh = new THREE.Mesh(geometry, material);
+        
+        // Add a glow effect
+        const glowGeometry = new THREE.SphereGeometry(0.4, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.3
+        });
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        
+        // Create a group to hold both meshes
+        const group = new THREE.Group();
+        group.add(this.mesh);
+        group.add(glowMesh);
+        
+        this.mesh = group;
+    }
+    
+    update(operatorData) {
+        // Update position
+        this.mesh.position.set(operatorData.x, operatorData.y, operatorData.z);
+        this.initialY = operatorData.y; // Update initial Y for animation
+        
+        // Update type if changed
+        if (this.type !== operatorData.type) {
+            console.log(`Operator type changed from ${this.type} to ${operatorData.type}`);
+            this.type = operatorData.type;
+            
+            // Recreate mesh with new type
+            const oldMesh = this.mesh;
+            const position = oldMesh.position.clone();
+            const parent = oldMesh.parent;
+            
+            // Create new mesh
+            this.createOperatorMesh();
+            this.mesh.position.copy(position);
+            
+            // Add to scene/parent
+            if (parent) {
+                parent.remove(oldMesh);
+                parent.add(this.mesh);
+            } else if (window.scene) {
+                window.scene.remove(oldMesh);
+                window.scene.add(this.mesh);
+            }
+            
+            // Dispose old resources (if possible)
+            try {
+                if (oldMesh.traverse) {
+                    oldMesh.traverse((child) => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => m.dispose());
+                            } else {
+                                child.material.dispose();
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error("Error disposing operator resources:", error);
+            }
+        }
+    }
+    
+    // Animate the operator (rotation and floating effect)
+    animate(deltaTime) {
+        if (!this.mesh) return;
+        
+        // Increment time counter
+        this.time += deltaTime;
+        
+        // Rotate around Y axis
+        this.mesh.rotation.y += this.rotationSpeed;
+        
+        // Floating effect (sine wave)
+        const yOffset = Math.sin(this.time * this.bounceSpeed) * this.bounceHeight;
+        this.mesh.position.y = this.initialY + yOffset;
+        
+        // Always face camera if available
+        if (window.camera) {
+            // Only align in XZ plane, keeping Y rotation normal
+            const cameraPos = window.camera.position.clone();
+            const meshPos = this.mesh.position.clone();
+            
+            // Set the same Y coordinate for both positions to only align in XZ plane
+            cameraPos.y = meshPos.y;
+            
+            // Look at camera
+            // We're not using lookAt directly on the mesh to avoid flipping issues
+            // Instead, we use a temporary vector to calculate the direction
+            const direction = new THREE.Vector3().subVectors(cameraPos, meshPos).normalize();
+            const angle = Math.atan2(direction.x, direction.z);
+            
+            // Apply rotation only to inner content if it's a group
+            if (this.mesh.children && this.mesh.children.length > 0) {
+                this.mesh.children.forEach(child => {
+                    if (child.isText) {
+                        child.rotation.y = angle;
+                    }
+                });
+            } else {
+                this.mesh.rotation.y = angle;
+            }
+        }
+    }
+};
+
+window.StaticNumberblocksVisual = class StaticNumberblocksVisual {
+    constructor(blockData) {
+        this.value = blockData.value;
+        this.color = blockData.color;
+        
+        // Create a Numberblock for this static block
+        const NumberblockClass = window.Numberblock || Numberblock;
+        this.mesh = new NumberblockClass(this.value, this.color).mesh;
+        
+        // Set initial position
+        this.mesh.position.set(blockData.x, blockData.y, blockData.z);
+        
+        // Static blocks don't move, but may rotate or animate
+        if (blockData.rotationY !== undefined) {
+            this.mesh.rotation.y = blockData.rotationY;
+        }
+    }
+    
+    update(blockData) {
+        // Update position if needed (should be rare for static blocks)
+        this.mesh.position.set(blockData.x, blockData.y, blockData.z);
+        
+        // Update rotation if available
+        if (blockData.rotationY !== undefined) {
+            this.mesh.rotation.y = blockData.rotationY;
+        }
+        
+        // Update value if changed
+        if (this.value !== blockData.value) {
+            console.log(`Static block value changed from ${this.value} to ${blockData.value}`);
+            this.value = blockData.value;
+            
+            // Create a new Numberblock with the updated value
+            const oldMesh = this.mesh;
+            const position = oldMesh.position.clone();
+            const rotation = oldMesh.rotation.clone();
+            
+            // Remove old mesh
+            window.scene.remove(oldMesh);
+            
+            // Create new mesh
+            const NumberblockClass = window.Numberblock || Numberblock;
+            const numberblock = new NumberblockClass(this.value, this.color);
+            this.mesh = numberblock.mesh;
+            
+            // Set position and rotation
+            this.mesh.position.copy(position);
+            this.mesh.rotation.copy(rotation);
+            
+            // Add to scene
+            window.scene.add(this.mesh);
+            
+            // Dispose old resources
+            if (oldMesh.geometry) oldMesh.geometry.dispose();
+            if (oldMesh.material) {
+                if (Array.isArray(oldMesh.material)) {
+                    oldMesh.material.forEach(m => m.dispose());
+                } else {
+                    oldMesh.material.dispose();
+                }
+            }
+        }
+    }
+};
+
 // Make functions available globally
 window.initNetworking = initNetworking;
 window.updatePlayerListUI = updatePlayerListUI;
@@ -5735,6 +6634,7 @@ window.sendOperatorCollect = sendOperatorCollect;
 window.sendNumberblockCollision = sendNumberblockCollision;
 window.getColorForValue = getColorForValue;
 window.togglePlayerList = togglePlayerList;
+window.visuals = visuals; // Export for debugging
  
  
 ===================================================== 
@@ -5828,6 +6728,19 @@ class Numberblock {
         // Return the total height calculated during creation
         // If value is 0, return a minimum height
         return this.value > 0 ? this.totalHeight - this.blockSpacing : this.blockSize;
+    }
+    
+    // Update the color of the Numberblock
+    updateColor(newColor) {
+        this.color = newColor;
+        
+        // Update the color of all blocks in the Numberblock
+        this.mesh.children.forEach(child => {
+            // Only update the blocks, not other attachments like arms or face
+            if (child.geometry && child.geometry.type === 'BoxGeometry') {
+                child.material.color.set(newColor);
+            }
+        });
     }
     
     // Create a single block with the Numberblock's color
@@ -5990,6 +6903,11 @@ class Numberblock {
         }
     }
     
+    // Update value (used for network synchronization)
+    updateValue(newValue) {
+        return this.setValue(newValue);
+    }
+    
     // Update the position of the HTML number tag in render loop
     updateNumberTagPosition(camera, renderer) {
         // Previous functionality disabled - no longer using HTML elements for tags
@@ -6023,7 +6941,11 @@ if (typeof module !== 'undefined') {
         Numberblock,
         createPlayerNumberblock
     };
-} 
+}
+
+// Always make Numberblock available globally
+window.Numberblock = Numberblock;
+console.log('Numberblock class exported to window object'); 
  
 ===================================================== 
 FILE: client\js\operator.js 

@@ -87,6 +87,19 @@ class Numberblock {
         return this.value > 0 ? this.totalHeight - this.blockSpacing : this.blockSize;
     }
     
+    // Update the color of the Numberblock
+    updateColor(newColor) {
+        this.color = newColor;
+        
+        // Update the color of all blocks in the Numberblock
+        this.mesh.children.forEach(child => {
+            // Only update the blocks, not other attachments like arms or face
+            if (child.geometry && child.geometry.type === 'BoxGeometry') {
+                child.material.color.set(newColor);
+            }
+        });
+    }
+    
     // Create a single block with the Numberblock's color
     createBlock() {
         const geometry = new THREE.BoxGeometry(this.blockSize, this.blockSize, this.blockSize);
@@ -247,6 +260,11 @@ class Numberblock {
         }
     }
     
+    // Update value (used for network synchronization)
+    updateValue(newValue) {
+        return this.setValue(newValue);
+    }
+    
     // Update the position of the HTML number tag in render loop
     updateNumberTagPosition(camera, renderer) {
         // Previous functionality disabled - no longer using HTML elements for tags
@@ -281,3 +299,7 @@ if (typeof module !== 'undefined') {
         createPlayerNumberblock
     };
 }
+
+// Always make Numberblock available globally
+window.Numberblock = Numberblock;
+console.log('Numberblock class exported to window object');
