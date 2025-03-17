@@ -48,9 +48,21 @@ The client is responsible for rendering the game, handling user inputs, and comm
   - Handles visual representation and animation
   - Provides collision detection support
 
+- **controls.js:**
+  - Handles player movement and camera controls
+  - Supports both first-person and third-person view modes
+  - Manages input handling for keyboard and mouse
+  - Implements quaternion-based rotation for smooth camera movement
+
 - **collision.js:**
   - Implements collision detection between game entities
   - Supports player-operator and player-numberblock interactions
+
+- **Entity.js, Player.js, NPC.js, EntityFactory.js:**
+  - Implements entity component system architecture
+  - Provides base classes for all game entities
+  - Manages entity tracking, creation, and removal
+  - Handles entity refreshing when browser tabs regain focus
 
 ### 3. Networking Architecture
 **Technology:** Colyseus for WebSocket-based real-time multiplayer.
@@ -67,12 +79,15 @@ The client is responsible for rendering the game, handling user inputs, and comm
 - Message-based communication for game events
 - Schema-based state synchronization with type annotations
 - Player list UI showing all connected players
+- Visibility change detection for inactive browser tabs
+- Comprehensive entity refresh system for reactivated tabs
 
 **Schema Implementation:**
 - Proper MapSchema collections for players, operators, and static objects
 - Type annotations for all schema properties
 - Structured synchronization patterns for consistent state updates
 - Multiple client-side approaches to handle schema data access
+- Robust fallback methods for handling different Colyseus schema implementations
 
 ## File Structure
 ```
@@ -86,7 +101,12 @@ The client is responsible for rendering the game, handling user inputs, and comm
 │       ├── network.js       # Networking and state synchronization
 │       ├── numberblock.js   # Numberblock entity implementation
 │       ├── operator.js      # Mathematical operator implementation
-│       └── collision.js     # Collision detection system
+│       ├── controls.js      # Player movement and camera controls
+│       ├── collision.js     # Collision detection system
+│       ├── Entity.js        # Base entity class
+│       ├── Player.js        # Player entity implementation
+│       ├── NPC.js           # Non-player character implementation
+│       └── EntityFactory.js # Entity management system
 ├── server.js                # Server implementation with Colyseus
 ├── package.json             # Project dependencies
 └── memory bank/             # Project documentation
@@ -120,6 +140,8 @@ The client is responsible for rendering the game, handling user inputs, and comm
 - **Mathematical Interactions:** Addition and subtraction operators affect Numberblock values
 - **Multiplayer Support:** Multiple players can join the same game world
 - **Persistence:** Session reconnection support
+- **Browser Tab Synchronization:** Automatically updates game state when inactive tabs become active
+- **Entity Component System:** Flexible architecture for game entity management
 
 ## Future Enhancements
 - Advanced operator types (multiplication, division)

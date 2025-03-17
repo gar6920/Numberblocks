@@ -181,6 +181,25 @@
   - Added real-time updating based on schema changes
   - Fixed visual formatting and styling of player entries
 
+## March 17, 2025
+- Fixed entity management after refactoring:
+  - Improved camera controls for first-person mode:
+    - Corrected camera rotation implementation to allow full 360-degree rotation
+    - Fixed the rotation limitation that previously restricted the view to about 90 degrees
+    - Updated quaternion handling to maintain proper camera orientation
+    - Explicitly set camera rotation order to 'YXZ' to prevent gimbal lock
+  - Enhanced player list update mechanism:
+    - Implemented visibility change event listener to detect when inactive tabs become active
+    - Created comprehensive entity refresh system to update all entities from current room state
+    - Added robust methods to handle different Colyseus schema implementations for maximum compatibility
+    - Enhanced error handling for network state synchronization
+    - Implemented fallback methods for obtaining player data when primary methods fail
+  - Improved entity architecture:
+    - Enhanced EntityFactory class with new refreshAllEntities method for comprehensive state updates
+    - Added helper methods for refreshing specific entity types (_refreshPlayerEntity, _refreshOperatorEntity)
+    - Optimized entity tracking to ensure consistent visual representation
+    - Fixed tracking of player entities between camera view changes
+
 ## Next Steps
 - Add customizable player names and colors
 - Implement additional operator types (multiplication, division)
