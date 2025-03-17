@@ -4,6 +4,7 @@ class Numberblock {
     constructor(value = 1, color = null) {
         this.value = value;
         this.mesh = new THREE.Group();
+        this.mesh.userData.numberblock = this; // Store reference for easy access
         this.blockSize = 1; // Size of each cube
         this.blockSpacing = 0.01; // Small gap between blocks
         this.totalHeight = 0;

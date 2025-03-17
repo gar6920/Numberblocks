@@ -18,26 +18,11 @@ function debug(message, isError = false) {
 let scene, camera, renderer, controls;
 let playerNumberblock;
 let operatorManager;
-let prevTime = performance.now();
 let playerValue = 1;
-const playerHeight = 2.0; // Player height in units (as specified in memory)
 
 // Add operator tracking without redeclaring variables
 let heldOperator = null;
 let lastOperatorSpawn = 0;
-
-// Movement keys state
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-let turnLeft = false;
-let turnRight = false;
-
-// Physics variables
-let velocity = new THREE.Vector3();
-let direction = new THREE.Vector3();
-let canJump = true;
 
 // Rotation variables for Q/E keys
 let rotationQuaternion = new THREE.Quaternion();
@@ -401,7 +386,7 @@ function setupPointerLockControls() {
                     const currentPos = controls.getObject().position;
                     if (currentPos.y > 5) { // If they're way up in the air
                         currentPos.y = 1.0; // Set to floor level + player height
-                        velocity.y = 0;     // Reset vertical velocity
+                        window.velocity.y = 0;     // Reset vertical velocity
                     }
                 }
             } else {
@@ -448,11 +433,11 @@ function setupPointerLockControls() {
         scene.add(controls.getObject());
         
         // Setup movement
-        moveForward = false;
-        moveBackward = false;
-        moveLeft = false;
-        moveRight = false;
-        canJump = false;
+        window.moveForward = false;
+        window.moveBackward = false;
+        window.moveLeft = false;
+        window.moveRight = false;
+        window.canJump = false;
         
         // Set up keyboard event listeners
         document.addEventListener('keydown', onKeyDown, false);
@@ -481,45 +466,71 @@ function updatePlayerPhysics(delta) {
             return;
         }
 
+        // Access variables from controls.js via window
         // Apply movement damping
-        velocity.x -= velocity.x * 10.0 * delta; 
-        velocity.z -= velocity.z * 10.0 * delta;
+        window.velocity.x -= window.velocity.x * 10.0 * delta; 
+        window.velocity.z -= window.velocity.z * 10.0 * delta;
         
         // Apply gravity (9.8 as specified in memory)
-        velocity.y -= 9.8 * delta;
+        window.velocity.y -= 9.8 * delta;
         
         // Calculate movement direction based on input
-        direction.z = Number(moveForward) - Number(moveBackward);
-        direction.x = Number(moveRight) - Number(moveLeft);
+        window.direction.z = Number(window.moveForward) - Number(window.moveBackward);
+        window.direction.x = Number(window.moveRight) - Number(window.moveLeft);
         
         // Only normalize if we're actually moving
-        if (direction.x !== 0 || direction.z !== 0) {
-            direction.normalize(); // Ensure consistent movement regardless of direction
+        if (window.direction.x !== 0 || window.direction.z !== 0) {
+            window.direction.normalize(); // Ensure consistent movement regardless of direction
         }
         
         // Apply movement force (scaled to achieve 5.0 units/sec)
         // Using a higher value to compensate for damping
-        const moveSpeed = 50.0;
+        // const moveSpeed = 50.0; // Using from controls.js
         
-        if (moveForward || moveBackward) {
-            velocity.z -= direction.z * moveSpeed * delta;
+        if (window.moveForward || window.moveBackward) {
+            window.velocity.z -= window.direction.z * window.moveSpeed * delta;
         }
-        if (moveLeft || moveRight) {
-            velocity.x -= direction.x * moveSpeed * delta;
+        
+        if (window.moveLeft || window.moveRight) {
+            window.velocity.x -= window.direction.x * window.moveSpeed * delta;
+        }
+        
+        // Handle Q/E rotation - turn left/right
+        if (window.turnLeft) {
+            // Calculate rotation amount
+            const turnAmount = window.turnSpeed * delta;
+            
+            // Rotate the camera
+            controls.getObject().rotation.y += turnAmount;
+        }
+        else if (window.turnRight) {
+            // Calculate rotation amount
+            const turnAmount = window.turnSpeed * delta;
+            
+            // Rotate the camera
+            controls.getObject().rotation.y -= turnAmount;
+        }
+        
+        // Handle jumping - only if on ground
+        if (window.canJump && controls.getObject().position.y <= window.playerHeight) {
+            if (window.jumpPressed) {
+                window.velocity.y = Math.sqrt(2 * 9.8 * window.jumpHeight);
+                window.canJump = false;
+            }
         }
         
         // Apply velocity to controls for movement
-        controls.moveRight(-velocity.x * delta);
-        controls.moveForward(-velocity.z * delta);
+        controls.moveRight(-window.velocity.x * delta);
+        controls.moveForward(-window.velocity.z * delta);
         
         // Apply jump physics
-        controls.getObject().position.y += velocity.y * delta;
+        controls.getObject().position.y += window.velocity.y * delta;
         
         // Check for floor collision
         if (controls.getObject().position.y < 1.0) { // Player height is 2.0 units
-            velocity.y = 0;
+            window.velocity.y = 0;
             controls.getObject().position.y = 1.0;
-            canJump = true;
+            window.canJump = true;
         }
         
         // Update player numberblock position AND ROTATION to match camera
@@ -536,7 +547,7 @@ function updatePlayerPhysics(delta) {
             
             // Offset the numberblock to be at the player's feet
             const numberblockHeight = playerNumberblock.getHeight ? playerNumberblock.getHeight() : 1;
-            playerNumberblock.mesh.position.y -= (playerHeight / 2) + (numberblockHeight / 2);
+            playerNumberblock.mesh.position.y -= (window.playerHeight / 2) + (numberblockHeight / 2);
             
             // Force numberblock to be visible in first-person mode
             playerNumberblock.mesh.visible = true;
@@ -653,13 +664,13 @@ function updatePlayerPositionThirdPerson(time, delta) {
         
         // Calculate desired movement direction from keyboard input
         const movement = new THREE.Vector3();
-        if (moveForward) movement.add(forward);
-        if (moveBackward) movement.sub(forward);
-        if (moveLeft) movement.sub(right);
-        if (moveRight) movement.add(right);
+        if (window.moveForward) movement.add(forward);
+        if (window.moveBackward) movement.sub(forward);
+        if (window.moveLeft) movement.sub(right);
+        if (window.moveRight) movement.add(right);
         
         // Apply gravity
-        velocity.y -= 9.8 * delta;
+        window.velocity.y -= 9.8 * delta;
         
         if (movement.length() > 0) {
             movement.normalize().multiplyScalar(moveSpeed * delta);
@@ -668,25 +679,25 @@ function updatePlayerPositionThirdPerson(time, delta) {
             playerNumberblock.mesh.position.add(movement);
             
             // Rotate player to face movement direction if moving (and no manual rotation with Q/E)
-            if (!turnLeft && !turnRight) {
+            if (!window.turnLeft && !window.turnRight) {
                 const targetAngle = Math.atan2(movement.x, movement.z);
                 playerNumberblock.mesh.rotation.y = targetAngle;
             }
         }
         
         // Update vertical position with gravity
-        playerNumberblock.mesh.position.y += velocity.y * delta;
+        playerNumberblock.mesh.position.y += window.velocity.y * delta;
         
         // Check for floor collision
         if (playerNumberblock.mesh.position.y < 0.5) {
-            velocity.y = 0;
+            window.velocity.y = 0;
             playerNumberblock.mesh.position.y = 0.5;
-            canJump = true;
+            window.canJump = true;
         }
         
         // Rotate player using Q/E keys
-        if (turnLeft) playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
-        if (turnRight) playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
+        if (window.turnLeft) playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
+        if (window.turnRight) playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
         
         // Send position to server for multiplayer
         if (typeof window.room !== 'undefined' && window.room) {
@@ -718,8 +729,8 @@ function updateThirdPersonCamera() {
         }
         
         // Adjust camera angle with Q/E keys
-        if (turnLeft) window.thirdPersonCameraAngle += rotationSpeed;
-        if (turnRight) window.thirdPersonCameraAngle -= rotationSpeed;
+        if (window.turnLeft) window.thirdPersonCameraAngle += rotationSpeed;
+        if (window.turnRight) window.thirdPersonCameraAngle -= rotationSpeed;
         
         // Calculate desired camera position explicitly without cumulative interpolation errors
         const playerPos = playerNumberblock.mesh.position.clone();
@@ -837,24 +848,24 @@ function onKeyDown(event) {
         switch (event.code) {
             case 'ArrowUp':
             case 'KeyW':
-                moveForward = true;
+                window.moveForward = true;
                 break;
             case 'ArrowLeft':
             case 'KeyA':
-                moveLeft = true;
+                window.moveLeft = true;
                 break;
             case 'ArrowDown':
             case 'KeyS':
-                moveBackward = true;
+                window.moveBackward = true;
                 break;
             case 'ArrowRight':
             case 'KeyD':
-                moveRight = true;
+                window.moveRight = true;
                 break;
             case 'Space':
-                if (canJump) {
-                    velocity.y = 5.0;
-                    canJump = false;
+                if (window.canJump) {
+                    window.velocity.y = 5.0;
+                    window.canJump = false;
                 }
                 break;
             case 'KeyV':
@@ -863,7 +874,7 @@ function onKeyDown(event) {
                 break;
             case 'KeyQ':
                 // Turn left
-                turnLeft = true;
+                window.turnLeft = true;
                 if (window.isFirstPerson) {
                     // Use quaternion rotation around world up axis (y-axis)
                     rotationAxis.copy(worldUp);
@@ -876,7 +887,7 @@ function onKeyDown(event) {
                 break;
             case 'KeyE':
                 // Turn right
-                turnRight = true;
+                window.turnRight = true;
                 if (window.isFirstPerson) {
                     // Use quaternion rotation around world up axis (y-axis)
                     rotationAxis.copy(worldUp);
@@ -898,25 +909,25 @@ function onKeyUp(event) {
         switch (event.code) {
             case 'ArrowUp':
             case 'KeyW':
-                moveForward = false;
+                window.moveForward = false;
                 break;
             case 'ArrowLeft':
             case 'KeyA':
-                moveLeft = false;
+                window.moveLeft = false;
                 break;
             case 'ArrowDown':
             case 'KeyS':
-                moveBackward = false;
+                window.moveBackward = false;
                 break;
             case 'ArrowRight':
             case 'KeyD':
-                moveRight = false;
+                window.moveRight = false;
                 break;
             case 'KeyQ':
-                turnLeft = false;
+                window.turnLeft = false;
                 break;
             case 'KeyE':
-                turnRight = false;
+                window.turnRight = false;
                 break;
         }
     } catch (error) {

@@ -15,42 +15,43 @@ function getRandomColor() {
 
 // Import CSS2D renderer for player names if not already defined
 let CSS2DObject;
+let CSS2DRenderer;
 try {
-    // Check for THREE.CSS2DObject
-    if (typeof THREE !== 'undefined') {
-        if (THREE.CSS2DObject) {
-            console.log("Using THREE.CSS2DObject directly");
-            CSS2DObject = THREE.CSS2DObject;
-        } 
-        // Check if it's in CSS2DRenderer
-        else if (THREE.CSS2DRenderer) {
-            console.log("Using THREE.CSS2DRenderer.CSS2DObject");
-            CSS2DObject = THREE.CSS2DRenderer.CSS2DObject;
-        }
-        // Try loading from CSS2D namespace if available
-        else if (THREE.CSS2D && THREE.CSS2D.CSS2DObject) {
-            console.log("Using THREE.CSS2D.CSS2DObject");
-            CSS2DObject = THREE.CSS2D.CSS2DObject;
-        }
-        // Last resort - look for it in the window object
-        else if (window.CSS2DObject) {
-            console.log("Using window.CSS2DObject");
-            CSS2DObject = window.CSS2DObject;
-        }
-        else {
-            throw new Error("CSS2DObject not found in THREE");
-        }
-    } else {
-        throw new Error("THREE is not defined");
+    // First check if THREE.CSS2D is available (Three.js r137+)
+    if (THREE.CSS2D) {
+        console.log("Using THREE.CSS2D namespace");
+        CSS2DObject = THREE.CSS2D.CSS2DObject;
+        CSS2DRenderer = THREE.CSS2D.CSS2DRenderer;
+    } 
+    // For older Three.js versions
+    else if (THREE.CSS2DObject && THREE.CSS2DRenderer) {
+        console.log("Using THREE.CSS2DObject directly");
+        CSS2DObject = THREE.CSS2DObject;
+        CSS2DRenderer = THREE.CSS2DRenderer;
+    } 
+    else {
+        throw new Error("CSS2D modules not found in THREE");
     }
 } catch (error) {
     console.warn("CSS2DObject not available, player name labels will not be shown:", error.message);
-    // Simple fallback that does nothing
+    
+    // Create dummy versions that do nothing to prevent errors
     CSS2DObject = class DummyCSS2DObject {
         constructor(element) {
             this.element = element;
-            this.position = { set: () => {} };
+            this.position = new THREE.Vector3();
+            this.rotation = new THREE.Euler();
+            this.scale = new THREE.Vector3(1, 1, 1);
+            this.visible = true;
         }
+    };
+    
+    CSS2DRenderer = class DummyCSS2DRenderer {
+        constructor() {
+            this.domElement = document.createElement('div');
+        }
+        setSize() {}
+        render() {}
     };
 }
 
@@ -285,6 +286,7 @@ function setupRoomListeners() {
                 numberblock = new window.Numberblock(player.value, player.color, player.name);
                 numberblock.mesh.position.set(player.x, player.y, player.z);
                 numberblock.mesh.rotation.y = player.rotationY;
+
                 window.scene.add(numberblock.mesh);
                 window.otherPlayers[sessionId] = numberblock;
 
@@ -370,11 +372,15 @@ function setupRoomListeners() {
         // Explicitly handle players joining AFTER local client is connected
         room.state.players.onAdd = (player, sessionId) => {
             if (sessionId === room.sessionId) {
-                // Explicitly assign local player's color from server data
-                window.playerNumberblock.color = player.color;
-                window.playerNumberblock.updateColor(player.color);
-                console.log(`Local player color explicitly set to ${player.color}`);
-                return; // skip local player
+                // This is the local player, just update its color but don't create a new visual
+                if (window.playerNumberblock) {
+                    window.playerNumberblock.color = player.color;
+                    window.playerNumberblock.updateColor(player.color);
+                    
+                    // Track with entityFactory as well
+                    window.entityFactory.trackEntity(window.playerEntity, 'players', sessionId);
+                }
+                return;
             }
 
             console.log(`Player ${sessionId} joined later; creating visual explicitly.`);
@@ -548,6 +554,329 @@ function setupSpecificSchemaListeners(schemaName, schema) {
             updatePlayerListUI();
         }
     };
+}
+
+// Setup schema-specific listeners for a generic schema
+function setupGenericSchemaListeners(room, schemaName) {
+    // Check for schema access
+    if (!room.state || !room.state[schemaName]) {
+        console.error(`Schema ${schemaName} not found in room state`);
+        return;
+    }
+    
+    console.log(`Setting up schema listeners for ${schemaName}`);
+    
+    // Setup onAdd listener for this schema
+    room.state[schemaName].onAdd = (entity, id) => {
+        try {
+            console.log(`Adding ${schemaName} with ID: ${id}`, entity);
+            
+            if (schemaName === 'players' && id === room.sessionId) {
+                // This is the local player, just update its color but don't create a new visual
+                if (window.playerNumberblock) {
+                    window.playerNumberblock.color = entity.color;
+                    window.playerNumberblock.updateColor(entity.color);
+                    
+                    // Track with entityFactory as well
+                    window.entityFactory.trackEntity(window.playerEntity, schemaName, id);
+                }
+                return;
+            }
+            
+            // Create entity through the factory
+            const entityOptions = {
+                id: id,
+                isLocalPlayer: (schemaName === 'players' && id === room.sessionId)
+            };
+            
+            // Create entity
+            const visualEntity = window.entityFactory.createEntity(entity, schemaName, entityOptions);
+            
+            // Add to scene if it has a mesh
+            if (visualEntity && visualEntity.mesh) {
+                window.scene.add(visualEntity.mesh);
+            }
+            
+            // Setup onChange handler
+            entity.onChange = (changes) => {
+                changes.forEach(change => {
+                    if (['x', 'y', 'z', 'rotationY'].includes(change.field)) {
+                        visualEntity.updatePosition({
+                            x: entity.x,
+                            y: entity.y,
+                            z: entity.z,
+                            rotationY: entity.rotationY
+                        });
+                    }
+                    if (change.field === "value") {
+                        visualEntity.updateValue(entity.value);
+                    }
+                    if (change.field === "color") {
+                        visualEntity.updateColor(entity.color);
+                    }
+                });
+            };
+            
+            // If this is a player, update the player list UI
+            if (schemaName === 'players') {
+                updatePlayerListUI();
+            }
+        } catch (error) {
+            console.error(`Error in ${schemaName}.onAdd:`, error);
+        }
+    };
+    
+    // Setup onRemove listener for this schema
+    room.state[schemaName].onRemove = (entity, id) => {
+        try {
+            console.log(`Removing ${schemaName} with ID: ${id}`);
+            
+            // Remove entity through factory
+            window.entityFactory.removeEntity(schemaName, id);
+            
+            // If this is a player, update the player list UI
+            if (schemaName === 'players') {
+                updatePlayerListUI();
+            }
+        } catch (error) {
+            console.error(`Error in ${schemaName}.onRemove:`, error);
+        }
+    };
+}
+
+// Setup listeners for all schemas and handle the room
+function setupRoomListeners(room) {
+    console.log("Setting up room listeners");
+    
+    if (!room) {
+        console.error("Room not available!");
+        return;
+    }
+    
+    // Set up message handlers
+    setupMessageHandlers();
+    
+    // Debug room state
+    console.log("Room state:", room.state);
+    console.log("Room schemas:", Object.keys(room.state || {}));
+    
+    // Ensure entity factory is initialized
+    if (!window.entityFactory) {
+        window.entityFactory = new EntityFactory();
+    }
+    
+    // Explicit full state handler to ensure all visuals are properly synced
+    room.onStateChange((state) => {
+        console.log('State snapshot received explicitly:', state);
+
+        // Process all players in the state
+        if (state.players) {
+            state.players.forEach((player, sessionId) => {
+                if (sessionId === room.sessionId) {
+                    // Local player - just update color
+                    if (window.playerNumberblock) {
+                        window.playerNumberblock.updateColor(player.color);
+                    }
+                    return;
+                }
+                
+                // Check if we already have this player entity
+                let playerEntity = window.entityFactory.getEntity('players', sessionId);
+                
+                if (!playerEntity) {
+                    // Create new player entity if not found
+                    console.log(`Creating entity for previously missed player ${sessionId}`);
+                    const entityOptions = { id: sessionId, type: 'numberblock' };
+                    playerEntity = window.entityFactory.createEntity(player, 'players', entityOptions);
+                    
+                    // Add mesh to scene
+                    if (playerEntity && playerEntity.mesh) {
+                        window.scene.add(playerEntity.mesh);
+                    }
+                    
+                    // Setup onChange for future incremental updates
+                    player.onChange = (changes) => {
+                        changes.forEach(change => {
+                            if (['x', 'y', 'z', 'rotationY'].includes(change.field)) {
+                                playerEntity.updatePosition({
+                                    x: player.x,
+                                    y: player.y,
+                                    z: player.z,
+                                    rotationY: player.rotationY
+                                });
+                            }
+                            if (change.field === "value") {
+                                playerEntity.updateValue(player.value);
+                            }
+                            if (change.field === "color") {
+                                playerEntity.updateColor(player.color);
+                            }
+                        });
+                    };
+                } else {
+                    // Update existing player entity
+                    playerEntity.updatePosition({
+                        x: player.x,
+                        y: player.y,
+                        z: player.z,
+                        rotationY: player.rotationY
+                    });
+                    playerEntity.updateValue(player.value);
+                    playerEntity.updateColor(player.color);
+                }
+            });
+            
+            // Check for players to remove
+            const allPlayerEntities = window.entityFactory.getAllEntities('players');
+            Object.keys(allPlayerEntities).forEach(sessionId => {
+                if (sessionId !== room.sessionId && !state.players.has(sessionId)) {
+                    console.log(`Explicitly removing player ${sessionId}`);
+                    window.entityFactory.removeEntity('players', sessionId);
+                }
+            });
+        }
+        
+        // Process all operators in the state
+        if (state.operators) {
+            state.operators.forEach((operator, operatorId) => {
+                // Check if we already have this operator entity
+                let operatorEntity = window.entityFactory.getEntity('operators', operatorId);
+                
+                if (!operatorEntity) {
+                    // Create new operator entity if not found
+                    console.log(`Creating entity for previously missed operator ${operatorId}`);
+                    const entityOptions = { 
+                        id: operatorId, 
+                        type: 'operator',
+                        // Map 'plus' or 'minus' to value
+                        value: operator.type 
+                    };
+                    operatorEntity = window.entityFactory.createEntity(operator, 'operators', entityOptions);
+                    
+                    // Add mesh to scene
+                    if (operatorEntity && operatorEntity.mesh) {
+                        window.scene.add(operatorEntity.mesh);
+                    }
+                    
+                    // Setup onChange for future incremental updates
+                    operator.onChange = () => {
+                        operatorEntity.updatePosition({
+                            x: operator.x,
+                            y: operator.y,
+                            z: operator.z
+                        });
+                    };
+                } else {
+                    // Update existing operator entity
+                    operatorEntity.updatePosition({
+                        x: operator.x,
+                        y: operator.y,
+                        z: operator.z
+                    });
+                }
+            });
+            
+            // Check for operators to remove
+            const allOperatorEntities = window.entityFactory.getAllEntities('operators');
+            Object.keys(allOperatorEntities).forEach(operatorId => {
+                if (!state.operators.has(operatorId)) {
+                    console.log(`Explicitly removing operator ${operatorId}`);
+                    window.entityFactory.removeEntity('operators', operatorId);
+                }
+            });
+        }
+        
+        // Similarly handle static numberblocks
+        if (state.staticNumberblocks) {
+            state.staticNumberblocks.forEach((staticBlock, blockId) => {
+                // Check if we already have this static numberblock entity
+                let staticBlockEntity = window.entityFactory.getEntity('staticNumberblocks', blockId);
+                
+                if (!staticBlockEntity) {
+                    // Create new static numberblock entity if not found
+                    console.log(`Creating entity for previously missed static numberblock ${blockId}`);
+                    const entityOptions = { 
+                        id: blockId, 
+                        type: 'numberblock',
+                        isStatic: true 
+                    };
+                    staticBlockEntity = window.entityFactory.createEntity(staticBlock, 'staticNumberblocks', entityOptions);
+                    
+                    // Add mesh to scene
+                    if (staticBlockEntity && staticBlockEntity.mesh) {
+                        window.scene.add(staticBlockEntity.mesh);
+                    }
+                    
+                    // Setup onChange for future incremental updates
+                    staticBlock.onChange = (changes) => {
+                        changes.forEach(change => {
+                            if (['x', 'y', 'z', 'rotationY'].includes(change.field)) {
+                                staticBlockEntity.updatePosition({
+                                    x: staticBlock.x,
+                                    y: staticBlock.y,
+                                    z: staticBlock.z,
+                                    rotationY: staticBlock.rotationY
+                                });
+                            }
+                            if (change.field === "value") {
+                                staticBlockEntity.updateValue(staticBlock.value);
+                            }
+                            if (change.field === "color") {
+                                staticBlockEntity.updateColor(staticBlock.color);
+                            }
+                        });
+                    };
+                } else {
+                    // Update existing static numberblock entity
+                    staticBlockEntity.updatePosition({
+                        x: staticBlock.x,
+                        y: staticBlock.y,
+                        z: staticBlock.z,
+                        rotationY: staticBlock.rotationY
+                    });
+                    staticBlockEntity.updateValue(staticBlock.value);
+                    staticBlockEntity.updateColor(staticBlock.color);
+                }
+            });
+            
+            // Check for static numberblocks to remove
+            const allStaticBlockEntities = window.entityFactory.getAllEntities('staticNumberblocks');
+            Object.keys(allStaticBlockEntities).forEach(blockId => {
+                if (!state.staticNumberblocks.has(blockId)) {
+                    console.log(`Explicitly removing static numberblock ${blockId}`);
+                    window.entityFactory.removeEntity('staticNumberblocks', blockId);
+                }
+            });
+        }
+
+        // Update the player list in the UI whenever state changes
+        updatePlayerListUI();
+    });
+
+    // Setup listeners for each schema type
+    const schemaTypes = ['players', 'operators', 'staticNumberblocks'];
+    schemaTypes.forEach(schemaName => {
+        if (room.state && room.state[schemaName]) {
+            console.log(`Setting up ${schemaName} schema listeners`);
+            setupGenericSchemaListeners(room, schemaName);
+        }
+    });
+    
+    // Handle local player
+    if (window.playerNumberblock) {
+        // Create a Player entity for the local player
+        window.playerEntity = new Player({
+            id: room.sessionId,
+            name: 'You',
+            value: window.playerNumberblock.value,
+            color: window.playerNumberblock.color,
+            type: 'numberblock',
+            isLocalPlayer: true
+        });
+        
+        // Store the reference in entityFactory
+        window.entityFactory.trackEntity(window.playerEntity, 'players', room.sessionId);
+    }
 }
 
 // Update player list in UI

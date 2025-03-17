@@ -17,6 +17,7 @@ class Operator {
     // Create the 3D mesh for the operator
     createOperatorMesh() {
         const operatorGroup = new THREE.Group();
+        operatorGroup.userData.operator = this; // Store reference for easy access
         
         // Create a semi-transparent white sphere as the base
         const sphereGeometry = new THREE.SphereGeometry(0.5, 16, 16);

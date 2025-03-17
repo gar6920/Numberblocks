@@ -1,26 +1,30 @@
 // Numberblocks game - First-person controls implementation
 
 // Global variables
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-let turnLeft = false;    // New variable for Q key turning
-let turnRight = false;   // New variable for E key turning
-let canJump = false;
-let pitch = 0;  // Track vertical rotation separately
+window.moveForward = false;
+window.moveBackward = false;
+window.moveLeft = false;
+window.moveRight = false;
+window.turnLeft = false;    // New variable for Q key turning
+window.turnRight = false;   // New variable for E key turning
+window.canJump = false;
+window.pitch = 0;  // Track vertical rotation separately
 // isFirstPerson is a global variable attached to the window object in main.js
 
-let prevTime = performance.now();
-let velocity = new THREE.Vector3();
-let direction = new THREE.Vector3();
+window.prevTime = performance.now();
+window.velocity = new THREE.Vector3();
+window.direction = new THREE.Vector3();
 
 // Player settings
-const playerHeight = 2.0;             // Height of camera from ground
-const moveSpeed = 5.0;                // Units per second
-const turnSpeed = 2.0;                // Rotation speed for Q/E turning
-const jumpHeight = 5.0;               // Jump impulse force
-const gravity = 9.8;                  // Gravity force 
+window.playerHeight = 2.0;             // Height of camera from ground
+window.moveSpeed = 50.0;                // Units per second
+window.turnSpeed = 2.0;                // Rotation speed for Q/E turning
+window.jumpHeight = 2.0;               // Jump height in units
+window.jumpPressed = false;            // Track jump button press
+
+// Add variable for third person camera
+window.thirdPersonCameraAngle = 0;  // Angle for the third person camera (in radians)
+window.thirdPersonCameraDistance = 5;  // Distance for the third person camera
 
 // Initialize controls for the camera
 window.initControls = function(camera, domElement) {
@@ -66,37 +70,37 @@ function onKeyDown(event) {
     switch (event.code) {
         case 'ArrowUp':
         case 'KeyW':
-            moveForward = true;
+            window.moveForward = true;
             break;
             
         case 'ArrowLeft':
         case 'KeyA':
-            moveLeft = true;
+            window.moveLeft = true;
             break;
             
         case 'ArrowDown':
         case 'KeyS':
-            moveBackward = true;
+            window.moveBackward = true;
             break;
             
         case 'ArrowRight':
         case 'KeyD':
-            moveRight = true;
+            window.moveRight = true;
             break;
             
         case 'KeyQ':
-            turnLeft = true;
+            window.turnLeft = true;
             break;
             
         case 'KeyE':
-            turnRight = true;
+            window.turnRight = true;
             break;
             
         case 'Space':
-            if (canJump) {
+            if (window.canJump) {
                 // Apply a physically accurate jump velocity
-                velocity.y = Math.sqrt(jumpHeight * 2 * gravity);
-                canJump = false;
+                window.velocity.y = Math.sqrt(window.jumpHeight * 2 * 9.8);
+                window.canJump = false;
             }
             break;
     }
@@ -107,30 +111,30 @@ function onKeyUp(event) {
     switch (event.code) {
         case 'ArrowUp':
         case 'KeyW':
-            moveForward = false;
+            window.moveForward = false;
             break;
             
         case 'ArrowLeft':
         case 'KeyA':
-            moveLeft = false;
+            window.moveLeft = false;
             break;
             
         case 'ArrowDown':
         case 'KeyS':
-            moveBackward = false;
+            window.moveBackward = false;
             break;
             
         case 'ArrowRight':
         case 'KeyD':
-            moveRight = false;
+            window.moveRight = false;
             break;
             
         case 'KeyQ':
-            turnLeft = false;
+            window.turnLeft = false;
             break;
             
         case 'KeyE':
-            turnRight = false;
+            window.turnRight = false;
             break;
     }
 }
@@ -139,15 +143,15 @@ function onKeyUp(event) {
 window.updateControls = function(controls, delta) {
     if (!controls.isLocked) return;
 
-    if (moveForward) controls.moveForward(moveSpeed * delta);
-    if (moveBackward) controls.moveForward(-moveSpeed * delta);
-    if (moveLeft) controls.moveRight(-moveSpeed * delta);
-    if (moveRight) controls.moveRight(moveSpeed * delta);
+    if (window.moveForward) controls.moveForward(window.moveSpeed * delta);
+    if (window.moveBackward) controls.moveForward(-window.moveSpeed * delta);
+    if (window.moveLeft) controls.moveRight(-window.moveSpeed * delta);
+    if (window.moveRight) controls.moveRight(window.moveSpeed * delta);
     
     // Proper on-axis rotation using the PointerLockControls object's quaternion
-    if (turnLeft || turnRight) {
+    if (window.turnLeft || window.turnRight) {
         // Create rotation quaternion for Q/E rotation
-        const rotationAngle = (turnLeft ? 1 : -1) * turnSpeed * delta;
+        const rotationAngle = (window.turnLeft ? 1 : -1) * window.turnSpeed * delta;
         const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(
             new THREE.Vector3(0, 1, 0), // Rotate around y-axis only
             rotationAngle
@@ -157,12 +161,12 @@ window.updateControls = function(controls, delta) {
         controls.getObject().quaternion.premultiply(rotationQuaternion);
     }
 
-    velocity.y -= gravity * delta;
-    controls.getObject().position.y += velocity.y * delta;
+    window.velocity.y -= 9.8 * delta;
+    controls.getObject().position.y += window.velocity.y * delta;
 
-    if (controls.getObject().position.y < playerHeight) {
-        velocity.y = 0;
-        controls.getObject().position.y = playerHeight;
-        canJump = true;
+    if (controls.getObject().position.y < window.playerHeight) {
+        window.velocity.y = 0;
+        controls.getObject().position.y = window.playerHeight;
+        window.canJump = true;
     }
 }
