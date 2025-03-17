@@ -8,7 +8,6 @@ window.moveRight = false;
 window.turnLeft = false;    // New variable for Q key turning
 window.turnRight = false;   // New variable for E key turning
 window.canJump = false;
-window.pitch = 0;  // Track vertical rotation separately
 // isFirstPerson is a global variable attached to the window object in main.js
 
 window.prevTime = performance.now();
@@ -143,27 +142,30 @@ function onKeyUp(event) {
 window.updateControls = function(controls, delta) {
     if (!controls.isLocked) return;
 
+    // Handle directional movement
     if (window.moveForward) controls.moveForward(window.moveSpeed * delta);
     if (window.moveBackward) controls.moveForward(-window.moveSpeed * delta);
     if (window.moveLeft) controls.moveRight(-window.moveSpeed * delta);
     if (window.moveRight) controls.moveRight(window.moveSpeed * delta);
     
-    // Proper on-axis rotation using the PointerLockControls object's quaternion
+    // Handle turning with Q/E keys
     if (window.turnLeft || window.turnRight) {
-        // Create rotation quaternion for Q/E rotation
+        // Create rotation quaternion for Q/E rotation around Y axis
         const rotationAngle = (window.turnLeft ? 1 : -1) * window.turnSpeed * delta;
         const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(
             new THREE.Vector3(0, 1, 0), // Rotate around y-axis only
             rotationAngle
         );
         
-        // Apply rotation to controls object's quaternion
-        controls.getObject().quaternion.premultiply(rotationQuaternion);
+        // Apply rotation to the camera's quaternion directly
+        controls.getObject().quaternion.multiply(rotationQuaternion);
     }
 
+    // Apply gravity
     window.velocity.y -= 9.8 * delta;
     controls.getObject().position.y += window.velocity.y * delta;
 
+    // Ground collision
     if (controls.getObject().position.y < window.playerHeight) {
         window.velocity.y = 0;
         controls.getObject().position.y = window.playerHeight;

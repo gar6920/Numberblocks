@@ -443,6 +443,9 @@ function setupPointerLockControls() {
         document.addEventListener('keydown', onKeyDown, false);
         document.addEventListener('keyup', onKeyUp, false);
         
+        // Ensure camera rotation is properly handled
+        camera.rotation.order = 'YXZ';
+        
         debug('PointerLock controls setup complete');
     } catch (error) {
         debug(`Error setting up PointerLock controls: ${error.message}`, true);

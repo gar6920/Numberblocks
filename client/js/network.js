@@ -108,6 +108,26 @@ async function initNetworking() {
         console.log(`Initializing networking with endpoint: ${endpoint}`);
         client = new Colyseus.Client(endpoint);
         
+        // Add a visibility change listener to handle tab activation
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && room) {
+                console.log('Tab became visible - forcing player list update');
+                // Force a full update of the player list when the tab becomes visible
+                updatePlayerListUI();
+                
+                // Also request a fresh state from the server
+                if (room.state && typeof room.state.refreshClient === 'function') {
+                    room.state.refreshClient();
+                } else {
+                    // If no explicit refresh method, just do a local refresh of all entities
+                    console.log('Refreshing all entities from current state');
+                    if (window.entityFactory) {
+                        window.entityFactory.refreshAllEntities(room.state);
+                    }
+                }
+            }
+        });
+        
         // Generate random player name and color
         const playerId = Math.random().toString(36).substring(2, 8).toUpperCase();
         console.log("Attempting to join room with ID:", playerId);
@@ -578,7 +598,7 @@ function setupGenericSchemaListeners(room, schemaName) {
                     window.playerNumberblock.updateColor(entity.color);
                     
                     // Track with entityFactory as well
-                    window.entityFactory.trackEntity(window.playerEntity, schemaName, id);
+                    window.entityFactory.trackEntity(window.playerEntity, 'players', id);
                 }
                 return;
             }
@@ -694,7 +714,7 @@ function setupRoomListeners(room) {
                         window.scene.add(playerEntity.mesh);
                     }
                     
-                    // Setup onChange for future incremental updates
+                    // Setup onChange handler
                     player.onChange = (changes) => {
                         changes.forEach(change => {
                             if (['x', 'y', 'z', 'rotationY'].includes(change.field)) {
@@ -758,7 +778,7 @@ function setupRoomListeners(room) {
                         window.scene.add(operatorEntity.mesh);
                     }
                     
-                    // Setup onChange for future incremental updates
+                    // Setup onChange handler
                     operator.onChange = () => {
                         operatorEntity.updatePosition({
                             x: operator.x,
@@ -807,7 +827,7 @@ function setupRoomListeners(room) {
                         window.scene.add(staticBlockEntity.mesh);
                     }
                     
-                    // Setup onChange for future incremental updates
+                    // Setup onChange handler
                     staticBlock.onChange = (changes) => {
                         changes.forEach(change => {
                             if (['x', 'y', 'z', 'rotationY'].includes(change.field)) {
