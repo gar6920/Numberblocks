@@ -60,9 +60,21 @@ The client is responsible for rendering the game, handling user inputs, and comm
   - Handles visual representation and animation
   - Provides collision detection support
 
+- **controls.js:**
+  - Handles player movement and camera controls
+  - Supports both first-person and third-person view modes
+  - Manages input handling for keyboard and mouse
+  - Implements quaternion-based rotation for smooth camera movement
+
 - **collision.js:**
   - Implements collision detection between game entities
   - Supports player-operator and player-numberblock interactions
+
+- **Entity.js, Player.js, NPC.js, EntityFactory.js:**
+  - Implements entity component system architecture
+  - Provides base classes for all game entities
+  - Manages entity tracking, creation, and removal
+  - Handles entity refreshing when browser tabs regain focus
 
 ### 3. Networking Architecture
 **Technology:** Colyseus for WebSocket-based real-time multiplayer.
@@ -79,12 +91,15 @@ The client is responsible for rendering the game, handling user inputs, and comm
 - Message-based communication for game events
 - Schema-based state synchronization with type annotations
 - Player list UI showing all connected players
+- Visibility change detection for inactive browser tabs
+- Comprehensive entity refresh system for reactivated tabs
 
 **Schema Implementation:**
 - Proper MapSchema collections for players, operators, and static objects
 - Type annotations for all schema properties
 - Structured synchronization patterns for consistent state updates
 - Multiple client-side approaches to handle schema data access
+- Robust fallback methods for handling different Colyseus schema implementations
 
 ## File Structure
 ```
@@ -98,7 +113,12 @@ The client is responsible for rendering the game, handling user inputs, and comm
 │       ├── network.js       # Networking and state synchronization
 │       ├── numberblock.js   # Numberblock entity implementation
 │       ├── operator.js      # Mathematical operator implementation
-│       └── collision.js     # Collision detection system
+│       ├── controls.js      # Player movement and camera controls
+│       ├── collision.js     # Collision detection system
+│       ├── Entity.js        # Base entity class
+│       ├── Player.js        # Player entity implementation
+│       ├── NPC.js           # Non-player character implementation
+│       └── EntityFactory.js # Entity management system
 ├── server.js                # Server implementation with Colyseus
 ├── package.json             # Project dependencies
 └── memory bank/             # Project documentation
@@ -132,6 +152,8 @@ The client is responsible for rendering the game, handling user inputs, and comm
 - **Mathematical Interactions:** Addition and subtraction operators affect Numberblock values
 - **Multiplayer Support:** Multiple players can join the same game world
 - **Persistence:** Session reconnection support
+- **Browser Tab Synchronization:** Automatically updates game state when inactive tabs become active
+- **Entity Component System:** Flexible architecture for game entity management
 
 ## Future Enhancements
 - Advanced operator types (multiplication, division)
@@ -1181,6 +1203,25 @@ FILE: memory bank\progress.md
   - Added real-time updating based on schema changes
   - Fixed visual formatting and styling of player entries
 
+## March 17, 2025
+- Fixed entity management after refactoring:
+  - Improved camera controls for first-person mode:
+    - Corrected camera rotation implementation to allow full 360-degree rotation
+    - Fixed the rotation limitation that previously restricted the view to about 90 degrees
+    - Updated quaternion handling to maintain proper camera orientation
+    - Explicitly set camera rotation order to 'YXZ' to prevent gimbal lock
+  - Enhanced player list update mechanism:
+    - Implemented visibility change event listener to detect when inactive tabs become active
+    - Created comprehensive entity refresh system to update all entities from current room state
+    - Added robust methods to handle different Colyseus schema implementations for maximum compatibility
+    - Enhanced error handling for network state synchronization
+    - Implemented fallback methods for obtaining player data when primary methods fail
+  - Improved entity architecture:
+    - Enhanced EntityFactory class with new refreshAllEntities method for comprehensive state updates
+    - Added helper methods for refreshing specific entity types (_refreshPlayerEntity, _refreshOperatorEntity)
+    - Optimized entity tracking to ensure consistent visual representation
+    - Fixed tracking of player entities between camera view changes
+
 ## Next Steps
 - Add customizable player names and colors
 - Implement additional operator types (multiplication, division)
@@ -1806,9 +1847,19 @@ FILE: client\index.html
     <script src="https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js"></script>
     
     <!-- Numberblocks game scripts -->
+    <script src="js/collision.js"></script>
     <script src="js/numberblock.js"></script>
-    <script src="js/main-fixed.js"></script>
+    <script src="js/operator.js"></script>
+    
+    <!-- Entity System -->
+    <script src="js/Entity.js"></script>
+    <script src="js/Player.js"></script>
+    <script src="js/NPC.js"></script>
+    <script src="js/EntityFactory.js"></script>
+    
     <script src="js/network.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/main-fixed.js"></script>
 </body>
 </html>
  
@@ -2138,26 +2189,29 @@ FILE: client\js\controls.js
 // Numberblocks game - First-person controls implementation
 
 // Global variables
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-let turnLeft = false;    // New variable for Q key turning
-let turnRight = false;   // New variable for E key turning
-let canJump = false;
-let pitch = 0;  // Track vertical rotation separately
+window.moveForward = false;
+window.moveBackward = false;
+window.moveLeft = false;
+window.moveRight = false;
+window.turnLeft = false;    // New variable for Q key turning
+window.turnRight = false;   // New variable for E key turning
+window.canJump = false;
 // isFirstPerson is a global variable attached to the window object in main.js
 
-let prevTime = performance.now();
-let velocity = new THREE.Vector3();
-let direction = new THREE.Vector3();
+window.prevTime = performance.now();
+window.velocity = new THREE.Vector3();
+window.direction = new THREE.Vector3();
 
 // Player settings
-const playerHeight = 2.0;             // Height of camera from ground
-const moveSpeed = 5.0;                // Units per second
-const turnSpeed = 2.0;                // Rotation speed for Q/E turning
-const jumpHeight = 5.0;               // Jump impulse force
-const gravity = 9.8;                  // Gravity force 
+window.playerHeight = 2.0;             // Height of camera from ground
+window.moveSpeed = 50.0;                // Units per second
+window.turnSpeed = 2.0;                // Rotation speed for Q/E turning
+window.jumpHeight = 2.0;               // Jump height in units
+window.jumpPressed = false;            // Track jump button press
+
+// Add variable for third person camera
+window.thirdPersonCameraAngle = 0;  // Angle for the third person camera (in radians)
+window.thirdPersonCameraDistance = 5;  // Distance for the third person camera
 
 // Initialize controls for the camera
 window.initControls = function(camera, domElement) {
@@ -2203,37 +2257,37 @@ function onKeyDown(event) {
     switch (event.code) {
         case 'ArrowUp':
         case 'KeyW':
-            moveForward = true;
+            window.moveForward = true;
             break;
             
         case 'ArrowLeft':
         case 'KeyA':
-            moveLeft = true;
+            window.moveLeft = true;
             break;
             
         case 'ArrowDown':
         case 'KeyS':
-            moveBackward = true;
+            window.moveBackward = true;
             break;
             
         case 'ArrowRight':
         case 'KeyD':
-            moveRight = true;
+            window.moveRight = true;
             break;
             
         case 'KeyQ':
-            turnLeft = true;
+            window.turnLeft = true;
             break;
             
         case 'KeyE':
-            turnRight = true;
+            window.turnRight = true;
             break;
             
         case 'Space':
-            if (canJump) {
+            if (window.canJump) {
                 // Apply a physically accurate jump velocity
-                velocity.y = Math.sqrt(jumpHeight * 2 * gravity);
-                canJump = false;
+                window.velocity.y = Math.sqrt(window.jumpHeight * 2 * 9.8);
+                window.canJump = false;
             }
             break;
     }
@@ -2244,30 +2298,30 @@ function onKeyUp(event) {
     switch (event.code) {
         case 'ArrowUp':
         case 'KeyW':
-            moveForward = false;
+            window.moveForward = false;
             break;
             
         case 'ArrowLeft':
         case 'KeyA':
-            moveLeft = false;
+            window.moveLeft = false;
             break;
             
         case 'ArrowDown':
         case 'KeyS':
-            moveBackward = false;
+            window.moveBackward = false;
             break;
             
         case 'ArrowRight':
         case 'KeyD':
-            moveRight = false;
+            window.moveRight = false;
             break;
             
         case 'KeyQ':
-            turnLeft = false;
+            window.turnLeft = false;
             break;
             
         case 'KeyE':
-            turnRight = false;
+            window.turnRight = false;
             break;
     }
 }
@@ -2276,32 +2330,511 @@ function onKeyUp(event) {
 window.updateControls = function(controls, delta) {
     if (!controls.isLocked) return;
 
-    if (moveForward) controls.moveForward(moveSpeed * delta);
-    if (moveBackward) controls.moveForward(-moveSpeed * delta);
-    if (moveLeft) controls.moveRight(-moveSpeed * delta);
-    if (moveRight) controls.moveRight(moveSpeed * delta);
+    // Handle directional movement
+    if (window.moveForward) controls.moveForward(window.moveSpeed * delta);
+    if (window.moveBackward) controls.moveForward(-window.moveSpeed * delta);
+    if (window.moveLeft) controls.moveRight(-window.moveSpeed * delta);
+    if (window.moveRight) controls.moveRight(window.moveSpeed * delta);
     
-    // Proper on-axis rotation using the PointerLockControls object's quaternion
-    if (turnLeft || turnRight) {
-        // Create rotation quaternion for Q/E rotation
-        const rotationAngle = (turnLeft ? 1 : -1) * turnSpeed * delta;
+    // Handle turning with Q/E keys
+    if (window.turnLeft || window.turnRight) {
+        // Create rotation quaternion for Q/E rotation around Y axis
+        const rotationAngle = (window.turnLeft ? 1 : -1) * window.turnSpeed * delta;
         const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(
             new THREE.Vector3(0, 1, 0), // Rotate around y-axis only
             rotationAngle
         );
         
-        // Apply rotation to controls object's quaternion
-        controls.getObject().quaternion.premultiply(rotationQuaternion);
+        // Apply rotation to the camera's quaternion directly
+        controls.getObject().quaternion.multiply(rotationQuaternion);
     }
 
-    velocity.y -= gravity * delta;
-    controls.getObject().position.y += velocity.y * delta;
+    // Apply gravity
+    window.velocity.y -= 9.8 * delta;
+    controls.getObject().position.y += window.velocity.y * delta;
 
-    if (controls.getObject().position.y < playerHeight) {
-        velocity.y = 0;
-        controls.getObject().position.y = playerHeight;
-        canJump = true;
+    // Ground collision
+    if (controls.getObject().position.y < window.playerHeight) {
+        window.velocity.y = 0;
+        controls.getObject().position.y = window.playerHeight;
+        window.canJump = true;
     }
+}
+ 
+ 
+===================================================== 
+FILE: client\js\Entity.js 
+===================================================== 
+ 
+// Numberblocks game - Base Entity class for all game entities
+
+class Entity {
+    constructor({id, name, value, color, x, y, z, rotationY, type}) {
+        this.id = id;
+        this.name = name || id;
+        this.value = value || 1;
+        this.color = color; 
+        this.type = type; // Type of visual representation ("numberblock", "letterblock", "operator")
+        this.x = x || 0;
+        this.y = y || 1;
+        this.z = z || 0;
+        this.rotationY = rotationY || 0;
+        
+        // Create the mesh - this should be implemented by subclasses
+        this.mesh = this.createMesh();
+        if (this.mesh) {
+            this.mesh.position.set(this.x, this.y, this.z);
+            this.mesh.rotation.y = this.rotationY;
+            
+            // Store a reference to this entity in the mesh's userData
+            this.mesh.userData.entity = this;
+        }
+    }
+
+    // Create the visual representation (mesh) for this entity
+    createMesh() {
+        let visual = null;
+        
+        switch (this.type) {
+            case 'numberblock':
+                // Create a new numberblock visual
+                visual = new window.Numberblock(this.value, this.color, this.name);
+                return visual.mesh;
+                
+            case 'operator':
+                // Create a new operator visual
+                if (typeof window.OperatorsVisual === 'function') {
+                    visual = new window.OperatorsVisual(this.value, window.scene);
+                    return visual.mesh;
+                } else if (typeof window.Operator === 'function') {
+                    visual = new window.Operator(this.value, window.scene);
+                    return visual.mesh;
+                } else {
+                    console.warn('Operator class not found');
+                    return null;
+                }
+                
+            // Add other entity types here
+            default:
+                console.warn(`Unknown entity type: ${this.type}`);
+                return null;
+        }
+    }
+
+    // Update the entity's position and rotation
+    updatePosition({ x, y, z, rotationY }) {
+        if (this.mesh) {
+            if (x !== undefined) {
+                this.x = x;
+                this.mesh.position.x = x;
+            }
+            
+            if (y !== undefined) {
+                this.y = y;
+                this.mesh.position.y = y;
+            }
+            
+            if (z !== undefined) {
+                this.z = z;
+                this.mesh.position.z = z;
+            }
+            
+            if (rotationY !== undefined) {
+                this.rotationY = rotationY;
+                this.mesh.rotation.y = rotationY;
+            }
+        }
+    }
+
+    // Update the entity's value and rebuild the mesh if needed
+    updateValue(newValue) {
+        if (this.value === newValue) return;
+        
+        this.value = newValue;
+        
+        // Remove the old mesh and create a new one
+        if (this.mesh && this.mesh.parent) {
+            this.mesh.parent.remove(this.mesh);
+        }
+        
+        this.mesh = this.createMesh();
+        
+        if (this.mesh) {
+            this.mesh.position.set(this.x, this.y, this.z);
+            this.mesh.rotation.y = this.rotationY;
+            this.mesh.userData.entity = this;
+            
+            // Add to scene if possible
+            if (window.scene) {
+                window.scene.add(this.mesh);
+            }
+        }
+    }
+
+    // Update the entity's color
+    updateColor(newColor) {
+        this.color = newColor;
+        
+        // If the entity is a numberblock, update its color
+        if (this.mesh && this.mesh.userData.numberblock) {
+            this.mesh.userData.numberblock.updateColor(newColor);
+        }
+    }
+
+    // Remove entity from scene when destroyed
+    destroy() {
+        if (this.mesh && this.mesh.parent) {
+            this.mesh.parent.remove(this.mesh);
+        }
+    }
+}
+
+// Export to window object for access in other scripts
+if (typeof window !== 'undefined') {
+    window.Entity = Entity;
+}
+ 
+ 
+===================================================== 
+FILE: client\js\EntityFactory.js 
+===================================================== 
+ 
+// Numberblocks game - Entity Factory for creating game entities
+
+class EntityFactory {
+    constructor() {
+        // Registry of visual types
+        this.visualRegistry = {
+            'players': {
+                'numberblock': window.Numberblock,
+                // Future types: 'letterblock', etc.
+            },
+            'npcs': {
+                'numberblock': window.Numberblock,
+                'operator': window.OperatorsVisual,
+                // Future types: 'letterblock', etc.
+            }
+        };
+        
+        // Global tracking objects for entity instances
+        this.entities = {
+            players: {},
+            npcs: {},
+            staticNumberblocks: {}
+        };
+    }
+    
+    // Create an entity from schema data
+    createEntity(entityData, entityCategory, options = {}) {
+        // Normalize data from schema to entity constructor format
+        const params = {
+            id: entityData.id || options.id,
+            name: entityData.name,
+            value: entityData.value,
+            color: entityData.color,
+            x: entityData.x,
+            y: entityData.y,
+            z: entityData.z,
+            rotationY: entityData.rotationY,
+            type: options.type || 'numberblock', // Default visual type
+            ...options // Any additional options
+        };
+        
+        let entity;
+        
+        // Create the appropriate entity type
+        switch (entityCategory) {
+            case 'players':
+                entity = new window.Player(params);
+                break;
+                
+            case 'operators':
+                // Handle operators as NPCs with operator type
+                params.type = 'operator';
+                entity = new window.NPC(params);
+                break;
+                
+            case 'staticNumberblocks':
+                // Static numberblocks are NPCs with isStatic=true
+                params.isStatic = true;
+                entity = new window.NPC(params);
+                break;
+                
+            default:
+                // Default to NPC for unknown types
+                entity = new window.NPC(params);
+                break;
+        }
+        
+        // Store in tracking object
+        this.trackEntity(entity, entityCategory, entityData.id || options.id);
+        
+        return entity;
+    }
+    
+    // Track an entity in the appropriate collection
+    trackEntity(entity, category, id) {
+        // Determine which collection to use based on category
+        let collection;
+        
+        if (category === 'players') {
+            collection = this.entities.players;
+        } else if (category === 'operators') {
+            collection = this.entities.npcs;
+        } else if (category === 'staticNumberblocks') {
+            collection = this.entities.staticNumberblocks;
+        } else {
+            console.warn(`Unknown entity category: ${category}`);
+            return;
+        }
+        
+        // Store the entity
+        collection[id] = entity;
+    }
+    
+    // Remove an entity from tracking
+    removeEntity(category, id) {
+        // Determine which collection to use
+        let collection;
+        
+        if (category === 'players') {
+            collection = this.entities.players;
+        } else if (category === 'operators') {
+            collection = this.entities.npcs;
+        } else if (category === 'staticNumberblocks') {
+            collection = this.entities.staticNumberblocks;
+        } else {
+            console.warn(`Unknown entity category: ${category}`);
+            return;
+        }
+        
+        // Get the entity
+        const entity = collection[id];
+        
+        // If entity exists, destroy it
+        if (entity) {
+            entity.destroy();
+            delete collection[id];
+        }
+    }
+    
+    // Get an entity by category and ID
+    getEntity(category, id) {
+        // Determine which collection to use
+        let collection;
+        
+        if (category === 'players') {
+            collection = this.entities.players;
+        } else if (category === 'operators') {
+            collection = this.entities.npcs;
+        } else if (category === 'staticNumberblocks') {
+            collection = this.entities.staticNumberblocks;
+        } else {
+            console.warn(`Unknown entity category: ${category}`);
+            return null;
+        }
+        
+        return collection[id] || null;
+    }
+    
+    // Get all entities of a category
+    getAllEntities(category) {
+        if (category === 'players') {
+            return this.entities.players;
+        } else if (category === 'operators') {
+            return this.entities.npcs;
+        } else if (category === 'staticNumberblocks') {
+            return this.entities.staticNumberblocks;
+        } else {
+            console.warn(`Unknown entity category: ${category}`);
+            return {};
+        }
+    }
+    
+    // Remove an entity from tracking
+    removeEntity(category, id) {
+        // Determine which collection to use
+        let collection;
+        
+        if (category === 'players') {
+            collection = this.entities.players;
+        } else if (category === 'operators') {
+            collection = this.entities.npcs;
+        } else if (category === 'staticNumberblocks') {
+            collection = this.entities.staticNumberblocks;
+        } else {
+            console.warn(`Unknown entity category: ${category}`);
+            return;
+        }
+        
+        // If the entity exists in the collection
+        if (collection[id]) {
+            // Clean up if it has a mesh
+            if (collection[id].mesh && window.scene) {
+                window.scene.remove(collection[id].mesh);
+            }
+            
+            // Remove from tracking
+            delete collection[id];
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // Get all entities of a specific category
+    getAllEntities(category) {
+        if (category === 'players') {
+            return this.entities.players;
+        } else if (category === 'operators') {
+            return this.entities.npcs;
+        } else if (category === 'staticNumberblocks') {
+            return this.entities.staticNumberblocks;
+        }
+        
+        return {};
+    }
+    
+    // Get a specific entity
+    getEntity(category, id) {
+        const entities = this.getAllEntities(category);
+        return entities[id];
+    }
+    
+    // Force refresh all entities from current room state
+    refreshAllEntities(state) {
+        console.log("Refreshing all entities from current state");
+        
+        if (!state) {
+            console.error("No state provided for entity refresh");
+            return;
+        }
+        
+        // Refresh players
+        if (state.players) {
+            try {
+                // Try different methods to iterate through players
+                if (typeof state.players.forEach === 'function') {
+                    state.players.forEach((player, id) => {
+                        this._refreshPlayerEntity(player, id);
+                    });
+                } else if (typeof state.players.entries === 'function') {
+                    for (const [id, player] of state.players.entries()) {
+                        this._refreshPlayerEntity(player, id);
+                    }
+                } else {
+                    const playersObj = state.players.toJSON ? state.players.toJSON() : state.players;
+                    for (const id in playersObj) {
+                        if (playersObj.hasOwnProperty(id)) {
+                            this._refreshPlayerEntity(playersObj[id], id);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Error refreshing players:", error);
+            }
+        }
+        
+        // Refresh operators
+        if (state.operators) {
+            try {
+                // Similar pattern for operators
+                if (typeof state.operators.forEach === 'function') {
+                    state.operators.forEach((operator, id) => {
+                        this._refreshOperatorEntity(operator, id);
+                    });
+                } else if (typeof state.operators.entries === 'function') {
+                    for (const [id, operator] of state.operators.entries()) {
+                        this._refreshOperatorEntity(operator, id);
+                    }
+                } else {
+                    const operatorsObj = state.operators.toJSON ? state.operators.toJSON() : state.operators;
+                    for (const id in operatorsObj) {
+                        if (operatorsObj.hasOwnProperty(id)) {
+                            this._refreshOperatorEntity(operatorsObj[id], id);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Error refreshing operators:", error);
+            }
+        }
+        
+        // Update player list UI as well
+        if (window.updatePlayerListUI) {
+            window.updatePlayerListUI();
+        }
+    }
+    
+    // Helper method to refresh a player entity
+    _refreshPlayerEntity(player, id) {
+        // Skip local player
+        if (window.room && id === window.room.sessionId) {
+            return;
+        }
+        
+        const entity = this.getEntity('players', id);
+        if (entity) {
+            // Update existing entity
+            entity.updatePosition({
+                x: player.x,
+                y: player.y,
+                z: player.z,
+                rotationY: player.rotationY
+            });
+            entity.updateValue(player.value);
+            entity.updateColor(player.color);
+        } else {
+            // Create new entity if it doesn't exist
+            console.log(`Creating entity for player ${id} during refresh`);
+            const entityOptions = { id: id, type: 'numberblock' };
+            const newEntity = this.createEntity(player, 'players', entityOptions);
+            
+            // Add to scene
+            if (newEntity && newEntity.mesh && window.scene) {
+                window.scene.add(newEntity.mesh);
+            }
+        }
+    }
+    
+    // Helper method to refresh an operator entity
+    _refreshOperatorEntity(operator, id) {
+        const entity = this.getEntity('operators', id);
+        if (entity) {
+            // Update existing entity
+            entity.updatePosition({
+                x: operator.x,
+                y: operator.y,
+                z: operator.z,
+                rotationY: operator.rotationY
+            });
+        } else {
+            // Create new entity if it doesn't exist
+            console.log(`Creating entity for operator ${id} during refresh`);
+            const entityOptions = { 
+                id: id, 
+                type: 'operator',
+                value: operator.type 
+            };
+            const newEntity = this.createEntity(operator, 'operators', entityOptions);
+            
+            // Add to scene
+            if (newEntity && newEntity.mesh && window.scene) {
+                window.scene.add(newEntity.mesh);
+            }
+        }
+    }
+}
+
+// Export for use in other modules
+if (typeof window !== 'undefined') {
+    window.EntityFactory = EntityFactory;
+    // Initialize global entity factory
+    window.entityFactory = new EntityFactory();
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = { EntityFactory };
 }
  
  
@@ -2329,26 +2862,11 @@ function debug(message, isError = false) {
 let scene, camera, renderer, controls;
 let playerNumberblock;
 let operatorManager;
-let prevTime = performance.now();
 let playerValue = 1;
-const playerHeight = 2.0; // Player height in units (as specified in memory)
 
 // Add operator tracking without redeclaring variables
 let heldOperator = null;
 let lastOperatorSpawn = 0;
-
-// Movement keys state
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-let turnLeft = false;
-let turnRight = false;
-
-// Physics variables
-let velocity = new THREE.Vector3();
-let direction = new THREE.Vector3();
-let canJump = true;
 
 // Rotation variables for Q/E keys
 let rotationQuaternion = new THREE.Quaternion();
@@ -2712,7 +3230,7 @@ function setupPointerLockControls() {
                     const currentPos = controls.getObject().position;
                     if (currentPos.y > 5) { // If they're way up in the air
                         currentPos.y = 1.0; // Set to floor level + player height
-                        velocity.y = 0;     // Reset vertical velocity
+                        window.velocity.y = 0;     // Reset vertical velocity
                     }
                 }
             } else {
@@ -2759,15 +3277,18 @@ function setupPointerLockControls() {
         scene.add(controls.getObject());
         
         // Setup movement
-        moveForward = false;
-        moveBackward = false;
-        moveLeft = false;
-        moveRight = false;
-        canJump = false;
+        window.moveForward = false;
+        window.moveBackward = false;
+        window.moveLeft = false;
+        window.moveRight = false;
+        window.canJump = false;
         
         // Set up keyboard event listeners
         document.addEventListener('keydown', onKeyDown, false);
         document.addEventListener('keyup', onKeyUp, false);
+        
+        // Ensure camera rotation is properly handled
+        camera.rotation.order = 'YXZ';
         
         debug('PointerLock controls setup complete');
     } catch (error) {
@@ -2792,45 +3313,71 @@ function updatePlayerPhysics(delta) {
             return;
         }
 
+        // Access variables from controls.js via window
         // Apply movement damping
-        velocity.x -= velocity.x * 10.0 * delta; 
-        velocity.z -= velocity.z * 10.0 * delta;
+        window.velocity.x -= window.velocity.x * 10.0 * delta; 
+        window.velocity.z -= window.velocity.z * 10.0 * delta;
         
         // Apply gravity (9.8 as specified in memory)
-        velocity.y -= 9.8 * delta;
+        window.velocity.y -= 9.8 * delta;
         
         // Calculate movement direction based on input
-        direction.z = Number(moveForward) - Number(moveBackward);
-        direction.x = Number(moveRight) - Number(moveLeft);
+        window.direction.z = Number(window.moveForward) - Number(window.moveBackward);
+        window.direction.x = Number(window.moveRight) - Number(window.moveLeft);
         
         // Only normalize if we're actually moving
-        if (direction.x !== 0 || direction.z !== 0) {
-            direction.normalize(); // Ensure consistent movement regardless of direction
+        if (window.direction.x !== 0 || window.direction.z !== 0) {
+            window.direction.normalize(); // Ensure consistent movement regardless of direction
         }
         
         // Apply movement force (scaled to achieve 5.0 units/sec)
         // Using a higher value to compensate for damping
-        const moveSpeed = 50.0;
+        // const moveSpeed = 50.0; // Using from controls.js
         
-        if (moveForward || moveBackward) {
-            velocity.z -= direction.z * moveSpeed * delta;
+        if (window.moveForward || window.moveBackward) {
+            window.velocity.z -= window.direction.z * window.moveSpeed * delta;
         }
-        if (moveLeft || moveRight) {
-            velocity.x -= direction.x * moveSpeed * delta;
+        
+        if (window.moveLeft || window.moveRight) {
+            window.velocity.x -= window.direction.x * window.moveSpeed * delta;
+        }
+        
+        // Handle Q/E rotation - turn left/right
+        if (window.turnLeft) {
+            // Calculate rotation amount
+            const turnAmount = window.turnSpeed * delta;
+            
+            // Rotate the camera
+            controls.getObject().rotation.y += turnAmount;
+        }
+        else if (window.turnRight) {
+            // Calculate rotation amount
+            const turnAmount = window.turnSpeed * delta;
+            
+            // Rotate the camera
+            controls.getObject().rotation.y -= turnAmount;
+        }
+        
+        // Handle jumping - only if on ground
+        if (window.canJump && controls.getObject().position.y <= window.playerHeight) {
+            if (window.jumpPressed) {
+                window.velocity.y = Math.sqrt(2 * 9.8 * window.jumpHeight);
+                window.canJump = false;
+            }
         }
         
         // Apply velocity to controls for movement
-        controls.moveRight(-velocity.x * delta);
-        controls.moveForward(-velocity.z * delta);
+        controls.moveRight(-window.velocity.x * delta);
+        controls.moveForward(-window.velocity.z * delta);
         
         // Apply jump physics
-        controls.getObject().position.y += velocity.y * delta;
+        controls.getObject().position.y += window.velocity.y * delta;
         
         // Check for floor collision
         if (controls.getObject().position.y < 1.0) { // Player height is 2.0 units
-            velocity.y = 0;
+            window.velocity.y = 0;
             controls.getObject().position.y = 1.0;
-            canJump = true;
+            window.canJump = true;
         }
         
         // Update player numberblock position AND ROTATION to match camera
@@ -2847,7 +3394,7 @@ function updatePlayerPhysics(delta) {
             
             // Offset the numberblock to be at the player's feet
             const numberblockHeight = playerNumberblock.getHeight ? playerNumberblock.getHeight() : 1;
-            playerNumberblock.mesh.position.y -= (playerHeight / 2) + (numberblockHeight / 2);
+            playerNumberblock.mesh.position.y -= (window.playerHeight / 2) + (numberblockHeight / 2);
             
             // Force numberblock to be visible in first-person mode
             playerNumberblock.mesh.visible = true;
@@ -2964,13 +3511,13 @@ function updatePlayerPositionThirdPerson(time, delta) {
         
         // Calculate desired movement direction from keyboard input
         const movement = new THREE.Vector3();
-        if (moveForward) movement.add(forward);
-        if (moveBackward) movement.sub(forward);
-        if (moveLeft) movement.sub(right);
-        if (moveRight) movement.add(right);
+        if (window.moveForward) movement.add(forward);
+        if (window.moveBackward) movement.sub(forward);
+        if (window.moveLeft) movement.sub(right);
+        if (window.moveRight) movement.add(right);
         
         // Apply gravity
-        velocity.y -= 9.8 * delta;
+        window.velocity.y -= 9.8 * delta;
         
         if (movement.length() > 0) {
             movement.normalize().multiplyScalar(moveSpeed * delta);
@@ -2979,25 +3526,25 @@ function updatePlayerPositionThirdPerson(time, delta) {
             playerNumberblock.mesh.position.add(movement);
             
             // Rotate player to face movement direction if moving (and no manual rotation with Q/E)
-            if (!turnLeft && !turnRight) {
+            if (!window.turnLeft && !window.turnRight) {
                 const targetAngle = Math.atan2(movement.x, movement.z);
                 playerNumberblock.mesh.rotation.y = targetAngle;
             }
         }
         
         // Update vertical position with gravity
-        playerNumberblock.mesh.position.y += velocity.y * delta;
+        playerNumberblock.mesh.position.y += window.velocity.y * delta;
         
         // Check for floor collision
         if (playerNumberblock.mesh.position.y < 0.5) {
-            velocity.y = 0;
+            window.velocity.y = 0;
             playerNumberblock.mesh.position.y = 0.5;
-            canJump = true;
+            window.canJump = true;
         }
         
         // Rotate player using Q/E keys
-        if (turnLeft) playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
-        if (turnRight) playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
+        if (window.turnLeft) playerNumberblock.mesh.rotation.y += rotationSpeed * delta;
+        if (window.turnRight) playerNumberblock.mesh.rotation.y -= rotationSpeed * delta;
         
         // Send position to server for multiplayer
         if (typeof window.room !== 'undefined' && window.room) {
@@ -3029,8 +3576,8 @@ function updateThirdPersonCamera() {
         }
         
         // Adjust camera angle with Q/E keys
-        if (turnLeft) window.thirdPersonCameraAngle += rotationSpeed;
-        if (turnRight) window.thirdPersonCameraAngle -= rotationSpeed;
+        if (window.turnLeft) window.thirdPersonCameraAngle += rotationSpeed;
+        if (window.turnRight) window.thirdPersonCameraAngle -= rotationSpeed;
         
         // Calculate desired camera position explicitly without cumulative interpolation errors
         const playerPos = playerNumberblock.mesh.position.clone();
@@ -3145,33 +3692,27 @@ function onKeyDown(event) {
     try {
         if (document.activeElement !== document.body) return; // Skip if focused on input
         
-        console.log(`Key pressed: ${event.code}`); // Debug logging
-        
         switch (event.code) {
             case 'ArrowUp':
             case 'KeyW':
-                moveForward = true;
-                console.log("moveForward = true"); // Debug logging
+                window.moveForward = true;
                 break;
             case 'ArrowLeft':
             case 'KeyA':
-                moveLeft = true;
-                console.log("moveLeft = true"); // Debug logging
+                window.moveLeft = true;
                 break;
             case 'ArrowDown':
             case 'KeyS':
-                moveBackward = true;
-                console.log("moveBackward = true"); // Debug logging
+                window.moveBackward = true;
                 break;
             case 'ArrowRight':
             case 'KeyD':
-                moveRight = true;
-                console.log("moveRight = true"); // Debug logging
+                window.moveRight = true;
                 break;
             case 'Space':
-                if (canJump) {
-                    velocity.y = 5.0;
-                    canJump = false;
+                if (window.canJump) {
+                    window.velocity.y = 5.0;
+                    window.canJump = false;
                 }
                 break;
             case 'KeyV':
@@ -3180,7 +3721,7 @@ function onKeyDown(event) {
                 break;
             case 'KeyQ':
                 // Turn left
-                turnLeft = true;
+                window.turnLeft = true;
                 if (window.isFirstPerson) {
                     // Use quaternion rotation around world up axis (y-axis)
                     rotationAxis.copy(worldUp);
@@ -3193,7 +3734,7 @@ function onKeyDown(event) {
                 break;
             case 'KeyE':
                 // Turn right
-                turnRight = true;
+                window.turnRight = true;
                 if (window.isFirstPerson) {
                     // Use quaternion rotation around world up axis (y-axis)
                     rotationAxis.copy(worldUp);
@@ -3215,25 +3756,25 @@ function onKeyUp(event) {
         switch (event.code) {
             case 'ArrowUp':
             case 'KeyW':
-                moveForward = false;
+                window.moveForward = false;
                 break;
             case 'ArrowLeft':
             case 'KeyA':
-                moveLeft = false;
+                window.moveLeft = false;
                 break;
             case 'ArrowDown':
             case 'KeyS':
-                moveBackward = false;
+                window.moveBackward = false;
                 break;
             case 'ArrowRight':
             case 'KeyD':
-                moveRight = false;
+                window.moveRight = false;
                 break;
             case 'KeyQ':
-                turnLeft = false;
+                window.turnLeft = false;
                 break;
             case 'KeyE':
-                turnRight = false;
+                window.turnRight = false;
                 break;
         }
     } catch (error) {
@@ -5552,42 +6093,43 @@ function getRandomColor() {
 
 // Import CSS2D renderer for player names if not already defined
 let CSS2DObject;
+let CSS2DRenderer;
 try {
-    // Check for THREE.CSS2DObject
-    if (typeof THREE !== 'undefined') {
-        if (THREE.CSS2DObject) {
-            console.log("Using THREE.CSS2DObject directly");
-            CSS2DObject = THREE.CSS2DObject;
-        } 
-        // Check if it's in CSS2DRenderer
-        else if (THREE.CSS2DRenderer) {
-            console.log("Using THREE.CSS2DRenderer.CSS2DObject");
-            CSS2DObject = THREE.CSS2DRenderer.CSS2DObject;
-        }
-        // Try loading from CSS2D namespace if available
-        else if (THREE.CSS2D && THREE.CSS2D.CSS2DObject) {
-            console.log("Using THREE.CSS2D.CSS2DObject");
-            CSS2DObject = THREE.CSS2D.CSS2DObject;
-        }
-        // Last resort - look for it in the window object
-        else if (window.CSS2DObject) {
-            console.log("Using window.CSS2DObject");
-            CSS2DObject = window.CSS2DObject;
-        }
-        else {
-            throw new Error("CSS2DObject not found in THREE");
-        }
-    } else {
-        throw new Error("THREE is not defined");
+    // First check if THREE.CSS2D is available (Three.js r137+)
+    if (THREE.CSS2D) {
+        console.log("Using THREE.CSS2D namespace");
+        CSS2DObject = THREE.CSS2D.CSS2DObject;
+        CSS2DRenderer = THREE.CSS2D.CSS2DRenderer;
+    } 
+    // For older Three.js versions
+    else if (THREE.CSS2DObject && THREE.CSS2DRenderer) {
+        console.log("Using THREE.CSS2DObject directly");
+        CSS2DObject = THREE.CSS2DObject;
+        CSS2DRenderer = THREE.CSS2DRenderer;
+    } 
+    else {
+        throw new Error("CSS2D modules not found in THREE");
     }
 } catch (error) {
     console.warn("CSS2DObject not available, player name labels will not be shown:", error.message);
-    // Simple fallback that does nothing
+    
+    // Create dummy versions that do nothing to prevent errors
     CSS2DObject = class DummyCSS2DObject {
         constructor(element) {
             this.element = element;
-            this.position = { set: () => {} };
+            this.position = new THREE.Vector3();
+            this.rotation = new THREE.Euler();
+            this.scale = new THREE.Vector3(1, 1, 1);
+            this.visible = true;
         }
+    };
+    
+    CSS2DRenderer = class DummyCSS2DRenderer {
+        constructor() {
+            this.domElement = document.createElement('div');
+        }
+        setSize() {}
+        render() {}
     };
 }
 
@@ -5643,6 +6185,26 @@ async function initNetworking() {
     try {
         console.log(`Initializing networking with endpoint: ${endpoint}`);
         client = new Colyseus.Client(endpoint);
+        
+        // Add a visibility change listener to handle tab activation
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && room) {
+                console.log('Tab became visible - forcing player list update');
+                // Force a full update of the player list when the tab becomes visible
+                updatePlayerListUI();
+                
+                // Also request a fresh state from the server
+                if (room.state && typeof room.state.refreshClient === 'function') {
+                    room.state.refreshClient();
+                } else {
+                    // If no explicit refresh method, just do a local refresh of all entities
+                    console.log('Refreshing all entities from current state');
+                    if (window.entityFactory) {
+                        window.entityFactory.refreshAllEntities(room.state);
+                    }
+                }
+            }
+        });
         
         // Generate random player name and color
         const playerId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -5800,6 +6362,104 @@ function setupRoomListeners() {
     // Global reference to other players - explicitly initialize
     window.otherPlayers = window.otherPlayers || {};
     
+    // Initialize operators tracking if not already done
+    window.operatorsVisuals = window.operatorsVisuals || {};
+    
+    // Explicit full state handler to ensure all visuals are properly synced
+    room.onStateChange((state) => {
+        console.log('State snapshot received explicitly:', state);
+
+        // Players explicitly handled
+        state.players.forEach((player, sessionId) => {
+            if (sessionId === room.sessionId) {
+                window.playerNumberblock.updateColor(player.color);
+                return; // Local player already explicitly managed
+            }
+
+            let numberblock = window.otherPlayers[sessionId];
+
+            if (!numberblock) {
+                // Explicitly instantiate visual if not present
+                console.log(`Creating visual for previously missed player ${sessionId}`);
+                numberblock = new window.Numberblock(player.value, player.color, player.name);
+                numberblock.mesh.position.set(player.x, player.y, player.z);
+                numberblock.mesh.rotation.y = player.rotationY;
+
+                window.scene.add(numberblock.mesh);
+                window.otherPlayers[sessionId] = numberblock;
+
+                // Explicitly set onChange for future incremental updates
+                player.onChange = (changes) => {
+                    changes.forEach(change => {
+                        if (['x', 'y', 'z'].includes(change.field)) {
+                            numberblock.mesh.position.set(player.x, player.y, player.z);
+                        }
+                        if (change.field === "rotationY") {
+                            numberblock.mesh.rotation.y = player.rotationY;
+                        }
+                        if (change.field === "value") {
+                            numberblock.updateValue(player.value);
+                        }
+                        if (change.field === "color") {
+                            numberblock.updateColor(player.color);
+                        }
+                    });
+                };
+            } else {
+                // Explicitly update position/rotation to match snapshot immediately
+                numberblock.mesh.position.set(player.x, player.y, player.z);
+                numberblock.mesh.rotation.y = player.rotationY;
+                numberblock.updateValue(player.value);
+                numberblock.updateColor(player.color);
+            }
+        });
+
+        // Explicitly remove players no longer in state
+        Object.keys(window.otherPlayers).forEach(sessionId => {
+            if (!state.players.has(sessionId)) {
+                console.log(`Explicitly removing player ${sessionId}`);
+                window.scene.remove(window.otherPlayers[sessionId].mesh);
+                delete window.otherPlayers[sessionId];
+            }
+        });
+
+        // Update the player list in the UI whenever state changes
+        updatePlayerListUI();
+
+        // Operators explicitly handled similarly
+        if (state.operators) {
+            state.operators.forEach((operator, operatorId) => {
+                if (!window.operatorsVisuals[operatorId]) {
+                    if (window.OperatorsVisual) {
+                        const opVisual = new window.OperatorsVisual(operator);
+                        window.scene.add(opVisual.mesh);
+                        window.operatorsVisuals[operatorId] = opVisual;
+
+                        operator.onChange = () => {
+                            opVisual.update(operator);
+                        };
+                    }
+                } else {
+                    window.operatorsVisuals[operatorId].update(operator);
+                }
+            });
+
+            // Explicitly remove operators no longer present
+            Object.keys(window.operatorsVisuals).forEach(operatorId => {
+                if (!state.operators.has(operatorId)) {
+                    window.scene.remove(window.operatorsVisuals[operatorId].mesh);
+                    delete window.operatorsVisuals[operatorId];
+                }
+            });
+        }
+
+        // Similarly handle staticNumberblocks if present
+        if (state.staticNumberblocks) {
+            // Process staticNumberblocks similar to operators
+            // Implementation would be similar to the operators code above
+        }
+    });
+
     // Safely access players schema
     if (room.state && room.state.players) {
         console.log("Setting up player schema listeners");
@@ -5810,11 +6470,15 @@ function setupRoomListeners() {
         // Explicitly handle players joining AFTER local client is connected
         room.state.players.onAdd = (player, sessionId) => {
             if (sessionId === room.sessionId) {
-                // Explicitly assign local player's color from server data
-                window.playerNumberblock.color = player.color;
-                window.playerNumberblock.updateColor(player.color);
-                console.log(`Local player color explicitly set to ${player.color}`);
-                return; // skip local player
+                // This is the local player, just update its color but don't create a new visual
+                if (window.playerNumberblock) {
+                    window.playerNumberblock.color = player.color;
+                    window.playerNumberblock.updateColor(player.color);
+                    
+                    // Track with entityFactory as well
+                    window.entityFactory.trackEntity(window.playerEntity, 'players', sessionId);
+                }
+                return;
             }
 
             console.log(`Player ${sessionId} joined later; creating visual explicitly.`);
@@ -5988,6 +6652,329 @@ function setupSpecificSchemaListeners(schemaName, schema) {
             updatePlayerListUI();
         }
     };
+}
+
+// Setup schema-specific listeners for a generic schema
+function setupGenericSchemaListeners(room, schemaName) {
+    // Check for schema access
+    if (!room.state || !room.state[schemaName]) {
+        console.error(`Schema ${schemaName} not found in room state`);
+        return;
+    }
+    
+    console.log(`Setting up schema listeners for ${schemaName}`);
+    
+    // Setup onAdd listener for this schema
+    room.state[schemaName].onAdd = (entity, id) => {
+        try {
+            console.log(`Adding ${schemaName} with ID: ${id}`, entity);
+            
+            if (schemaName === 'players' && id === room.sessionId) {
+                // This is the local player, just update its color but don't create a new visual
+                if (window.playerNumberblock) {
+                    window.playerNumberblock.color = entity.color;
+                    window.playerNumberblock.updateColor(entity.color);
+                    
+                    // Track with entityFactory as well
+                    window.entityFactory.trackEntity(window.playerEntity, 'players', id);
+                }
+                return;
+            }
+            
+            // Create entity through the factory
+            const entityOptions = {
+                id: id,
+                isLocalPlayer: (schemaName === 'players' && id === room.sessionId)
+            };
+            
+            // Create entity
+            const visualEntity = window.entityFactory.createEntity(entity, schemaName, entityOptions);
+            
+            // Add to scene if it has a mesh
+            if (visualEntity && visualEntity.mesh) {
+                window.scene.add(visualEntity.mesh);
+            }
+            
+            // Setup onChange handler
+            entity.onChange = (changes) => {
+                changes.forEach(change => {
+                    if (['x', 'y', 'z', 'rotationY'].includes(change.field)) {
+                        visualEntity.updatePosition({
+                            x: entity.x,
+                            y: entity.y,
+                            z: entity.z,
+                            rotationY: entity.rotationY
+                        });
+                    }
+                    if (change.field === "value") {
+                        visualEntity.updateValue(entity.value);
+                    }
+                    if (change.field === "color") {
+                        visualEntity.updateColor(entity.color);
+                    }
+                });
+            };
+            
+            // If this is a player, update the player list UI
+            if (schemaName === 'players') {
+                updatePlayerListUI();
+            }
+        } catch (error) {
+            console.error(`Error in ${schemaName}.onAdd:`, error);
+        }
+    };
+    
+    // Setup onRemove listener for this schema
+    room.state[schemaName].onRemove = (entity, id) => {
+        try {
+            console.log(`Removing ${schemaName} with ID: ${id}`);
+            
+            // Remove entity through factory
+            window.entityFactory.removeEntity(schemaName, id);
+            
+            // If this is a player, update the player list UI
+            if (schemaName === 'players') {
+                updatePlayerListUI();
+            }
+        } catch (error) {
+            console.error(`Error in ${schemaName}.onRemove:`, error);
+        }
+    };
+}
+
+// Setup listeners for all schemas and handle the room
+function setupRoomListeners(room) {
+    console.log("Setting up room listeners");
+    
+    if (!room) {
+        console.error("Room not available!");
+        return;
+    }
+    
+    // Set up message handlers
+    setupMessageHandlers();
+    
+    // Debug room state
+    console.log("Room state:", room.state);
+    console.log("Room schemas:", Object.keys(room.state || {}));
+    
+    // Ensure entity factory is initialized
+    if (!window.entityFactory) {
+        window.entityFactory = new EntityFactory();
+    }
+    
+    // Explicit full state handler to ensure all visuals are properly synced
+    room.onStateChange((state) => {
+        console.log('State snapshot received explicitly:', state);
+
+        // Process all players in the state
+        if (state.players) {
+            state.players.forEach((player, sessionId) => {
+                if (sessionId === room.sessionId) {
+                    // Local player - just update color
+                    if (window.playerNumberblock) {
+                        window.playerNumberblock.updateColor(player.color);
+                    }
+                    return;
+                }
+                
+                // Check if we already have this player entity
+                let playerEntity = window.entityFactory.getEntity('players', sessionId);
+                
+                if (!playerEntity) {
+                    // Create new player entity if not found
+                    console.log(`Creating entity for previously missed player ${sessionId}`);
+                    const entityOptions = { id: sessionId, type: 'numberblock' };
+                    playerEntity = window.entityFactory.createEntity(player, 'players', entityOptions);
+                    
+                    // Add mesh to scene
+                    if (playerEntity && playerEntity.mesh) {
+                        window.scene.add(playerEntity.mesh);
+                    }
+                    
+                    // Setup onChange handler
+                    player.onChange = (changes) => {
+                        changes.forEach(change => {
+                            if (['x', 'y', 'z', 'rotationY'].includes(change.field)) {
+                                playerEntity.updatePosition({
+                                    x: player.x,
+                                    y: player.y,
+                                    z: player.z,
+                                    rotationY: player.rotationY
+                                });
+                            }
+                            if (change.field === "value") {
+                                playerEntity.updateValue(player.value);
+                            }
+                            if (change.field === "color") {
+                                playerEntity.updateColor(player.color);
+                            }
+                        });
+                    };
+                } else {
+                    // Update existing player entity
+                    playerEntity.updatePosition({
+                        x: player.x,
+                        y: player.y,
+                        z: player.z,
+                        rotationY: player.rotationY
+                    });
+                    playerEntity.updateValue(player.value);
+                    playerEntity.updateColor(player.color);
+                }
+            });
+            
+            // Check for players to remove
+            const allPlayerEntities = window.entityFactory.getAllEntities('players');
+            Object.keys(allPlayerEntities).forEach(sessionId => {
+                if (sessionId !== room.sessionId && !state.players.has(sessionId)) {
+                    console.log(`Explicitly removing player ${sessionId}`);
+                    window.entityFactory.removeEntity('players', sessionId);
+                }
+            });
+        }
+        
+        // Process all operators in the state
+        if (state.operators) {
+            state.operators.forEach((operator, operatorId) => {
+                // Check if we already have this operator entity
+                let operatorEntity = window.entityFactory.getEntity('operators', operatorId);
+                
+                if (!operatorEntity) {
+                    // Create new operator entity if not found
+                    console.log(`Creating entity for previously missed operator ${operatorId}`);
+                    const entityOptions = { 
+                        id: operatorId, 
+                        type: 'operator',
+                        // Map 'plus' or 'minus' to value
+                        value: operator.type 
+                    };
+                    operatorEntity = window.entityFactory.createEntity(operator, 'operators', entityOptions);
+                    
+                    // Add mesh to scene
+                    if (operatorEntity && operatorEntity.mesh) {
+                        window.scene.add(operatorEntity.mesh);
+                    }
+                    
+                    // Setup onChange handler
+                    operator.onChange = () => {
+                        operatorEntity.updatePosition({
+                            x: operator.x,
+                            y: operator.y,
+                            z: operator.z
+                        });
+                    };
+                } else {
+                    // Update existing operator entity
+                    operatorEntity.updatePosition({
+                        x: operator.x,
+                        y: operator.y,
+                        z: operator.z
+                    });
+                }
+            });
+            
+            // Check for operators to remove
+            const allOperatorEntities = window.entityFactory.getAllEntities('operators');
+            Object.keys(allOperatorEntities).forEach(operatorId => {
+                if (!state.operators.has(operatorId)) {
+                    console.log(`Explicitly removing operator ${operatorId}`);
+                    window.entityFactory.removeEntity('operators', operatorId);
+                }
+            });
+        }
+        
+        // Similarly handle static numberblocks
+        if (state.staticNumberblocks) {
+            state.staticNumberblocks.forEach((staticBlock, blockId) => {
+                // Check if we already have this static numberblock entity
+                let staticBlockEntity = window.entityFactory.getEntity('staticNumberblocks', blockId);
+                
+                if (!staticBlockEntity) {
+                    // Create new static numberblock entity if not found
+                    console.log(`Creating entity for previously missed static numberblock ${blockId}`);
+                    const entityOptions = { 
+                        id: blockId, 
+                        type: 'numberblock',
+                        isStatic: true 
+                    };
+                    staticBlockEntity = window.entityFactory.createEntity(staticBlock, 'staticNumberblocks', entityOptions);
+                    
+                    // Add mesh to scene
+                    if (staticBlockEntity && staticBlockEntity.mesh) {
+                        window.scene.add(staticBlockEntity.mesh);
+                    }
+                    
+                    // Setup onChange handler
+                    staticBlock.onChange = (changes) => {
+                        changes.forEach(change => {
+                            if (['x', 'y', 'z', 'rotationY'].includes(change.field)) {
+                                staticBlockEntity.updatePosition({
+                                    x: staticBlock.x,
+                                    y: staticBlock.y,
+                                    z: staticBlock.z,
+                                    rotationY: staticBlock.rotationY
+                                });
+                            }
+                            if (change.field === "value") {
+                                staticBlockEntity.updateValue(staticBlock.value);
+                            }
+                            if (change.field === "color") {
+                                staticBlockEntity.updateColor(staticBlock.color);
+                            }
+                        });
+                    };
+                } else {
+                    // Update existing static numberblock entity
+                    staticBlockEntity.updatePosition({
+                        x: staticBlock.x,
+                        y: staticBlock.y,
+                        z: staticBlock.z,
+                        rotationY: staticBlock.rotationY
+                    });
+                    staticBlockEntity.updateValue(staticBlock.value);
+                    staticBlockEntity.updateColor(staticBlock.color);
+                }
+            });
+            
+            // Check for static numberblocks to remove
+            const allStaticBlockEntities = window.entityFactory.getAllEntities('staticNumberblocks');
+            Object.keys(allStaticBlockEntities).forEach(blockId => {
+                if (!state.staticNumberblocks.has(blockId)) {
+                    console.log(`Explicitly removing static numberblock ${blockId}`);
+                    window.entityFactory.removeEntity('staticNumberblocks', blockId);
+                }
+            });
+        }
+
+        // Update the player list in the UI whenever state changes
+        updatePlayerListUI();
+    });
+
+    // Setup listeners for each schema type
+    const schemaTypes = ['players', 'operators', 'staticNumberblocks'];
+    schemaTypes.forEach(schemaName => {
+        if (room.state && room.state[schemaName]) {
+            console.log(`Setting up ${schemaName} schema listeners`);
+            setupGenericSchemaListeners(room, schemaName);
+        }
+    });
+    
+    // Handle local player
+    if (window.playerNumberblock) {
+        // Create a Player entity for the local player
+        window.playerEntity = new Player({
+            id: room.sessionId,
+            name: 'You',
+            value: window.playerNumberblock.value,
+            color: window.playerNumberblock.color,
+            type: 'numberblock',
+            isLocalPlayer: true
+        });
+        
+        // Store the reference in entityFactory
+        window.entityFactory.trackEntity(window.playerEntity, 'players', room.sessionId);
+    }
 }
 
 // Update player list in UI
@@ -6638,6 +7625,211 @@ window.visuals = visuals; // Export for debugging
  
  
 ===================================================== 
+FILE: client\js\NPC.js 
+===================================================== 
+ 
+// Numberblocks game - NPC entity class
+
+class NPC extends Entity {
+    constructor(params) {
+        super(params);
+        
+        // NPC-specific properties
+        this.isStatic = params.isStatic || false;
+        this.operatorType = params.operatorType || null;
+        this.behaviorType = params.behaviorType || 'static';
+        this.target = params.target || null;
+        
+        // Animation properties
+        this.animationState = {
+            floating: {
+                enabled: !this.isStatic,
+                height: 0.5,
+                speed: 1.0,
+                time: Math.random() * Math.PI * 2 // Random start phase
+            },
+            rotating: {
+                enabled: params.type === 'operator',
+                speed: 0.5
+            }
+        };
+        
+        // Set initial animation state
+        this.setupAnimation();
+    }
+    
+    setupAnimation() {
+        // Only set up animation for non-static NPCs or operators
+        if (this.isStatic) {
+            this.animationState.floating.enabled = false;
+            this.animationState.rotating.enabled = false;
+        }
+        
+        // Operators should rotate to face player
+        if (this.type === 'operator') {
+            this.animationState.rotating.enabled = true;
+        }
+    }
+    
+    // Animate the NPC
+    animate(deltaTime) {
+        if (!this.mesh) return;
+        
+        // Handle floating animation
+        if (this.animationState.floating.enabled) {
+            this.animationState.floating.time += deltaTime * this.animationState.floating.speed;
+            const floatHeight = Math.sin(this.animationState.floating.time) * this.animationState.floating.height;
+            
+            // Apply floating motion
+            this.mesh.position.y = this.y + floatHeight;
+        }
+        
+        // Handle rotation animation (e.g., operators facing player)
+        if (this.animationState.rotating.enabled && window.playerNumberblock) {
+            // Rotate to face the player
+            const playerPos = window.playerNumberblock.mesh.position;
+            const direction = new THREE.Vector3();
+            direction.subVectors(playerPos, this.mesh.position);
+            
+            // Calculate the angle but only on the Y axis (horizontal rotation)
+            const targetRotation = Math.atan2(direction.x, direction.z);
+            
+            // Smooth rotation
+            const rotationSpeed = this.animationState.rotating.speed;
+            const angleDiff = (targetRotation - this.mesh.rotation.y + Math.PI) % (Math.PI * 2) - Math.PI;
+            this.mesh.rotation.y += angleDiff * rotationSpeed * deltaTime;
+        }
+    }
+    
+    // Update position and also handle any animations
+    updatePosition(position) {
+        super.updatePosition(position);
+        
+        // Re-enable animations if needed
+        this.setupAnimation();
+    }
+    
+    createMesh() {
+        // Create visual representation based on the type
+        switch (this.type) {
+            case 'numberblock':
+                // For static numberblocks, we use the same Numberblock class
+                const numberblock = new window.Numberblock(this.value, this.color, this.name);
+                
+                // Store the numberblock reference for later updates
+                numberblock.mesh.userData.numberblockRef = numberblock;
+                
+                return numberblock.mesh;
+                
+            case 'operator':
+                // For operators, use the Operator class if available
+                if (window.OperatorsVisual) {
+                    const operator = new window.OperatorsVisual({
+                        type: this.value, // 'plus' or 'minus', stored in value
+                        x: this.x,
+                        y: this.y,
+                        z: this.z
+                    });
+                    return operator.mesh;
+                }
+                break;
+                
+            default:
+                // Default fallback
+                const geometry = new THREE.BoxGeometry(1, 1, 1);
+                const material = new THREE.MeshStandardMaterial({ color: this.color || 0xFFFFFF });
+                return new THREE.Mesh(geometry, material);
+        }
+    }
+
+    updateValue(newValue) {
+        super.updateValue(newValue);
+        
+        // For numberblocks, we need to recreate the visual
+        if (this.type === 'numberblock' && this.mesh) {
+            const parentScene = this.mesh.parent;
+            const position = this.mesh.position.clone();
+            const rotation = this.mesh.rotation.y;
+            
+            // Remove old mesh
+            if (parentScene) {
+                parentScene.remove(this.mesh);
+            }
+            
+            // Create new numberblock with updated value
+            const numberblock = new window.Numberblock(newValue, this.color, this.name);
+            this.mesh = numberblock.mesh;
+            
+            // Restore position and rotation
+            this.mesh.position.copy(position);
+            this.mesh.rotation.y = rotation;
+            
+            // Add back to scene
+            if (parentScene) {
+                parentScene.add(this.mesh);
+            }
+            
+            // Store reference to this entity
+            this.mesh.userData.entity = this;
+            this.mesh.userData.numberblockRef = numberblock;
+        }
+    }
+
+    updateColor(newColor) {
+        super.updateColor(newColor);
+        
+        // Update the color based on entity type
+        if (this.type === 'numberblock' && this.mesh) {
+            // Delegate to Numberblock's updateColor if we can
+            const numberblockRef = this.mesh.userData.numberblockRef;
+            if (numberblockRef && typeof numberblockRef.updateColor === 'function') {
+                numberblockRef.updateColor(newColor);
+            } else {
+                // Otherwise traverse all children and update materials
+                this.mesh.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        child.material.color.set(newColor);
+                    }
+                });
+            }
+        }
+    }
+    
+    // NPCs can have behavior in their update method
+    update(deltaTime) {
+        super.update(deltaTime);
+        
+        // Implement different behaviors
+        switch (this.behaviorType) {
+            case 'idle':
+                // Do nothing
+                break;
+                
+            case 'wander':
+                // Random movement could be implemented here
+                break;
+                
+            case 'follow':
+                // Follow logic could be implemented here
+                break;
+        }
+        
+        // Animate the NPC
+        this.animate(deltaTime);
+    }
+}
+
+// Export to window object for access in other scripts
+if (typeof window !== 'undefined') {
+    window.NPC = NPC;
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = { NPC };
+}
+ 
+ 
+===================================================== 
 FILE: client\js\numberblock.js 
 ===================================================== 
  
@@ -6647,6 +7839,7 @@ class Numberblock {
     constructor(value = 1, color = null) {
         this.value = value;
         this.mesh = new THREE.Group();
+        this.mesh.userData.numberblock = this; // Store reference for easy access
         this.blockSize = 1; // Size of each cube
         this.blockSpacing = 0.01; // Small gap between blocks
         this.totalHeight = 0;
@@ -6970,6 +8163,7 @@ class Operator {
     // Create the 3D mesh for the operator
     createOperatorMesh() {
         const operatorGroup = new THREE.Group();
+        operatorGroup.userData.operator = this; // Store reference for easy access
         
         // Create a semi-transparent white sphere as the base
         const sphereGeometry = new THREE.SphereGeometry(0.5, 16, 16);
@@ -7274,6 +8468,129 @@ if (typeof module !== 'undefined') {
         Operator,
         OperatorManager
     };
+}
+ 
+ 
+===================================================== 
+FILE: client\js\Player.js 
+===================================================== 
+ 
+// Numberblocks game - Player entity class
+
+class Player extends Entity {
+    constructor(params) {
+        super(params);
+        this.isPlayer = true;
+        this.isLocalPlayer = params.isLocalPlayer || false;
+        
+        // Player-specific properties
+        this.moveSpeed = 5.0;
+        this.jumpHeight = 5.0;
+        this.isJumping = false;
+        this.isColliding = false;
+        this.controls = null;
+        
+        // Override the mesh if this is the local player
+        if (this.isLocalPlayer && window.playerNumberblock) {
+            this.mesh = window.playerNumberblock.mesh;
+            this.mesh.userData.entity = this;
+        }
+    }
+    
+    // For local player, position is controlled by PointerLockControls
+    // For remote players, position is updated via network
+    updatePosition(position) {
+        // Only update remote players via network updates
+        if (!this.isLocalPlayer) {
+            super.updatePosition(position);
+        }
+    }
+    
+    // Create playerCamera
+    createPlayerCamera() {
+        if (this.isLocalPlayer) {
+            // Implementation of first-person camera setup
+        }
+    }
+    
+    // Handle player input and movement
+    handleInput(inputState) {
+        if (this.isLocalPlayer) {
+            // Handle player input (WASD, etc)
+        }
+    }
+    
+    createMesh() {
+        // Create visual representation based on the type
+        switch (this.type) {
+            case 'numberblock':
+            default:
+                // Default to numberblock for now
+                const numberblock = new window.Numberblock(this.value, this.color, this.name);
+                return numberblock.mesh;
+        }
+    }
+
+    updateValue(newValue) {
+        super.updateValue(newValue);
+        
+        // For numberblocks, we need to recreate the visual
+        if (this.type === 'numberblock' && this.mesh) {
+            const parentScene = this.mesh.parent;
+            const position = this.mesh.position.clone();
+            const rotation = this.mesh.rotation.y;
+            
+            // Remove old mesh
+            if (parentScene) {
+                parentScene.remove(this.mesh);
+            }
+            
+            // Create new numberblock with updated value
+            const numberblock = new window.Numberblock(newValue, this.color, this.name);
+            this.mesh = numberblock.mesh;
+            
+            // Restore position and rotation
+            this.mesh.position.copy(position);
+            this.mesh.rotation.y = rotation;
+            
+            // Add back to scene
+            if (parentScene) {
+                parentScene.add(this.mesh);
+            }
+            
+            // Store reference to this entity
+            this.mesh.userData.entity = this;
+        }
+    }
+
+    updateColor(newColor) {
+        super.updateColor(newColor);
+        
+        // Update the color of all blocks in the numberblock
+        if (this.type === 'numberblock' && this.mesh) {
+            // Delegate to Numberblock's updateColor if we can
+            const numberblockRef = this.mesh.userData.numberblockRef;
+            if (numberblockRef && typeof numberblockRef.updateColor === 'function') {
+                numberblockRef.updateColor(newColor);
+            } else {
+                // Otherwise traverse all children and update materials
+                this.mesh.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        child.material.color.set(newColor);
+                    }
+                });
+            }
+        }
+    }
+}
+
+// Export for use in other modules
+if (typeof window !== 'undefined') {
+    window.Player = Player;
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = { Player };
 }
  
  

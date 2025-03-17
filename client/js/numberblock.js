@@ -269,7 +269,7 @@ class Numberblock {
     // Update the position of the HTML number tag in render loop
     updateNumberTagPosition(camera, renderer) {
         // Previous functionality disabled - no longer using HTML elements for tags
-        // Now fully using the HUD we created in index.html and main.js
+        // Now fully using the HUD we created in index.html and main-fixed.js
     }
     
     // Dispose any allocated resources

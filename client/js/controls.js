@@ -8,8 +8,7 @@ window.moveRight = false;
 window.turnLeft = false;    // New variable for Q key turning
 window.turnRight = false;   // New variable for E key turning
 window.canJump = false;
-// isFirstPerson is a global variable attached to the window object in main.js
-
+// isFirstPerson is a global variable attached to the window object in main-fixed.js
 window.prevTime = performance.now();
 window.velocity = new THREE.Vector3();
 window.direction = new THREE.Vector3();
