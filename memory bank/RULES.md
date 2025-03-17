@@ -1,12 +1,20 @@
 # Development Rules and Notes
 
-## PowerShell Command Issues
+## Server Management
 
-## restarting server / game
-- Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force
-PS 
--  npm start  
+### Restarting the Numberblocks Server
+When testing changes, you'll need to properly stop and restart the Node.js server:
 
+```powershell
+# STEP 1: Kill all Node.js processes (safer and more reliable method)
+taskkill /F /IM node.exe
+
+# STEP 2: Start the server using npm
+npm start
+```
+
+> NOTE: The previous method using `Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force` 
+> has been found to be unreliable and may cause issues.
 
 ### Directory Creation
 - When creating multiple directories at once with PowerShell's `mkdir` command, you must use quotes when specifying paths with spaces or multiple directories:

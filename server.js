@@ -3,7 +3,7 @@ const http = require('http');
 const express = require('express');
 const { Server } = require('colyseus');
 const { Room } = require("colyseus");
-const { Schema, type } = require("@colyseus/schema");
+const { Schema, MapSchema, type } = require("@colyseus/schema");
 const path = require('path');
 
 // Define the state schema for Colyseus
@@ -12,12 +12,13 @@ class Player extends Schema {
         super();
         this.x = 0;
         this.y = 1;
-        this.z = 0;
+        this.z = 5;
         this.value = 1;
         this.rotationY = 0;
         this.pitch = 0;
         this.operator = null;
-        this.color = null;
+        this.color = "#FFFFFF";
+        this.name = "";
     }
 }
 
@@ -35,9 +36,9 @@ class Operator extends Schema {
 class GameState extends Schema {
     constructor() {
         super();
-        this.players = {};
-        this.operators = {};
-        this.staticNumberblocks = {};
+        this.players = new MapSchema();
+        this.operators = new MapSchema();
+        this.staticNumberblocks = new MapSchema();
     }
 }
 
@@ -50,6 +51,7 @@ type("number")(Player.prototype, "rotationY");
 type("number")(Player.prototype, "pitch");
 type("string")(Player.prototype, "operator");
 type("string")(Player.prototype, "color");
+type("string")(Player.prototype, "name");
 
 type("string")(Operator.prototype, "id");
 type("string")(Operator.prototype, "type");
@@ -90,6 +92,8 @@ class NumberblocksRoom extends Room {
         this.createStaticNumberblock("static4", 5, 0, 0, -10);
         this.createStaticNumberblock("static5", 1, 5, 0, -10);
         
+        console.log("Room initialized with GameState:", this.state);
+        
         // Listen for messages from clients
         this.onMessage("move", (client, message) => {
             const player = this.state.players[client.sessionId];
@@ -100,15 +104,26 @@ class NumberblocksRoom extends Room {
                 const dz = message.z - player.z;
                 
                 // Simple distance check for speed hacking prevention
-                if (Math.sqrt(dx * dx + dz * dz) <= speedLimit) {
+                const distance = Math.sqrt(dx * dx + dz * dz);
+                if (distance <= speedLimit * 2) { // Allow some flexibility with speed
                     player.x = message.x;
                     player.y = message.y;
                     player.z = message.z;
                     player.rotationY = message.rotationY;
                     player.pitch = message.pitch;
+                    
+                    // Debug log occasional position updates (every 5 seconds)
+                    if (Math.random() < 0.01) {
+                        console.log(`Player ${client.sessionId} at position: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)})`);
+                    }
                 } else {
-                    console.log(`Rejected movement from ${client.sessionId}: too fast`);
-                    // Could send a correction message here
+                    console.log(`Rejected movement from ${client.sessionId}: too fast (${distance.toFixed(2)} > ${speedLimit.toFixed(2)})`);
+                    // Send correction message
+                    client.send("correction", {
+                        x: player.x,
+                        y: player.y,
+                        z: player.z
+                    });
                 }
             }
         });
@@ -118,6 +133,9 @@ class NumberblocksRoom extends Room {
             const operator = this.state.operators[message.id];
             
             if (player && operator) {
+                // Set the player's operator explicitly
+                player.operator = operator.type;
+                
                 // Apply operator effect
                 if (operator.type === "plus") {
                     player.value++;
@@ -211,25 +229,37 @@ class NumberblocksRoom extends Room {
     }
     
     onJoin(client, options) {
-        console.log(`${client.sessionId} joined the game`);
+        console.log(`Client joined: ${client.sessionId}`);
         
-        // Create player with initial state
+        // Create a new player instance
         const player = new Player();
+        
+        // Set initial player position
         player.x = 0;
         player.y = 1;
-        player.z = 5; // Starting position
+        player.z = 5; // Start slightly behind origin
+        
+        // Set player value and other properties
         player.value = 1;
+        // Use client ID as the player name for now
+        player.name = client.sessionId;
         player.color = this.getColorForPlayer(Object.keys(this.state.players).length);
         
-        // Add player to room state
-        this.state.players[client.sessionId] = player;
+        // Add player to game state - using .set() method for MapSchema
+        this.state.players.set(client.sessionId, player);
+        
+        console.log(`Player ${player.name} (${client.sessionId}) joined with color ${player.color}`);
+        console.log(`Current players in room:`, JSON.stringify(this.state.players));
+        console.log(`Total players:`, this.state.players.size);
     }
     
     onLeave(client, consented) {
         console.log(`${client.sessionId} left the game`);
         
-        // Remove player from room state
-        delete this.state.players[client.sessionId];
+        // Remove player from room state - use delete() method for MapSchema
+        this.state.players.delete(client.sessionId);
+        
+        console.log(`Player ${client.sessionId} removed. Remaining players: ${this.state.players.size}`);
     }
     
     // Get a distinct color for each player

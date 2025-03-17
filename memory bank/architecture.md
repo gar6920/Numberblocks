@@ -65,6 +65,14 @@ The client is responsible for rendering the game, handling user inputs, and comm
 - Session persistence with reconnection support
 - Room-based multiplayer with shared state
 - Message-based communication for game events
+- Schema-based state synchronization with type annotations
+- Player list UI showing all connected players
+
+**Schema Implementation:**
+- Proper MapSchema collections for players, operators, and static objects
+- Type annotations for all schema properties
+- Structured synchronization patterns for consistent state updates
+- Multiple client-side approaches to handle schema data access
 
 ## File Structure
 ```

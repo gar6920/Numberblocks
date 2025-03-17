@@ -1,214 +1,363 @@
-// Numberblocks game - Network functionality for Colyseus integration
-
-// Global variables for networking
-let room = null;
+// Network configuration
+const endpoint = 'ws://localhost:3000';
 let client = null;
-let players = {}; // Store other player objects by sessionId
-let operators = {}; // Store operators by their id
-let staticNumberblocks = {}; // Store static numberblocks
-let staticNumberblocksVisuals = {}; // Store static numberblock visuals
-let localSessionId = null; // Store our own session ID
-let playerUpdateFrequency = 1000 / 10; // Update server 10 times per second
-let lastUpdateTime = 0;
+let room = null;
 
-// Initialize client and connect to Colyseus server
+// Store references to UI elements for players
+let playerListElement = null;
+let playerCountElement = null;
+
+// Make sure UI references are available after DOM loads
+document.addEventListener('DOMContentLoaded', () => {
+    playerListElement = document.getElementById('player-list');
+    playerCountElement = document.getElementById('player-count');
+    
+    // Set up player list toggle via click
+    const playerListHeader = document.getElementById('player-list-header');
+    if (playerListHeader) {
+        playerListHeader.addEventListener('click', togglePlayerList);
+    }
+});
+
+// Function to get color based on Numberblock value
+function getColorForValue(value) {
+    const colors = [
+        "#FF0000", // Red (1)
+        "#FFA500", // Orange (2)
+        "#FFFF00", // Yellow (3)
+        "#008000", // Green (4)
+        "#0000FF", // Blue (5)
+        "#800080", // Purple (6)
+        "#FFC0CB", // Pink (7)
+        "#A52A2A", // Brown (8)
+        "#808080", // Grey (9)
+        "#FFFFFF"  // White (10+)
+    ];
+    
+    if (value <= 0) return "#CCCCCC"; // Default for invalid values
+    if (value > colors.length) return colors[colors.length - 1]; // Use the last color for large values
+    return colors[value - 1]; // Arrays are 0-indexed, but our values start at 1
+}
+
+// Initialize the networking
 async function initNetworking() {
-    console.log("Initializing networking with Colyseus...");
-    
-    // Create Colyseus client
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const endpoint = `${protocol}://${window.location.hostname}:${window.location.port}`;
-    client = new Colyseus.Client(endpoint);
-    
     try {
-        // Try to reconnect with the last session, otherwise create new
-        const reconnectId = localStorage.getItem('numberblocks_session_id');
+        console.log(`Initializing networking with endpoint: ${endpoint}`);
+        client = new Colyseus.Client(endpoint);
         
-        // Join or create a room
-        if (reconnectId) {
-            try {
-                room = await client.reconnect(reconnectId);
-                console.log("Successfully reconnected to previous session!");
-            } catch (reconnectError) {
-                console.log("Reconnection failed, creating new session");
-                room = await client.joinOrCreate("numberblocks");
-            }
-        } else {
-            room = await client.joinOrCreate("numberblocks");
-            console.log("Successfully joined Numberblocks room!");
-        }
+        // Join with a player name
+        const playerName = `Player${Math.floor(Math.random() * 1000)}`;
+        console.log("Attempting to join room with name:", playerName);
         
-        // Store our session ID for potential reconnection
-        localSessionId = room.sessionId;
-        localStorage.setItem('numberblocks_session_id', room.sessionId);
-        console.log("My session ID:", localSessionId);
+        // Join the room
+        room = await client.joinOrCreate("numberblocks", { name: playerName });
+        console.log(`Connected to server with session ID: ${room.sessionId}`);
         
-        // Expose room to global scope for debugging
-        window.room = room;
+        // Setup connection message handlers
+        setupMessageHandlers();
         
-        // Set up event listeners for room state changes
-        setupRoomHandlers();
+        // Setup state change listeners
+        setupStateChangeListeners();
         
-        // Add basic error handler
-        room.onError((code, message) => {
-            console.error(`Room error (${code}): ${message}`);
-            
-            // Handle fatal connection errors by clearing session and reloading
-            if (code === 1006 || message.includes("serializer")) {
-                console.log("Serialization error detected, clearing session and reloading");
-                localStorage.removeItem('numberblocks_session_id');
-                
-                // Reload after a small delay
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-            }
-        });
-        
-        return true;
+        return room;
     } catch (error) {
-        console.error("Failed to join Numberblocks room:", error);
-        return false;
+        console.error(`Error connecting to Colyseus server: ${error}`);
+        // Don't throw, just log the error and continue - allows game to work in offline mode
+        console.log("Continuing in offline mode");
     }
 }
 
-// Set up handlers for room state changes
-function setupRoomHandlers() {
-    // Handle initial state and state changes
-    room.onStateChange((state) => {
-        // This is called whenever the room state changes
-        console.log("Room state updated:", state);
-    });
-    
-    // Handle when a player joins
-    room.state.players.onAdd((player, sessionId) => {
-        console.log(`Player ${sessionId} joined`);
-        
-        // Skip if this is ourselves (we'll handle local player differently)
-        if (sessionId === localSessionId) {
-            return;
-        }
-        
-        // Create a new numberblock for this player
-        const numberblock = new Numberblock(player.value, player.color);
-        scene.add(numberblock.mesh);
-        
-        // Store the player object
-        players[sessionId] = {
-            sessionId: sessionId,
-            numberblock: numberblock,
-            lastKnownPosition: new THREE.Vector3(player.x, player.y, player.z),
-            currentPosition: new THREE.Vector3(player.x, player.y, player.z),
-            rotationY: player.rotationY,
-            pitch: player.pitch,
-        };
-        
-        // Add player to the player list UI
-        updatePlayerListUI();
-        
-        // Listen for player property changes
-        player.onChange(() => {
-            // Update player value if needed
-            if (players[sessionId].numberblock.value !== player.value) {
-                players[sessionId].numberblock.value = player.value;
-                players[sessionId].numberblock.createNumberblock(); // Update visual to match new value
-            }
-            
-            // Update position and rotation data
-            players[sessionId].lastKnownPosition.copy(players[sessionId].currentPosition);
-            players[sessionId].currentPosition.set(player.x, player.y, player.z);
-            players[sessionId].rotationY = player.rotationY;
-            players[sessionId].pitch = player.pitch;
-        });
-    });
-    
-    // Handle when a player leaves
-    room.state.players.onRemove((player, sessionId) => {
-        console.log(`Player ${sessionId} left`);
-        
-        // Clean up player object if it exists
-        if (players[sessionId]) {
-            // Remove mesh from scene
-            scene.remove(players[sessionId].numberblock.mesh);
-            
-            // Remove player from our list
-            delete players[sessionId];
-            
-            // Update UI
-            updatePlayerListUI();
-        }
-    });
-    
-    // Handle static numberblocks
-    room.state.staticNumberblocks.onAdd((numberblock, id) => {
-        console.log(`Static numberblock ${id} added with value ${numberblock.value}`);
-        staticNumberblocks[id] = numberblock;
-        
-        // Create visual representation if in main module
-        if (typeof createStaticNumberblockVisual === 'function') {
-            createStaticNumberblockVisual(id, numberblock);
-        }
-    });
-    
-    // Handle static numberblock changes
-    room.state.staticNumberblocks.onChange((numberblock, id) => {
-        console.log(`Static numberblock ${id} changed`);
-        
-        // If the value changed, update the visual
-        if (staticNumberblocksVisuals[id] && staticNumberblocksVisuals[id].value !== numberblock.value) {
-            if (typeof updateStaticNumberblockVisual === 'function') {
-                updateStaticNumberblockVisual(id, numberblock);
-            }
-        }
-    });
-    
-    // Handle operators being added
-    room.state.operators.onAdd((operator, operatorId) => {
-        console.log(`Operator ${operatorId} (${operator.type}) added`);
-        
-        // Create a new operator and add it to the scene
-        const newOperator = new Operator(operator.type, scene);
-        newOperator.setPosition(operator.x, operator.y, operator.z);
-        
-        // Store the operator
-        operators[operatorId] = {
-            id: operatorId,
-            operator: newOperator
-        };
-    });
-    
-    // Handle operators being removed
-    room.state.operators.onRemove((operator, operatorId) => {
-        console.log(`Operator ${operatorId} removed`);
-        
-        // Clean up operator if it exists
-        if (operators[operatorId]) {
-            operators[operatorId].operator.remove();
-            delete operators[operatorId];
-        }
-    });
-}
-
-// Send player position and rotation to the server
-function sendPlayerUpdate(position, rotationY, pitch, value) {
+// Setup message handlers
+function setupMessageHandlers() {
     if (!room) return;
     
-    const now = performance.now();
-    if (now - lastUpdateTime >= playerUpdateFrequency) {
-        lastUpdateTime = now;
+    // Handle errors
+    room.onError((code, message) => {
+        console.error(`Room error: ${code} - ${message}`);
+    });
+    
+    // Handle leaving
+    room.onLeave((code) => {
+        console.log(`Left room with code ${code}`);
+    });
+    
+    // Handle messages
+    room.onMessage("*", (type, message) => {
+        console.log(`Received message of type ${type}:`, message);
+    });
+}
+
+// Setup state change listeners
+function setupStateChangeListeners() {
+    if (!room) return;
+    
+    // Debug: Log room id and sessionId
+    console.log(`Room ID: ${room.id}, Session ID: ${room.sessionId}`);
+    
+    // First state sync
+    room.onStateChange.once((state) => {
+        console.log("Initial state synchronized:", state);
         
-        room.send("move", {
-            x: position.x,
-            y: position.y,
-            z: position.z,
-            rotationY: rotationY,
-            pitch: pitch
-        });
+        // Explicitly verify schema iteration is working
+        if (state.players) {
+            console.log("VERIFICATION: Testing schema iteration...");
+            state.players.forEach((player, sessionId) => {
+                console.log("PLAYER DATA:", sessionId, player.name, player.x, player.y, player.z, player.value, player.color);
+            });
+        } else {
+            console.error("VERIFICATION FAILED: players collection missing from state!");
+        }
+        
+        // Setup room event handlers now that we have the state
+        setupRoomHandlers();
+    });
+    
+    // Handle ongoing state changes
+    room.onStateChange((state) => {
+        // Log periodic state updates
+        console.log("State updated, current players:");
+        if (state.players) {
+            state.players.forEach((player, sessionId) => {
+                console.log(`Player ${sessionId}: value=${player.value}, position=(${player.x},${player.y},${player.z})`);
+            });
+        }
+        
+        updatePlayerListUI();
+    });
+}
+
+// Set up room event handlers after state is available
+function setupRoomHandlers() {
+    if (!room || !room.state) {
+        console.error("Cannot setup handlers: room or state is not initialized");
+        return;
+    }
+    
+    console.log("Setting up room handlers with state:", room.state);
+    
+    // Watch for player additions and removals
+    if (room.state.players) {
+        // Set up player listeners with error handling
+        try {
+            // Listen for player additions
+            room.state.players.onAdd = function(player, sessionId) {
+                console.log(`Player added: ${sessionId}`, player);
+                
+                // Also listen for changes to this player
+                player.onChange = function() {
+                    console.log(`Player ${sessionId} changed:`, player);
+                    updatePlayerListUI();
+                };
+                
+                // Update UI when a player is added
+                updatePlayerListUI();
+            };
+            
+            // Listen for player removals
+            room.state.players.onRemove = function(player, sessionId) {
+                console.log(`Player removed: ${sessionId}`);
+                updatePlayerListUI();
+            };
+            
+            console.log("Successfully set up player schema listeners");
+        } catch (error) {
+            console.error("Error setting up schema listeners:", error);
+            // Fall back to periodic updates
+            console.log("Falling back to periodic updates");
+            setInterval(updatePlayerListUI, 1000);
+        }
+    } else {
+        console.warn("No players collection found in state:", room.state);
+        // Fallback to periodic updates
+        setInterval(updatePlayerListUI, 1000);
+    }
+    
+    // Initial update
+    updatePlayerListUI();
+    
+    // Set up key handlers for player list toggle
+    setupPlayerListKeyControls();
+}
+
+// Update player list in UI
+function updatePlayerListUI() {
+    // Get references if not yet set
+    if (!playerListElement) playerListElement = document.getElementById('player-list');
+    if (!playerCountElement) playerCountElement = document.getElementById('player-count');
+    
+    if (!playerListElement || !playerCountElement) {
+        console.log("Player list elements not yet available in DOM");
+        return;
+    }
+    
+    // Clear current list
+    playerListElement.innerHTML = '';
+    
+    // Default to 0 players
+    let playerCount = 0;
+    
+    // Detailed debug for state structure
+    if (room && room.state) {
+        console.log("Current room state:", JSON.stringify(room.state));
+    }
+    
+    // Log the current state of players
+    console.log("Player state:", room?.state?.players);
+    
+    // Try different approaches to get players
+    if (room && room.state && room.state.players) {
+        try {
+            // APPROACH 1: Use schema forEach if available (most reliable for Colyseus schemas)
+            if (typeof room.state.players.forEach === 'function') {
+                console.log("Using forEach method");
+                room.state.players.forEach((player, key) => {
+                    console.log(`Player [${key}]:`, player);
+                    addPlayerToList(player, key);
+                    playerCount++;
+                });
+            }
+            // APPROACH 2: Use manual iteration over entries
+            else if (typeof room.state.players.entries === 'function') {
+                console.log("Using entries method");
+                for (const [key, player] of room.state.players.entries()) {
+                    console.log(`Player [${key}]:`, player);
+                    addPlayerToList(player, key);
+                    playerCount++;
+                }
+            } 
+            // APPROACH 3: Use standard object iteration
+            else {
+                console.log("Using object iteration");
+                // Get all players
+                try {
+                    // Try to use toJSON first (some versions of Colyseus)
+                    const playersObj = room.state.players.toJSON ? room.state.players.toJSON() : room.state.players;
+                    
+                    // Iterate through players
+                    for (const key in playersObj) {
+                        if (playersObj.hasOwnProperty(key)) {
+                            const player = playersObj[key];
+                            console.log(`Player [${key}]:`, player);
+                            addPlayerToList(player, key);
+                            playerCount++;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error iterating players:", e);
+                }
+            }
+        } catch (error) {
+            console.error("Error updating player list:", error);
+        }
+    }
+    
+    console.log(`Total player count: ${playerCount}`);
+    
+    // Update player count in header
+    playerCountElement.textContent = `(${playerCount})`;
+}
+
+// Helper function to add a player to the list UI
+function addPlayerToList(player, sessionId) {
+    if (!player) {
+        console.warn(`Skipping undefined player with ID ${sessionId}`);
+        return;
+    }
+    
+    console.log(`Creating UI entry for player ${sessionId}`);
+    
+    // Create player entry
+    const playerEntry = document.createElement('div');
+    playerEntry.className = 'player-entry';
+    
+    // Create color indicator
+    const colorIndicator = document.createElement('div');
+    colorIndicator.className = 'player-color';
+    colorIndicator.style.backgroundColor = player.color || getColorForValue(player.value || 1);
+    
+    // Player info - show "You" for local player
+    const playerInfo = document.createElement('div');
+    playerInfo.className = 'player-info';
+    
+    // Determine display name
+    let displayName;
+    let valueText = player.value || 1;
+    
+    if (room && sessionId === room.sessionId) {
+        displayName = "You";
+    } else {
+        // Use name property if available, fallback to session ID
+        displayName = player.name || `Player-${sessionId.substring(0, 4)}`;
+    }
+    
+    playerInfo.textContent = `${displayName} (${valueText})`;
+    
+    // Log the entry we're adding to the UI
+    console.log(`Adding player entry: ${displayName} with value ${valueText} and color ${colorIndicator.style.backgroundColor}`);
+    
+    // Add elements to entry
+    playerEntry.appendChild(colorIndicator);
+    playerEntry.appendChild(playerInfo);
+    playerListElement.appendChild(playerEntry);
+}
+
+// Get position from player object, with validation
+function getPlayerPosition(player) {
+    if (!player) return { x: 0, y: 0, z: 0 };
+    return {
+        x: player.x || 0,
+        y: player.y || 0,
+        z: player.z || 0,
+        rotationY: player.rotationY || 0,
+        pitch: player.pitch || 0
+    };
+}
+
+// Set up key event listeners for player list toggle
+function setupPlayerListKeyControls() {
+    // Using keydown to capture Tab key
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Tab') {
+            event.preventDefault(); // Prevent default tab behavior
+            togglePlayerList(); // Use a dedicated toggle function
+        }
+    });
+}
+
+// Function to toggle player list visibility
+function togglePlayerList() {
+    const playerList = document.getElementById('player-list');
+    const collapseIcon = document.getElementById('collapse-icon');
+    
+    if (!playerList || !collapseIcon) return;
+    
+    console.log("Toggling player list visibility");
+    
+    if (playerList.style.display === 'none') {
+        playerList.style.display = 'block';
+        collapseIcon.textContent = '▼';
+    } else {
+        playerList.style.display = 'none';
+        collapseIcon.textContent = '▶';
     }
 }
 
-// Send operator collection to the server
-function sendOperatorCollection(operatorId) {
+// Send player update to server
+function sendPlayerUpdate(position, rotation, pitch, value) {
+    if (!room) return;
+    
+    // Send position and rotation update to server
+    room.send("move", {
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        rotationY: rotation,
+        pitch: pitch
+    });
+}
+
+// Send operator collection message
+function sendOperatorCollect(operatorId) {
     if (!room) return;
     
     room.send("collectOperator", {
@@ -216,7 +365,7 @@ function sendOperatorCollection(operatorId) {
     });
 }
 
-// Send numberblock collision to the server
+// Send numberblock collision message
 function sendNumberblockCollision(targetId) {
     if (!room) return;
     
@@ -225,153 +374,12 @@ function sendNumberblockCollision(targetId) {
     });
 }
 
-// Interpolate other players' positions
-function interpolatePlayerPositions(deltaTime) {
-    const lerpFactor = 0.2; // Adjust for smoother/faster movement
-    
-    Object.values(players).forEach(player => {
-        // Skip interpolation if positions are the same
-        if (player.lastKnownPosition.equals(player.currentPosition)) return;
-        
-        // Interpolate position
-        player.numberblock.mesh.position.lerpVectors(
-            player.lastKnownPosition,
-            player.currentPosition,
-            lerpFactor
-        );
-        
-        // Adjust numberblock rotation
-        // This is a simplistic approach; could be improved with quaternion interpolation
-        player.numberblock.mesh.rotation.y = player.rotationY;
-    });
-}
-
-// Update player list in UI
-function updatePlayerListUI() {
-    const playerListElement = document.getElementById('player-list');
-    if (!playerListElement) return;
-    
-    // Clear current list
-    playerListElement.innerHTML = '';
-    
-    // Add all players including local player
-    const allPlayers = { ...players };
-    if (room) {
-        // Only add local player to list if we have room connection
-        const myPlayer = room.state.players[localSessionId];
-        if (myPlayer) {
-            const colorDiv = document.createElement('div');
-            colorDiv.style.cssText = `
-                display: inline-block;
-                width: 15px;
-                height: 15px;
-                border-radius: 50%;
-                background-color: ${myPlayer.color || '#FF0000'};
-                margin-right: 5px;
-                vertical-align: middle;
-            `;
-            
-            const playerEntry = document.createElement('div');
-            playerEntry.innerHTML = `${colorDiv.outerHTML} You (${myPlayer.value})`;
-            playerEntry.style.marginBottom = '5px';
-            playerEntry.style.color = 'white';
-            playerListElement.appendChild(playerEntry);
-        }
-    }
-    
-    // Add other players
-    Object.entries(allPlayers).forEach(([sessionId, player]) => {
-        const remotePlayer = room.state.players[sessionId];
-        if (!remotePlayer) return;
-        
-        const colorDiv = document.createElement('div');
-        colorDiv.style.cssText = `
-            display: inline-block;
-            width: 15px;
-            height: 15px;
-            border-radius: 50%;
-            background-color: ${remotePlayer.color || '#FFFFFF'};
-            margin-right: 5px;
-            vertical-align: middle;
-        `;
-        
-        const playerEntry = document.createElement('div');
-        playerEntry.innerHTML = `${colorDiv.outerHTML} Player (${remotePlayer.value})`;
-        playerEntry.style.marginBottom = '5px';
-        playerEntry.style.color = 'white';
-        playerListElement.appendChild(playerEntry);
-    });
-}
-
-// Check for operator collision with player
-function checkOperatorCollisions(playerPosition, playerRadius) {
-    if (!room) return null;
-    
-    for (const [operatorId, operatorData] of Object.entries(operators)) {
-        const operatorMesh = operatorData.operator.mesh;
-        const operatorPos = operatorMesh.position;
-        
-        // Simple distance check
-        const dx = playerPosition.x - operatorPos.x;
-        const dy = playerPosition.y - operatorPos.y;
-        const dz = playerPosition.z - operatorPos.z;
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        
-        if (distance < (playerRadius + operatorData.operator.collisionRadius)) {
-            // Collision detected
-            return operatorId;
-        }
-    }
-    
-    return null;
-}
-
-// Check for numberblock collision with player
-function checkNumberblockCollisions(playerPosition, playerRadius) {
-    if (!room) return null;
-    
-    // Check collision with static numberblocks
-    for (const [blockId, blockData] of Object.entries(staticNumberblocks)) {
-        const blockMesh = staticNumberblocksVisuals[blockId].mesh;
-        const blockPos = blockMesh.position;
-        
-        // Simple distance check (could be improved with bounding box)
-        const dx = playerPosition.x - blockPos.x;
-        const dy = playerPosition.y - blockPos.y;
-        const dz = playerPosition.z - blockPos.z;
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        
-        if (distance < (playerRadius + 1.0)) { // Using 1.0 as a default block radius
-            // Collision detected
-            return blockId;
-        }
-    }
-    
-    // Check collision with other players (except self)
-    for (const [sessionId, playerData] of Object.entries(players)) {
-        // Skip ourselves
-        if (sessionId === localSessionId) continue;
-        
-        const otherPlayerPos = playerData.numberblock.mesh.position;
-        
-        // Simple distance check
-        const dx = playerPosition.x - otherPlayerPos.x;
-        const dy = playerPosition.y - otherPlayerPos.y;
-        const dz = playerPosition.z - otherPlayerPos.z;
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        
-        if (distance < (playerRadius + 1.0)) { // Using 1.0 as a default player radius
-            // Collision detected
-            return sessionId;
-        }
-    }
-    
-    return null;
-}
-
-// Clean up networking resources when leaving or closing the page
-window.addEventListener('beforeunload', () => {
-    if (room) {
-        room.leave();
-    }
-});
+// Make functions available globally
+window.initNetworking = initNetworking;
+window.updatePlayerListUI = updatePlayerListUI;
+window.getPlayerPosition = getPlayerPosition;
+window.sendPlayerUpdate = sendPlayerUpdate;
+window.sendOperatorCollect = sendOperatorCollect;
+window.sendNumberblockCollision = sendNumberblockCollision;
+window.getColorForValue = getColorForValue;
+window.togglePlayerList = togglePlayerList;

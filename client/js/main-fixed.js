@@ -1,23 +1,16 @@
 // Numberblocks game - Main game logic
 
 // Debug support
-const DEBUG = true;
-const debugPanel = document.getElementById('debug-panel');
+const DEBUG = false;
 
 function debug(message, isError = false) {
     if (!DEBUG) return;
     
-    console.log(`[DEBUG] ${message}`);
-    
-    if (debugPanel) {
-        const messageElement = document.createElement('div');
-        messageElement.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        if (isError) {
-            messageElement.style.color = '#ff5555';
-            console.error(`[ERROR] ${message}`);
-        }
-        debugPanel.appendChild(messageElement);
-        debugPanel.scrollTop = debugPanel.scrollHeight;
+    // Log to console only when debug is enabled
+    if (isError) {
+        console.error(`[ERROR] ${message}`);
+    } else {
+        console.log(`[DEBUG] ${message}`);
     }
 }
 
@@ -312,13 +305,25 @@ function setupPointerLockControls() {
         controls = new THREE.PointerLockControls(camera, document.body);
         scene.add(controls.getObject());
         
+        const lockInstructions = document.getElementById('lock-instructions');
+        
         const onPointerLockChange = function() {
             if (document.pointerLockElement === document.body) {
                 debug('Pointer Lock enabled');
                 controls.enabled = true;
+                
+                // Hide the lock instructions overlay when controls are enabled
+                if (lockInstructions) {
+                    lockInstructions.style.display = 'none';
+                }
             } else {
                 debug('Pointer Lock disabled');
                 controls.enabled = false;
+                
+                // Show the instructions again when controls are disabled
+                if (lockInstructions) {
+                    lockInstructions.style.display = 'block';
+                }
             }
         };
         
@@ -560,8 +565,15 @@ function initNetworkingSystem() {
         if (typeof window.initNetworking === 'function') {
             debug('Found networking module, attempting to connect...');
             window.initNetworking()
-                .then(() => {
+                .then((roomInstance) => {
                     debug('Networking initialized successfully');
+                    window.gameRoom = roomInstance; // Store room instance globally
+                    
+                    // Manually trigger player list update after successful connection
+                    if (typeof window.updatePlayerListUI === 'function') {
+                        setTimeout(window.updatePlayerListUI, 500);
+                        setTimeout(window.updatePlayerListUI, 2000);
+                    }
                 })
                 .catch(error => {
                     debug(`Networking error: ${error.message}`, true);
@@ -962,12 +974,12 @@ function updatePlayerPositionThirdPerson() {
         
         // Send position to server for multiplayer
         if (typeof window.room !== 'undefined' && window.room) {
-            window.room.send("updatePosition", {
-                x: playerNumberblock.mesh.position.x,
-                y: playerNumberblock.mesh.position.y,
-                z: playerNumberblock.mesh.position.z,
-                rotation: playerNumberblock.mesh.rotation.y
-            });
+            window.sendPlayerUpdate(
+                playerNumberblock.mesh.position, 
+                playerNumberblock.mesh.rotation.y,
+                0, // pitch not used in third-person
+                playerValue
+            );
         }
         
         prevTime = time;
@@ -1080,12 +1092,12 @@ function updatePlayerPosition() {
     
     // Send position to server for multiplayer
     if (typeof window.room !== 'undefined' && window.room) {
-        window.room.send("updatePosition", {
-            x: playerNumberblock.mesh.position.x,
-            y: playerNumberblock.mesh.position.y,
-            z: playerNumberblock.mesh.position.z,
-            rotation: controls.getObject().rotation.y
-        });
+        window.sendPlayerUpdate(
+            playerNumberblock.mesh.position, 
+            playerNumberblock.mesh.rotation.y,
+            0, // pitch not used in first-person
+            playerValue
+        );
     }
     
     prevTime = time;

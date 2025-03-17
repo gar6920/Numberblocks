@@ -8,20 +8,6 @@
     <style>
         body { margin: 0; padding: 0; overflow: hidden; }
         #game-canvas { display: block; width: 100vw; height: 100vh; }
-        #debug-panel {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            color: white;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 12px;
-            max-height: 300px;
-            max-width: 500px;
-            overflow: auto;
-            z-index: 1000;
-        }
         #lock-instructions {
             position: absolute;
             top: 50%;
@@ -34,12 +20,83 @@
             border-radius: 10px;
             z-index: 999;
         }
+        #game-hud {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            z-index: 100;
+        }
+        .hud-value {
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            text-align: right;
+        }
+        #multiplayer-panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 5px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            width: 120px;
+            z-index: 999;
+            font-size: 12px;
+            display: block;
+            transition: all 0.3s ease;
+        }
+        #player-list-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #player-list-header h3 {
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+        }
+        #player-list {
+            margin-top: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            transition: height 0.3s ease;
+        }
+        .player-entry {
+            padding: 3px;
+            margin-bottom: 3px;
+            display: flex;
+            align-items: center;
+            font-size: 11px;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+        .player-color {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            flex-shrink: 0;
+        }
+        .player-info {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #collapse-icon {
+            transition: transform 0.3s ease;
+        }
     </style>
 </head>
 <body>
     <canvas id="game-canvas"></canvas>
-    
-    <div id="debug-panel"></div>
     
     <div id="lock-instructions">
         <h2>Numberblocks Game</h2>
@@ -52,27 +109,27 @@
         </ul>
     </div>
     
-    <!-- Game HUD -->
-    <div id="game-hud" class="hud">
-    </div>
-    
-    <!-- Multiplayer panel -->
-    <div id="multiplayer-panel" class="overlay" style="display: none; top: 10px; right: 10px; text-align: right; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;">
-        <h3>Players</h3>
+    <!-- Multiplayer panel - Players List -->
+    <div id="multiplayer-panel">
+        <div id="player-list-header">
+            <h3>Players <span id="player-count">(0)</span></h3>
+            <span id="collapse-icon">▼</span>
+        </div>
         <div id="player-list"></div>
     </div>
+    
+    <!-- Game HUD -->
+    <div id="game-hud"></div>
     
     <!-- Three.js library via CDN -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
     
     <!-- Colyseus client library -->
-    <script src="https://unpkg.com/colyseus.js@0.14.13/dist/colyseus.js"></script>
+    <script src="https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js"></script>
     
-    <!-- Game JavaScript files -->
-    <script src="js/collision.js"></script>
+    <!-- Numberblocks game scripts -->
     <script src="js/numberblock.js"></script>
-    <script src="js/operator.js"></script>
     <script src="js/network.js"></script>
     <script src="js/main-fixed.js"></script>
 </body>

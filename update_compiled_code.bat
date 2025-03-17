@@ -39,6 +39,16 @@ type "server.js" >> compiled_code.txt
 echo. >> compiled_code.txt
 echo. >> compiled_code.txt
 
+:: Package.json file
+echo Processing package.json...
+echo ===================================================== >> compiled_code.txt
+echo FILE: package.json >> compiled_code.txt
+echo ===================================================== >> compiled_code.txt
+echo. >> compiled_code.txt
+type "package.json" >> compiled_code.txt
+echo. >> compiled_code.txt
+echo. >> compiled_code.txt
+
 :: Client HTML files
 for %%F in (client\*.html) do (
   echo Processing client\%%~nxF...
@@ -58,24 +68,34 @@ for %%F in (client\css\*.css) do (
   echo FILE: client\css\%%~nxF >> compiled_code.txt
   echo ===================================================== >> compiled_code.txt
   echo. >> compiled_code.txt
-  type "client\%%F" >> compiled_code.txt
+  type "client\css\%%~nxF" >> compiled_code.txt
   echo. >> compiled_code.txt
   echo. >> compiled_code.txt
 )
 
 :: Client JavaScript files
+echo Processing client JavaScript files...
 for %%F in (client\js\*.js) do (
   echo Processing client\js\%%~nxF...
   echo ===================================================== >> compiled_code.txt
   echo FILE: client\js\%%~nxF >> compiled_code.txt
   echo ===================================================== >> compiled_code.txt
   echo. >> compiled_code.txt
-  type "client\%%F" >> compiled_code.txt
+  type "client\js\%%~nxF" >> compiled_code.txt
   echo. >> compiled_code.txt
   echo. >> compiled_code.txt
 )
 
-echo Compilation complete!
+:: Count total processed files
+set /a total=0
+for %%F in ("memory bank\*.md") do set /a total+=1
+set /a total+=1 :: server.js
+set /a total+=1 :: package.json
+for %%F in (client\*.html) do set /a total+=1
+for %%F in (client\css\*.css) do set /a total+=1
+for %%F in (client\js\*.js) do set /a total+=1
+
+echo Compilation complete! Processed %total% files.
 echo The updated compiled_code.txt file now contains all code from the project.
 echo.
 
