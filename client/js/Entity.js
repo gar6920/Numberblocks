@@ -54,29 +54,32 @@ class Entity {
     }
 
     // Update the entity's position and rotation
-    updatePosition({ x, y, z, rotationY }) {
-        if (this.mesh) {
-            if (x !== undefined) {
-                this.x = x;
-                this.mesh.position.x = x;
-            }
-            
-            if (y !== undefined) {
-                this.y = y;
-                this.mesh.position.y = y;
-            }
-            
-            if (z !== undefined) {
-                this.z = z;
-                this.mesh.position.z = z;
-            }
-            
-            if (rotationY !== undefined) {
-                this.rotationY = rotationY;
-                this.mesh.rotation.y = rotationY;
-            }
+    updatePosition(pos) {
+        if (!pos) {
+            console.warn("updatePosition called with undefined position!");
+            return;
+        }
+    
+        const { x, y, z, rotationY } = pos;
+    
+        if (x !== undefined) {
+            this.x = x;
+            this.mesh.position.x = x;
+        }
+        if (y !== undefined) {
+            this.y = y;
+            this.mesh.position.y = y;
+        }
+        if (z !== undefined) {
+            this.z = z;
+            this.mesh.position.z = z;
+        }
+        if (rotationY !== undefined) {
+            this.rotationY = rotationY;
+            this.mesh.rotation.y = rotationY;
         }
     }
+    
 
     // Update the entity's value and rebuild the mesh if needed
     updateValue(newValue) {

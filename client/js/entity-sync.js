@@ -72,7 +72,6 @@ function removeStaticNumberblockVisual(blockId) {
     }
 }
 
-// Setup room listeners
 function setupRoomListeners() {
     if (!window.room) {
         console.error("No room available!");
@@ -81,64 +80,112 @@ function setupRoomListeners() {
 
     window.room.onStateChange.once((state) => {
         console.log("✅ State synchronized, setting up listeners.");
-
-        // Confirm 'players' is a MapSchema before adding listeners
-        if (state.players && typeof state.players.onAdd === 'function') {
-            state.players.onAdd((player, sessionId) => {
-                console.log(`Player ${sessionId} joined.`);
-                setupPlayerListeners(player, sessionId);
-            });
-
-            state.players.onRemove((player, sessionId) => {
-                console.log(`Player ${sessionId} left.`);
-                removePlayerVisual(sessionId);
-            });
-
-            state.players.forEach((player, sessionId) => {
-                console.log(`Existing player: ${sessionId}`);
+    
+        // Players (CORRECTED LOOP)
+        if (state.players) {
+            state.players.forEach((player, sessionId) => {  // <-- CORRECT METHOD
                 setupPlayerListeners(player, sessionId);
             });
         } else {
-            console.error("❌ state.players is not a valid MapSchema");
+            console.error("❌ state.players not found");
         }
-
-        // Operators collection listeners
-        if (state.operators && typeof state.operators.onAdd === 'function') {
-            state.operators.onAdd((operator, operatorId) => {
-                createOperatorVisual(operator, operatorId);
-            });
-
-            state.operators.onRemove((operator, operatorId) => {
-                removeOperatorVisual(operatorId);
-            });
-
-            state.operators.forEach((operator, operatorId) => {
+    
+        // Operators (CORRECTED LOOP)
+        if (state.operators) {
+            state.operators.forEach((operator, operatorId) => {  // <-- CORRECT METHOD
                 createOperatorVisual(operator, operatorId);
             });
         } else {
-            console.error("❌ state.operators is not a valid MapSchema");
+            console.error("❌ state.operators not found");
         }
-
-        // Static Numberblocks listeners
-        if (state.staticNumberblocks && typeof state.staticNumberblocks.onAdd === 'function') {
-            state.staticNumberblocks.onAdd((block, blockId) => {
-                createStaticNumberblockVisual(block, blockId);
-            });
-
-            state.staticNumberblocks.onRemove((block, blockId) => {
-                removeStaticNumberblockVisual(blockId);
-            });
-
-            state.staticNumberblocks.forEach((block, blockId) => {
+    
+        // Static Numberblocks (CORRECTED LOOP)
+        if (state.staticNumberblocks) {
+            state.staticNumberblocks.forEach((block, blockId) => {  // <-- CORRECT METHOD
                 createStaticNumberblockVisual(block, blockId);
             });
         } else {
-            console.error("❌ state.staticNumberblocks is not a valid MapSchema");
+            console.error("❌ state.staticNumberblocks not found");
         }
-
+    
         console.log("✅ Room listeners fully set up.");
     });
+    
+    
+
+    // Continuous state updates without schema methods
+    window.room.onStateChange((state) => {
+        // Players handled explicitly here because there's no onChange defined for them yet
+        state.players.forEach((playerState, sessionId) => {
+            if (playerState.x !== undefined && playerState.y !== undefined && playerState.z !== undefined) {
+                updatePlayerVisual(playerState, sessionId);
+            } else {
+                console.warn("[DEBUG] playerState has undefined position values:", sessionId, playerState);
+            }
+        });
+    
+        // Operators and staticNumberblocks are handled ALREADY via their onChange listeners
+        // REMOVE THE FOLLOWING LINES ENTIRELY:
+        /*
+        for (const operatorId in state.operators) {
+            updateOperatorVisual(state.operators[operatorId], operatorId);
+        }
+    
+        for (const blockId in state.staticNumberblocks) {
+            updateStaticNumberblockVisual(state.staticNumberblocks[blockId], blockId);
+        }
+        */
+    });
+    
 }
+
+// Update functions you need to implement if you haven't yet
+function updatePlayerVisual(playerState, sessionId) {
+    if (!playerState) {
+        console.warn(`[DEBUG] updatePlayerVisual called with undefined playerState for sessionId: ${sessionId}`);
+        return;
+    }
+
+    let playerVisual = window.visuals.players[sessionId];
+
+    if (!playerVisual) {
+        console.warn(`[DEBUG] Player visual doesn't exist yet for sessionId: ${sessionId}, creating now.`);
+        playerVisual = new Player({
+            id: sessionId,
+            name: playerState.name,
+            color: playerState.color,
+            value: playerState.value
+        });
+        scene.add(playerVisual.mesh);
+        window.visuals.players[sessionId] = playerVisual;
+    }
+
+    if (playerState.x === undefined || playerState.y === undefined || playerState.z === undefined) {
+        console.warn(`[DEBUG] playerState has undefined position values:`, playerState);
+        return;
+    }
+
+    playerVisual.updatePosition({
+        x: playerState.x,
+        y: playerState.y,
+        z: playerState.z,
+        rotationY: playerState.rotationY
+    });
+}
+
+
+function updateStaticNumberblockVisual(block, blockId) {
+    const blockVisual = window.visuals.staticNumberblocks[blockId];
+    if (blockVisual) {
+        blockVisual.update({
+            x: block.x,
+            y: block.y,
+            z: block.z,
+            value: block.value
+        });
+    }
+}
+
 
 // Define Operators Visual class
 window.OperatorsVisual = class OperatorsVisual {

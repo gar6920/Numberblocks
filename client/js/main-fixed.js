@@ -557,63 +557,50 @@ function updatePlayerPhysics(delta) {
     }
 }
 
-// Main animation loop
+// initialize your global visuals safely if not done already
+window.visuals = window.visuals || { players: {}, operators: {}, staticNumberblocks: {} };
+
+// animate loop (exactly like this)
 function animate() {
-    try {
-        // Request next animation frame 
-        requestAnimationFrame(animate);
-        
-        // Calculate delta time
-        const time = performance.now();
-        const delta = Math.min((time - prevTime) / 1000, 0.1); // Cap delta to avoid large jumps
-        
-        // Update player movement based on view mode
-        if (window.isFirstPerson) {
-            updatePlayerPhysics(delta);
-        } else {
-            updatePlayerPositionThirdPerson(time, delta);
-            updateThirdPersonCamera();
+    requestAnimationFrame(animate);  // continuous loop every frame
+
+    // Safely check if room and state exist
+    if (window.room && window.room.state && window.room.state.players) {
+        const playerStates = window.room.state.players;
+
+        // Safely loop through player states
+        for (const sessionId in playerStates) {
+            const playerState = playerStates[sessionId];
+            if (!playerState) continue; // safety check
+
+            // retrieve or create the visual representation
+            let playerVisual = window.visuals.players[sessionId];
+            if (!playerVisual) {
+                playerVisual = new Player({
+                    id: sessionId,
+                    name: playerState.name,
+                    color: playerState.color,
+                    value: playerState.value
+                });
+                scene.add(playerVisual.mesh);
+                window.visuals.players[sessionId] = playerVisual;
+            }
+
+            // safely update visual state (position and rotation)
+            playerVisual.mesh.position.set(playerState.x, playerState.y, playerState.z);
+            playerVisual.mesh.rotation.y = playerState.rotationY;
+
+            // safely update visual value
+            if (playerVisual.updateValue && playerState.value !== undefined) {
+                playerVisual.updateValue(playerState.value);
+            }
         }
-        
-        // Send input state to server at regular intervals
-        if (time - lastInputUpdate > inputUpdateInterval) {
-            sendInputUpdate();
-            lastInputUpdate = time;
-        }
-        
-        // Force position updates periodically for network
-        if (time - lastPositionUpdate > positionUpdateInterval) {
-            sendRegularPositionUpdate();
-            lastPositionUpdate = time;
-        }
-        
-        // Update remote player representations
-        if (window.updateRemotePlayers) {
-            window.updateRemotePlayers();
-        }
-        
-        // Update operators
-        updateOperators();
-        
-        // Check for collisions
-        if (playerNumberblock) {
-            checkCollisions();
-        }
-        
-        // Update debug overlay if it exists
-        if (window.DEBUG && window.updateDebugOverlay) {
-            window.updateDebugOverlay();
-        }
-        
-        // Render the scene
-        renderer.render(scene, camera);
-        
-        // Update game loop vars
-        prevTime = time;
-    } catch (error) {
-        debug(`Error in animate loop: ${error.message}`, true);
     }
+
+    // renderer call must be here (inside animate function)
+    renderer.render(scene, camera);
 }
+
 
 // Send input state to the server
 function sendInputUpdate() {

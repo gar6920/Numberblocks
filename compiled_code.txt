@@ -2729,7 +2729,6 @@ function removeStaticNumberblockVisual(blockId) {
     }
 }
 
-// Setup room listeners
 function setupRoomListeners() {
     if (!window.room) {
         console.error("No room available!");
@@ -2739,63 +2738,90 @@ function setupRoomListeners() {
     window.room.onStateChange.once((state) => {
         console.log("✅ State synchronized, setting up listeners.");
 
-        // Confirm 'players' is a MapSchema before adding listeners
-        if (state.players && typeof state.players.onAdd === 'function') {
-            state.players.onAdd((player, sessionId) => {
-                console.log(`Player ${sessionId} joined.`);
+        // Players
+        if (state.players) {
+            for (const sessionId in state.players) {
+                const player = state.players[sessionId];
                 setupPlayerListeners(player, sessionId);
-            });
-
-            state.players.onRemove((player, sessionId) => {
-                console.log(`Player ${sessionId} left.`);
-                removePlayerVisual(sessionId);
-            });
-
-            state.players.forEach((player, sessionId) => {
-                console.log(`Existing player: ${sessionId}`);
-                setupPlayerListeners(player, sessionId);
-            });
+            }
         } else {
-            console.error("❌ state.players is not a valid MapSchema");
+            console.error("❌ state.players not found");
         }
 
-        // Operators collection listeners
-        if (state.operators && typeof state.operators.onAdd === 'function') {
-            state.operators.onAdd((operator, operatorId) => {
+        // Operators
+        if (state.operators) {
+            for (const operatorId in state.operators) {
+                const operator = state.operators[operatorId];
                 createOperatorVisual(operator, operatorId);
-            });
-
-            state.operators.onRemove((operator, operatorId) => {
-                removeOperatorVisual(operatorId);
-            });
-
-            state.operators.forEach((operator, operatorId) => {
-                createOperatorVisual(operator, operatorId);
-            });
+            }
         } else {
-            console.error("❌ state.operators is not a valid MapSchema");
+            console.error("❌ state.operators not found");
         }
 
-        // Static Numberblocks listeners
-        if (state.staticNumberblocks && typeof state.staticNumberblocks.onAdd === 'function') {
-            state.staticNumberblocks.onAdd((block, blockId) => {
+        // Static Numberblocks
+        if (state.staticNumberblocks) {
+            for (const blockId in state.staticNumberblocks) {
+                const block = state.staticNumberblocks[blockId];
                 createStaticNumberblockVisual(block, blockId);
-            });
-
-            state.staticNumberblocks.onRemove((block, blockId) => {
-                removeStaticNumberblockVisual(blockId);
-            });
-
-            state.staticNumberblocks.forEach((block, blockId) => {
-                createStaticNumberblockVisual(block, blockId);
-            });
+            }
         } else {
-            console.error("❌ state.staticNumberblocks is not a valid MapSchema");
+            console.error("❌ state.staticNumberblocks not found");
         }
 
         console.log("✅ Room listeners fully set up.");
     });
+
+    // Continuous state updates without schema methods
+    window.room.onStateChange((state) => {
+        for (const sessionId in state.players) {
+            updatePlayerVisual(state.players[sessionId], sessionId);
+        }
+
+        for (const operatorId in state.operators) {
+            updateOperatorVisual(state.operators[operatorId], operatorId);
+        }
+
+        for (const blockId in state.staticNumberblocks) {
+            updateStaticNumberblockVisual(state.staticNumberblocks[blockId], blockId);
+        }
+    });
 }
+
+// Update functions you need to implement if you haven't yet
+function updatePlayerVisual(player, sessionId) {
+    // Update position, rotation, value, etc.
+    const playerVisual = window.visuals.players[sessionId];
+    if (playerVisual) {
+        playerVisual.updatePosition(player.x, player.y, player.z);
+        playerVisual.updateRotation(player.rotationY);
+        playerVisual.updateValue(player.value);
+    }
+}
+
+function updateOperatorVisual(operator, operatorId) {
+    const operatorVisual = window.visuals.operators[operatorId];
+    if (operatorVisual) {
+        operatorVisual.update({
+            x: operator.x,
+            y: operator.y,
+            z: operator.z,
+            type: operator.type
+        });
+    }
+}
+
+function updateStaticNumberblockVisual(block, blockId) {
+    const blockVisual = window.visuals.staticNumberblocks[blockId];
+    if (blockVisual) {
+        blockVisual.update({
+            x: block.x,
+            y: block.y,
+            z: block.z,
+            value: block.value
+        });
+    }
+}
+
 
 // Define Operators Visual class
 window.OperatorsVisual = class OperatorsVisual {
@@ -3989,63 +4015,50 @@ function updatePlayerPhysics(delta) {
     }
 }
 
-// Main animation loop
+// initialize your global visuals safely if not done already
+window.visuals = window.visuals || { players: {}, operators: {}, staticNumberblocks: {} };
+
+// animate loop (exactly like this)
 function animate() {
-    try {
-        // Request next animation frame 
-        requestAnimationFrame(animate);
-        
-        // Calculate delta time
-        const time = performance.now();
-        const delta = Math.min((time - prevTime) / 1000, 0.1); // Cap delta to avoid large jumps
-        
-        // Update player movement based on view mode
-        if (window.isFirstPerson) {
-            updatePlayerPhysics(delta);
-        } else {
-            updatePlayerPositionThirdPerson(time, delta);
-            updateThirdPersonCamera();
+    requestAnimationFrame(animate);  // continuous loop every frame
+
+    // Safely check if room and state exist
+    if (window.room && window.room.state && window.room.state.players) {
+        const playerStates = window.room.state.players;
+
+        // Safely loop through player states
+        for (const sessionId in playerStates) {
+            const playerState = playerStates[sessionId];
+            if (!playerState) continue; // safety check
+
+            // retrieve or create the visual representation
+            let playerVisual = window.visuals.players[sessionId];
+            if (!playerVisual) {
+                playerVisual = new Player({
+                    id: sessionId,
+                    name: playerState.name,
+                    color: playerState.color,
+                    value: playerState.value
+                });
+                scene.add(playerVisual.mesh);
+                window.visuals.players[sessionId] = playerVisual;
+            }
+
+            // safely update visual state (position and rotation)
+            playerVisual.mesh.position.set(playerState.x, playerState.y, playerState.z);
+            playerVisual.mesh.rotation.y = playerState.rotationY;
+
+            // safely update visual value
+            if (playerVisual.updateValue && playerState.value !== undefined) {
+                playerVisual.updateValue(playerState.value);
+            }
         }
-        
-        // Send input state to server at regular intervals
-        if (time - lastInputUpdate > inputUpdateInterval) {
-            sendInputUpdate();
-            lastInputUpdate = time;
-        }
-        
-        // Force position updates periodically for network
-        if (time - lastPositionUpdate > positionUpdateInterval) {
-            sendRegularPositionUpdate();
-            lastPositionUpdate = time;
-        }
-        
-        // Update remote player representations
-        if (window.updateRemotePlayers) {
-            window.updateRemotePlayers();
-        }
-        
-        // Update operators
-        updateOperators();
-        
-        // Check for collisions
-        if (playerNumberblock) {
-            checkCollisions();
-        }
-        
-        // Update debug overlay if it exists
-        if (window.DEBUG && window.updateDebugOverlay) {
-            window.updateDebugOverlay();
-        }
-        
-        // Render the scene
-        renderer.render(scene, camera);
-        
-        // Update game loop vars
-        prevTime = time;
-    } catch (error) {
-        debug(`Error in animate loop: ${error.message}`, true);
     }
+
+    // renderer call must be here (inside animate function)
+    renderer.render(scene, camera);
 }
+
 
 // Send input state to the server
 function sendInputUpdate() {

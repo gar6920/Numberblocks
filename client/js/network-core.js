@@ -304,6 +304,8 @@ async function initNetworking() {
                 // Setup room listeners
                 window.roomInitialized = false;
                 setupRoomListeners(room);
+
+                animate();
                 
                 // Check if room initialization succeeded
                 const checkRoomInit = () => {

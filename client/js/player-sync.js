@@ -171,7 +171,8 @@ function processExistingPlayers() {
 }
 
 // Setup specific schema listeners for Players
-function setupPlayerListeners(room) {
+// Setup room-level listeners specifically for Players
+function setupRoomPlayerListeners(room) {
     if (!room || !room.state || !room.state.players) {
         console.warn('Players state not available.');
         return;
@@ -180,7 +181,7 @@ function setupPlayerListeners(room) {
     // Listen for player added
     room.state.players.onAdd((player, sessionId) => {
         console.log(`✅ Player ${sessionId} joined.`, player);
-        setupPlayerListeners(player, sessionId);
+        setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
     });
 
     // Listen for player removal
@@ -192,12 +193,16 @@ function setupPlayerListeners(room) {
     // Initial iteration (process existing players)
     room.state.players.forEach((player, sessionId) => {
         console.log(`✅ Processing existing player: ${sessionId}`, player);
-        setupPlayerListeners(player, sessionId);
+        setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
     });
     
     // Update UI after processing all players
     updatePlayerListUI();
 }
+
+// Make this explicitly available globally
+window.setupRoomPlayerListeners = setupRoomPlayerListeners;
+
 
 // Make functions available globally
 window.setupPlayerListeners = setupPlayerListeners;
