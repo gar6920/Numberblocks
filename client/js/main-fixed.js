@@ -43,6 +43,8 @@ let lastSentPosition = new THREE.Vector3();
 let lastSentRotation = 0;
 let positionUpdateInterval = 100; // ms between position updates
 let lastPositionUpdate = 0;
+let inputUpdateInterval = 1000 / 30; // 30Hz input updates
+let lastInputUpdate = 0;
 
 // Initialize the game
 window.onload = function() {
@@ -454,112 +456,61 @@ function setupPointerLockControls() {
 
 // Update player movement physics
 function updatePlayerPhysics(delta) {
-    try {
-        // Skip if controls are disabled or not initialized
-        if (!controls) {
-            console.log("Controls disabled or not initialized");
-            return;
-        }
-        
-        // Allow movement in preview mode even without pointer lock
-        const isPreviewMode = window.previewControlsMode === true;
-        
-        // Skip if not locked (unless in preview mode)
-        if (!controls.isLocked && !isPreviewMode) {
-            return;
-        }
-
-        // Access variables from controls.js via window
-        // Apply movement damping
-        window.velocity.x -= window.velocity.x * 10.0 * delta; 
-        window.velocity.z -= window.velocity.z * 10.0 * delta;
-        
-        // Apply gravity (9.8 as specified in memory)
-        window.velocity.y -= 9.8 * delta;
-        
-        // Calculate movement direction based on input
-        window.direction.z = Number(window.moveForward) - Number(window.moveBackward);
-        window.direction.x = Number(window.moveRight) - Number(window.moveLeft);
-        
-        // Only normalize if we're actually moving
-        if (window.direction.x !== 0 || window.direction.z !== 0) {
-            window.direction.normalize(); // Ensure consistent movement regardless of direction
-        }
-        
-        // Apply movement force (scaled to achieve 5.0 units/sec)
-        // Using a higher value to compensate for damping
-        // const moveSpeed = 50.0; // Using from controls.js
-        
-        if (window.moveForward || window.moveBackward) {
-            window.velocity.z -= window.direction.z * window.moveSpeed * delta;
-        }
-        
-        if (window.moveLeft || window.moveRight) {
-            window.velocity.x -= window.direction.x * window.moveSpeed * delta;
-        }
-        
-        // Handle Q/E rotation - turn left/right
-        if (window.turnLeft) {
-            // Calculate rotation amount
-            const turnAmount = window.turnSpeed * delta;
+    if (!controls || !scene || !controls.isLocked) return;
+    
+    const controlsObject = controls.getObject();
+    let playerMoved = false;
+    
+    // Get current player state from server if available
+    if (window.room && window.room.state && window.room.state.players) {
+        const player = window.room.state.players.get(window.room.sessionId);
+        if (player) {
+            // Update the player's position based on the server position
+            // This ensures server authority while allowing client-side prediction
+            const lerpFactor = 0.2; // Lower value = smoother but more latent transition
             
-            // Rotate the camera
-            controls.getObject().rotation.y += turnAmount;
-        }
-        else if (window.turnRight) {
-            // Calculate rotation amount
-            const turnAmount = window.turnSpeed * delta;
+            // Smoothly interpolate to the server position
+            controlsObject.position.x = THREE.MathUtils.lerp(
+                controlsObject.position.x, 
+                player.x, 
+                lerpFactor
+            );
             
-            // Rotate the camera
-            controls.getObject().rotation.y -= turnAmount;
-        }
-        
-        // Handle jumping - only if on ground
-        if (window.canJump && controls.getObject().position.y <= window.playerHeight) {
-            if (window.jumpPressed) {
-                window.velocity.y = Math.sqrt(2 * 9.8 * window.jumpHeight);
-                window.canJump = false;
+            controlsObject.position.z = THREE.MathUtils.lerp(
+                controlsObject.position.z, 
+                player.z, 
+                lerpFactor
+            );
+            
+            // Only use server Y position if it's significantly different
+            if (Math.abs(controlsObject.position.y - player.y) > 0.5) {
+                controlsObject.position.y = player.y;
             }
+            
+            // If there's a significant desync, instantly correct position
+            const distanceSquared = 
+                Math.pow(controlsObject.position.x - player.x, 2) + 
+                Math.pow(controlsObject.position.z - player.z, 2);
+                
+            if (distanceSquared > 25) { // More than 5 units away
+                controlsObject.position.x = player.x;
+                controlsObject.position.z = player.z;
+                controlsObject.position.y = player.y;
+                console.log("Significant position correction applied");
+            }
+            
+            // Update the player's velocity
+            velocity.y = player.velocityY;
+            
+            // Update Numberblock position and scale to match player value
+            updatePlayerNumberblock(player.value);
         }
-        
-        // Apply velocity to controls for movement
-        controls.moveRight(-window.velocity.x * delta);
-        controls.moveForward(-window.velocity.z * delta);
-        
-        // Apply jump physics
-        controls.getObject().position.y += window.velocity.y * delta;
-        
-        // Check for floor collision
-        if (controls.getObject().position.y < 1.0) { // Player height is 2.0 units
-            window.velocity.y = 0;
-            controls.getObject().position.y = 1.0;
-            window.canJump = true;
-        }
-        
-        // Update player numberblock position AND ROTATION to match camera
-        if (playerNumberblock) {
-            // Update position
-            playerNumberblock.mesh.position.copy(controls.getObject().position);
-            
-            // Get camera rotation (from controls quaternion)
-            const cameraQuaternion = controls.getObject().quaternion;
-            const euler = new THREE.Euler().setFromQuaternion(cameraQuaternion, 'YXZ');
-            
-            // Update numberblock rotation to match camera's Y rotation (yaw)
-            playerNumberblock.mesh.rotation.y = euler.y;
-            
-            // Offset the numberblock to be at the player's feet
-            const numberblockHeight = playerNumberblock.getHeight ? playerNumberblock.getHeight() : 1;
-            playerNumberblock.mesh.position.y -= (window.playerHeight / 2) + (numberblockHeight / 2);
-            
-            // Force numberblock to be visible in first-person mode
-            playerNumberblock.mesh.visible = true;
-        }
-        
-        // Send movement to server
-        sendRegularPositionUpdate();
-    } catch (error) {
-        console.error(`Error updating player movement: ${error.message}`);
+    }
+    
+    // Also update UI if the player was observed
+    if (playerMoved) {
+        // Update game UI elements
+        updateGameUI();
     }
 }
 
@@ -581,10 +532,21 @@ function animate() {
             updateThirdPersonCamera();
         }
         
+        // Send input state to server at regular intervals
+        if (time - lastInputUpdate > inputUpdateInterval) {
+            sendInputUpdate();
+            lastInputUpdate = time;
+        }
+        
         // Force position updates periodically for network
         if (time - lastPositionUpdate > positionUpdateInterval) {
             sendRegularPositionUpdate();
             lastPositionUpdate = time;
+        }
+        
+        // Update remote player representations
+        if (window.updateRemotePlayers) {
+            window.updateRemotePlayers();
         }
         
         // Update operators
@@ -593,6 +555,11 @@ function animate() {
         // Check for collisions
         if (playerNumberblock) {
             checkCollisions();
+        }
+        
+        // Update debug overlay if it exists
+        if (window.DEBUG && window.updateDebugOverlay) {
+            window.updateDebugOverlay();
         }
         
         // Render the scene
@@ -605,11 +572,43 @@ function animate() {
     }
 }
 
+// Send input state to the server
+function sendInputUpdate() {
+    try {
+        // Make sure room is available and connected before sending
+        if (!window.room || !window.room.connection || window.room.connection.readyState !== WebSocket.OPEN || !window.inputState) {
+            if (window.debugOverlay && window.debugOverlay.visible) {
+                updateDebugInfo("WebSocket not connected, skipping input update");
+            }
+            return; // Skip update if connection is not available
+        }
+        
+        // Send input state to server
+        window.room.send("input", {
+            version: 2, // Version to distinguish from legacy messages
+            keys: window.inputState.keys,
+            mouseDelta: window.inputState.mouseDelta,
+            viewMode: window.isFirstPerson ? "first-person" : "third-person"
+        });
+        
+        // Reset mouse delta after sending
+        window.inputState.mouseDelta.x = 0;
+        window.inputState.mouseDelta.y = 0;
+    } catch (error) {
+        console.error("Error sending input update:", error);
+    }
+}
+
 // Send regular position updates to the server for multiplayer synchronization
 function sendRegularPositionUpdate() {
     try {
-        if (!window.room || typeof window.sendPlayerUpdate !== 'function') {
-            return;
+        // Make sure room is available and connected before sending
+        if (!window.room || !window.room.connection || window.room.connection.readyState !== WebSocket.OPEN || 
+            typeof window.sendPlayerUpdate !== 'function') {
+            if (window.debugOverlay && window.debugOverlay.visible) {
+                updateDebugInfo("WebSocket not connected, skipping position update");
+            }
+            return; // Skip update if connection is not available
         }
         
         let currentPos, currentRot;
@@ -1016,13 +1015,22 @@ function initNetworkingSystem() {
     debug('Initializing networking system');
     
     try {
-        // Check if initNetworking is defined in network.js
+        console.log("Initializing networking system...");
+        
+        // Check if initNetworking is defined in network-core.js
         if (typeof window.initNetworking === 'function') {
             debug('Found networking module, attempting to connect...');
             window.initNetworking()
                 .then((roomInstance) => {
                     debug('Networking initialized successfully');
                     window.gameRoom = roomInstance; // Store room instance globally
+                    window.room = roomInstance; // For compatibility
+                    
+                    // Setup room event listeners
+                    setupRoomEventHandlers(roomInstance);
+                    
+                    // Create debug overlay if it doesn't exist
+                    createDebugOverlay();
                     
                     // Manually trigger player list update after successful connection
                     if (typeof window.updatePlayerListUI === 'function') {
@@ -1039,6 +1047,116 @@ function initNetworkingSystem() {
     } catch (error) {
         debug(`Error initializing networking: ${error.message}`, true);
     }
+}
+
+// Setup room event handlers
+function setupRoomEventHandlers(room) {
+    if (!room) return;
+    
+    // Register for player join events
+    room.state.players.onAdd = function(player, sessionId) {
+        console.log("Player added to room state:", sessionId);
+        
+        // Call the player join handler if available
+        if (typeof window.onPlayerJoin === 'function') {
+            window.onPlayerJoin(player);
+        }
+    };
+    
+    // Register for player leave events
+    room.state.players.onRemove = function(player, sessionId) {
+        console.log("Player removed from room state:", sessionId);
+        
+        // Call the player leave handler if available
+        if (typeof window.onPlayerLeave === 'function') {
+            window.onPlayerLeave(player);
+        }
+    };
+    
+    // Register for player change events
+    room.state.players.onChange = function(player, sessionId) {
+        // This could be used for player property changes if needed
+    };
+    
+    // Register for state change events
+    room.onStateChange(function(state) {
+        // This could be used to handle full state changes if needed
+    });
+}
+
+// Create debug overlay for development
+function createDebugOverlay() {
+    // Only create if DEBUG is true
+    window.DEBUG = false; // Set to true during development
+    
+    // Create debug overlay element
+    const debugOverlay = document.createElement('div');
+    debugOverlay.id = 'debug-overlay';
+    debugOverlay.style.position = 'absolute';
+    debugOverlay.style.top = '10px';
+    debugOverlay.style.left = '10px';
+    debugOverlay.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    debugOverlay.style.color = 'white';
+    debugOverlay.style.padding = '10px';
+    debugOverlay.style.fontFamily = 'monospace';
+    debugOverlay.style.fontSize = '12px';
+    debugOverlay.style.display = 'none';
+    debugOverlay.style.zIndex = '1000';
+    document.body.appendChild(debugOverlay);
+    
+    // Debug logging function
+    window.debugLog = function(...args) {
+        if (window.DEBUG) console.log(...args);
+    };
+    
+    // Update debug overlay
+    window.updateDebugOverlay = function() {
+        if (!window.DEBUG) {
+            debugOverlay.style.display = 'none';
+            return;
+        }
+        
+        debugOverlay.style.display = 'block';
+        
+        let content = '';
+        
+        // Add player position info
+        if (window.room && window.room.state && window.room.state.players) {
+            const player = window.room.state.players.get(window.room.sessionId);
+            if (player && window.playerNumberblock) {
+                const clientPos = window.playerNumberblock.mesh.position;
+                content += `Position:<br>`;
+                content += `Client: x=${clientPos.x.toFixed(2)}, y=${clientPos.y.toFixed(2)}, z=${clientPos.z.toFixed(2)}<br>`;
+                content += `Server: x=${player.x.toFixed(2)}, y=${player.y.toFixed(2)}, z=${player.z.toFixed(2)}<br>`;
+                content += `<br>Rotation:<br>`;
+                content += `Y: ${player.rotationY.toFixed(2)}<br>`;
+                content += `Pitch: ${player.pitch.toFixed(2)}<br>`;
+            }
+        }
+        
+        // Add input state info
+        if (window.inputState) {
+            content += `<br>Input:<br>`;
+            content += `W: ${window.inputState.keys.w}, `;
+            content += `A: ${window.inputState.keys.a}, `;
+            content += `S: ${window.inputState.keys.s}, `;
+            content += `D: ${window.inputState.keys.d}<br>`;
+            content += `Space: ${window.inputState.keys.space}, `;
+            content += `Q: ${window.inputState.keys.q}, `;
+            content += `E: ${window.inputState.keys.e}<br>`;
+            content += `Mouse: x=${window.inputState.mouseDelta.x.toFixed(0)}, y=${window.inputState.mouseDelta.y.toFixed(0)}`;
+        }
+        
+        debugOverlay.innerHTML = content;
+    };
+    
+    // Toggle debug mode with F1 key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'F1') {
+            window.DEBUG = !window.DEBUG;
+            console.log("Debug mode:", window.DEBUG ? "ON" : "OFF");
+        }
+    });
 }
 
 // Emergency render function - displays a simple scene if initialization fails

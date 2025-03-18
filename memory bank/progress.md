@@ -137,7 +137,7 @@
   - Migrated from single-player to a networked multiplayer architecture
   - Implemented room-based gameplay with Colyseus schema for state synchronization
   - Added player session management with reconnection support
-  - Created network.js client module for server communication
+  - Enhanced network communication between client and server
   - Modified main.js to support server-synchronized gameplay
   - Implemented server-authoritative position tracking and collision detection
   - Added player joining/leaving events with real-time UI updates

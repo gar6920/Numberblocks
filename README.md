@@ -20,7 +20,7 @@ Root
 │   ├── controls.js
 │   ├── player.js
 │   ├── operators.js
-│   ├── network.js
+│   ├── network-core.js
 │   ├── hud.js
 │   └── gameModes.js
 └── lib

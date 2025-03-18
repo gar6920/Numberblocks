@@ -31,7 +31,7 @@ The client is responsible for rendering the game, handling user inputs, and comm
   - Manages view modes (first-person and third-person)
   - Updates visual components based on server state
 
-- **network.js:**
+- **network-core.js:**
   - Establishes and maintains WebSocket connection to the server via Colyseus
   - Sends player actions to the server (movement, operator collection, collisions)
   - Processes state updates from the server
@@ -98,7 +98,7 @@ The client is responsible for rendering the game, handling user inputs, and comm
 │   │   └── styles.css       # Game styling
 │   └── js/
 │       ├── main-fixed.js    # Core game logic and rendering
-│       ├── network.js       # Networking and state synchronization
+│       ├── network-core.js  # Networking and state synchronization
 │       ├── numberblock.js   # Numberblock entity implementation
 │       ├── operator.js      # Mathematical operator implementation
 │       ├── controls.js      # Player movement and camera controls

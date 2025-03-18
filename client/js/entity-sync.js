@@ -14,6 +14,13 @@ function setupSpecificSchemaListeners(schemaName, schema) {
             window[schemaName] = {};
         }
         
+        // Check if schema is a MapSchema with onAdd method
+        if (!schema || typeof schema.onAdd !== 'function') {
+            console.error(`${schemaName} collection is not a valid MapSchema or not yet initialized:`, schema);
+            console.log("Current room.state:", room.state);
+            return;
+        }
+        
         // Determine which visual class to use
         let VisualClass;
         switch(schemaName) {
@@ -163,30 +170,44 @@ function setupRoomListeners() {
     try {
         console.log("Setting up room listeners");
         
+        // Debug: Log the entire room.state object to inspect its structure
+        console.log("Room state before setting up listeners:", room.state);
+        console.log("Players collection type:", room.state.players ? typeof room.state.players : 'undefined');
+        console.log("Players collection methods:", room.state.players ? Object.getOwnPropertyNames(Object.getPrototypeOf(room.state.players)) : 'undefined');
+        
         // Player listeners
         setupPlayerListeners(room);
         
         // Operators listeners
         if (room.state.operators) {
+            console.log("Setting up operators listeners");
             setupSpecificSchemaListeners('operators', room.state.operators);
+        } else {
+            console.warn("Operators collection not found in room state");
         }
         
         // Static numberblocks listeners
         if (room.state.staticNumberblocks) {
+            console.log("Setting up staticNumberblocks listeners");
             setupSpecificSchemaListeners('staticNumberblocks', room.state.staticNumberblocks);
+        } else {
+            console.warn("StaticNumberblocks collection not found in room state");
         }
         
         // Other generic schemas
         const genericSchemas = ['trees', 'rocks'];
         genericSchemas.forEach(schemaName => {
             if (room.state[schemaName]) {
+                console.log(`Setting up ${schemaName} listeners`);
                 setupGenericSchemaListeners(room, schemaName);
+            } else {
+                console.warn(`${schemaName} collection not found in room state`);
             }
         });
         
-        // Mark room as initialized
+        // Mark as initialized
         window.roomInitialized = true;
-        console.log("Room listeners initialized successfully");
+        console.log("Room listeners setup complete");
     } catch (error) {
         console.error("Error setting up room listeners:", error);
     }

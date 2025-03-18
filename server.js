@@ -6,6 +6,17 @@ const { Room } = require("colyseus");
 const { Schema, MapSchema, type } = require("@colyseus/schema");
 const path = require('path');
 
+// Define the InputState schema
+class InputState extends Schema {
+    constructor() {
+        super();
+        // Default initialization for input state
+        this.keys = { w: false, a: false, s: false, d: false, space: false };
+        this.mouseDelta = { x: 0, y: 0 };
+        this.viewMode = "third-person"; // Default view mode
+    }
+}
+
 // Define the state schema for Colyseus
 class Player extends Schema {
     constructor() {
@@ -16,9 +27,11 @@ class Player extends Schema {
         this.value = 1;
         this.rotationY = 0;
         this.pitch = 0;
-        this.operator = null;
+        this.operator = ""; // Changed from null to empty string
         this.color = "#FFFFFF";
         this.name = "";
+        this.velocityY = 0; // Add velocity for physics
+        this.input = new InputState();  // Initialize with InputState schema
     }
 }
 
@@ -33,16 +46,61 @@ class Operator extends Schema {
     }
 }
 
+// Create a dedicated schema for static numberblocks
+class StaticNumberblock extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.value = 1;
+        this.color = "#FFFFFF";
+    }
+}
+
+// Add schemas for other entities
+class Tree extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.scale = 1;
+    }
+}
+
+class Rock extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.scale = 1;
+    }
+}
+
 class GameState extends Schema {
     constructor() {
         super();
         this.players = new MapSchema();
         this.operators = new MapSchema();
         this.staticNumberblocks = new MapSchema();
+        this.trees = new MapSchema();
+        this.rocks = new MapSchema();
     }
 }
 
-// Register schema types
+// Register schema types for InputState
+type("boolean")(InputState.prototype, "keys.w");
+type("boolean")(InputState.prototype, "keys.a");
+type("boolean")(InputState.prototype, "keys.s");
+type("boolean")(InputState.prototype, "keys.d");
+type("boolean")(InputState.prototype, "keys.space");
+type("number")(InputState.prototype, "mouseDelta.x");
+type("number")(InputState.prototype, "mouseDelta.y");
+type("string")(InputState.prototype, "viewMode");
+
+// Register schema types for Player
 type("number")(Player.prototype, "x");
 type("number")(Player.prototype, "y");
 type("number")(Player.prototype, "z");
@@ -52,16 +110,41 @@ type("number")(Player.prototype, "pitch");
 type("string")(Player.prototype, "operator");
 type("string")(Player.prototype, "color");
 type("string")(Player.prototype, "name");
+type("number")(Player.prototype, "velocityY");
+type(InputState)(Player.prototype, "input"); // Use InputState type instead of wildcard
 
+// Register schema types for Operator
 type("string")(Operator.prototype, "id");
 type("string")(Operator.prototype, "type");
 type("number")(Operator.prototype, "x");
 type("number")(Operator.prototype, "y");
 type("number")(Operator.prototype, "z");
 
+// Register schema types for StaticNumberblock
+type("number")(StaticNumberblock.prototype, "x");
+type("number")(StaticNumberblock.prototype, "y");
+type("number")(StaticNumberblock.prototype, "z");
+type("number")(StaticNumberblock.prototype, "value");
+type("string")(StaticNumberblock.prototype, "color");
+
+// Register schema types for Tree
+type("number")(Tree.prototype, "x");
+type("number")(Tree.prototype, "y");
+type("number")(Tree.prototype, "z");
+type("number")(Tree.prototype, "scale");
+
+// Register schema types for Rock
+type("number")(Rock.prototype, "x");
+type("number")(Rock.prototype, "y");
+type("number")(Rock.prototype, "z");
+type("number")(Rock.prototype, "scale");
+
+// Register schema types for GameState
 type({ map: Player })(GameState.prototype, "players");
 type({ map: Operator })(GameState.prototype, "operators");
-type({ map: Player })(GameState.prototype, "staticNumberblocks");
+type({ map: StaticNumberblock })(GameState.prototype, "staticNumberblocks"); // Updated to use StaticNumberblock
+type({ map: Tree })(GameState.prototype, "trees");
+type({ map: Rock })(GameState.prototype, "rocks");
 
 // Define the game room
 class NumberblocksRoom extends Room {
@@ -94,9 +177,43 @@ class NumberblocksRoom extends Room {
         
         console.log("Room initialized with GameState:", this.state);
         
-        // Listen for messages from clients
+        // Listen for input messages from clients
+        this.onMessage("input", (client, message) => {
+            // Check for version 2 (new input-based system)
+            if (!message.version || message.version < 2) {
+                return; // Ignore old messages
+            }
+            
+            const player = this.state.players.get(client.sessionId);
+            if (player && player.input) {
+                // Update the InputState schema with the incoming data
+                player.input.keys.w = message.keys.w || false;
+                player.input.keys.a = message.keys.a || false;
+                player.input.keys.s = message.keys.s || false;
+                player.input.keys.d = message.keys.d || false;
+                player.input.keys.space = message.keys.space || false;
+                
+                if (message.mouseDelta) {
+                    player.input.mouseDelta.x = message.mouseDelta.x || 0;
+                    player.input.mouseDelta.y = message.mouseDelta.y || 0;
+                }
+                
+                // Update view mode if provided
+                if (message.viewMode) {
+                    player.input.viewMode = message.viewMode;
+                }
+                
+                console.log(`Received input from player ${client.sessionId}:`, 
+                    player.input.keys.w ? "W" : "", 
+                    player.input.keys.a ? "A" : "", 
+                    player.input.keys.s ? "S" : "", 
+                    player.input.keys.d ? "D" : "");
+            }
+        });
+        
+        // Keep the existing move message handler for backward compatibility
         this.onMessage("move", (client, message) => {
-            const player = this.state.players[client.sessionId];
+            const player = this.state.players.get(client.sessionId);
             if (player) {
                 // Validate movement with speed limit
                 const speedLimit = 5.0 * (1/30); // moveSpeed * delta
@@ -129,8 +246,8 @@ class NumberblocksRoom extends Room {
         });
         
         this.onMessage("collectOperator", (client, message) => {
-            const player = this.state.players[client.sessionId];
-            const operator = this.state.operators[message.id];
+            const player = this.state.players.get(client.sessionId);
+            const operator = this.state.operators.get(message.id);
             
             if (player && operator) {
                 // Set the player's operator explicitly
@@ -144,21 +261,21 @@ class NumberblocksRoom extends Room {
                 }
                 
                 // Remove operator from state
-                delete this.state.operators[operator.id];
+                this.state.operators.delete(operator.id);
                 console.log(`Player ${client.sessionId} collected ${operator.type} operator`);
             }
         });
         
         this.onMessage("numberblockCollision", (client, message) => {
-            const player = this.state.players[client.sessionId];
+            const player = this.state.players.get(client.sessionId);
             const targetId = message.targetId;
             let target;
             
             // Check if target is another player or a static numberblock
-            if (this.state.players[targetId]) {
-                target = this.state.players[targetId];
-            } else if (this.state.staticNumberblocks[targetId]) {
-                target = this.state.staticNumberblocks[targetId];
+            if (this.state.players.has(targetId)) {
+                target = this.state.players.get(targetId);
+            } else if (this.state.staticNumberblocks.has(targetId)) {
+                target = this.state.staticNumberblocks.get(targetId);
             }
             
             if (player && target) {
@@ -178,15 +295,93 @@ class NumberblocksRoom extends Room {
     }
     
     update() {
+        // Calculate delta time (assuming 30fps)
+        const deltaTime = 1/30;
+        
+        // Process player inputs and update positions
+        this.state.players.forEach((player, sessionId) => {
+            // Skip if no input data
+            if (!player.input) return;
+            
+            // Handle player movement based on input state
+            this.updatePlayerFromInput(player, deltaTime);
+        });
+        
         // Spawn operators periodically
-        this.spawnTimer += 1/30; // Assuming 30 fps
+        this.spawnTimer += deltaTime;
         if (this.spawnTimer >= this.spawnInterval && Object.keys(this.state.operators).length < this.maxOperators) {
             this.spawnOperator();
             this.spawnTimer = 0;
             this.spawnInterval = this.getRandomSpawnInterval();
         }
+    }
+    
+    // Update player position based on input state
+    updatePlayerFromInput(player, deltaTime) {
+        // Skip if no input
+        if (!player.input || !player.input.keys) return;
         
-        // Check for collisions between players (could be added here)
+        const input = player.input;
+        const speed = 5.0 * deltaTime;
+        
+        // Handle rotation from mouse movement
+        if (input.mouseDelta) {
+            const sensitivity = 0.002;
+            player.rotationY += input.mouseDelta.x * sensitivity;
+            
+            // Only update pitch in first-person mode
+            if (input.viewMode === "first-person") {
+                player.pitch += input.mouseDelta.y * sensitivity;
+                // Clamp pitch to prevent flipping
+                player.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, player.pitch));
+            }
+        }
+        
+        // Handle movement
+        let dx = 0, dz = 0;
+        if (input.keys.w) {
+            dx += Math.sin(player.rotationY) * speed;
+            dz += Math.cos(player.rotationY) * speed;
+        }
+        if (input.keys.s) {
+            dx -= Math.sin(player.rotationY) * speed;
+            dz -= Math.cos(player.rotationY) * speed;
+        }
+        if (input.keys.a) {
+            dx += Math.sin(player.rotationY - Math.PI/2) * speed;
+            dz += Math.cos(player.rotationY - Math.PI/2) * speed;
+        }
+        if (input.keys.d) {
+            dx += Math.sin(player.rotationY + Math.PI/2) * speed;
+            dz += Math.cos(player.rotationY + Math.PI/2) * speed;
+        }
+        
+        // Apply movement
+        player.x += dx;
+        player.z += dz;
+        
+        // Handle Q/E rotation
+        if (input.keys.q) {
+            player.rotationY += 2.0 * deltaTime; // Turn left
+        }
+        if (input.keys.e) {
+            player.rotationY -= 2.0 * deltaTime; // Turn right
+        }
+        
+        // Handle jumping
+        if (input.keys.space && player.y === 1) {
+            player.velocityY = 0.2; // Jump velocity
+        }
+        
+        // Apply gravity
+        player.velocityY += -0.01; // Simple gravity
+        player.y += player.velocityY;
+        
+        // Floor collision
+        if (player.y < 1) {
+            player.y = 1;
+            player.velocityY = 0;
+        }
     }
     
     // Get a random spawn interval between 5-10 seconds
@@ -217,7 +412,7 @@ class NumberblocksRoom extends Room {
     
     // Create a static numberblock (for players to interact with)
     createStaticNumberblock(id, value, x, y, z) {
-        const staticBlock = new Player();
+        const staticBlock = new StaticNumberblock();
         staticBlock.value = value;
         staticBlock.x = x;
         // Set Y position to 0 (ground level)

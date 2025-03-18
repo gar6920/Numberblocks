@@ -90,6 +90,14 @@ function setupPlayerListeners(room) {
     try {
         const players = room.state.players;
         
+        // Check if players is a MapSchema with onAdd method
+        if (!players || typeof players.onAdd !== 'function') {
+            console.error("Players collection is not a valid MapSchema or not yet initialized:", players);
+            // Log the state for debugging
+            console.log("Current room.state:", room.state);
+            return;
+        }
+        
         // Listen for player additions
         players.onAdd((player, sessionId) => {
             console.log(`Player added: ${sessionId}`);

@@ -13,6 +13,12 @@ window.prevTime = performance.now();
 window.velocity = new THREE.Vector3();
 window.direction = new THREE.Vector3();
 
+// Add input state object for server-based movement
+window.inputState = {
+  keys: { w: false, a: false, s: false, d: false, space: false, q: false, e: false },
+  mouseDelta: { x: 0, y: 0 }
+};
+
 // Player settings
 window.playerHeight = 2.0;             // Height of camera from ground
 window.moveSpeed = 50.0;                // Units per second
@@ -53,6 +59,14 @@ window.initControls = function(camera, domElement) {
     // Keyboard listeners for movement remain as-is
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
+    
+    // Add mouse movement tracking for input state
+    document.addEventListener('mousemove', (event) => {
+        if (document.pointerLockElement) {
+            window.inputState.mouseDelta.x += event.movementX;
+            window.inputState.mouseDelta.y += event.movementY;
+        }
+    });
 
     return controls;
 }
@@ -69,32 +83,39 @@ function onKeyDown(event) {
         case 'ArrowUp':
         case 'KeyW':
             window.moveForward = true;
+            window.inputState.keys.w = true;
             break;
             
         case 'ArrowLeft':
         case 'KeyA':
             window.moveLeft = true;
+            window.inputState.keys.a = true;
             break;
             
         case 'ArrowDown':
         case 'KeyS':
             window.moveBackward = true;
+            window.inputState.keys.s = true;
             break;
             
         case 'ArrowRight':
         case 'KeyD':
             window.moveRight = true;
+            window.inputState.keys.d = true;
             break;
             
         case 'KeyQ':
             window.turnLeft = true;
+            window.inputState.keys.q = true;
             break;
             
         case 'KeyE':
             window.turnRight = true;
+            window.inputState.keys.e = true;
             break;
             
         case 'Space':
+            window.inputState.keys.space = true;
             if (window.canJump) {
                 // Apply a physically accurate jump velocity
                 window.velocity.y = Math.sqrt(window.jumpHeight * 2 * 9.8);
@@ -110,29 +131,39 @@ function onKeyUp(event) {
         case 'ArrowUp':
         case 'KeyW':
             window.moveForward = false;
+            window.inputState.keys.w = false;
             break;
             
         case 'ArrowLeft':
         case 'KeyA':
             window.moveLeft = false;
+            window.inputState.keys.a = false;
             break;
             
         case 'ArrowDown':
         case 'KeyS':
             window.moveBackward = false;
+            window.inputState.keys.s = false;
             break;
             
         case 'ArrowRight':
         case 'KeyD':
             window.moveRight = false;
+            window.inputState.keys.d = false;
             break;
             
         case 'KeyQ':
             window.turnLeft = false;
+            window.inputState.keys.q = false;
             break;
             
         case 'KeyE':
             window.turnRight = false;
+            window.inputState.keys.e = false;
+            break;
+            
+        case 'Space':
+            window.inputState.keys.space = false;
             break;
     }
 }
@@ -141,6 +172,9 @@ function onKeyUp(event) {
 window.updateControls = function(controls, delta) {
     if (!controls.isLocked) return;
 
+    // Update controls is still needed for local movement
+    // But actual position updates will now be driven by the server
+    
     // Handle directional movement
     if (window.moveForward) controls.moveForward(window.moveSpeed * delta);
     if (window.moveBackward) controls.moveForward(-window.moveSpeed * delta);
