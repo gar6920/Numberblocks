@@ -12,6 +12,16 @@ echo NUMBERBLOCKS GAME - COMPLETE CODE COMPILATION >> compiled_code.txt
 echo ===================================================== >> compiled_code.txt
 echo. >> compiled_code.txt
 
+:: README.md file
+echo Processing README.md...
+echo ===================================================== >> compiled_code.txt
+echo FILE: README.md >> compiled_code.txt
+echo ===================================================== >> compiled_code.txt
+echo. >> compiled_code.txt
+type "README.md" >> compiled_code.txt
+echo. >> compiled_code.txt
+echo. >> compiled_code.txt
+
 :: Memory Bank files
 echo Processing Memory Bank files...
 echo ===================================================== >> compiled_code.txt
@@ -86,14 +96,29 @@ for %%F in (client\js\*.js) do (
   echo. >> compiled_code.txt
 )
 
+:: Public directory files
+echo Processing public directory files...
+for %%F in (public\*.html) do (
+  echo Processing public\%%~nxF...
+  echo ===================================================== >> compiled_code.txt
+  echo FILE: public\%%~nxF >> compiled_code.txt
+  echo ===================================================== >> compiled_code.txt
+  echo. >> compiled_code.txt
+  type "public\%%~nxF" >> compiled_code.txt
+  echo. >> compiled_code.txt
+  echo. >> compiled_code.txt
+)
+
 :: Count total processed files
 set /a total=0
-for %%F in ("memory bank\*.md") do set /a total+=1
-set /a total+=1 :: server.js
-set /a total+=1 :: package.json
-for %%F in (client\*.html) do set /a total+=1
-for %%F in (client\css\*.css) do set /a total+=1
-for %%F in (client\js\*.js) do set /a total+=1
+set /a total=total+1
+for %%F in ("memory bank\*.md") do set /a total=total+1
+set /a total=total+1
+set /a total=total+1
+for %%F in (client\*.html) do set /a total=total+1
+for %%F in (client\css\*.css) do set /a total=total+1
+for %%F in (client\js\*.js) do set /a total=total+1
+for %%F in (public\*.html) do set /a total=total+1
 
 echo Compilation complete! Processed %total% files.
 echo The updated compiled_code.txt file now contains all code from the project.
