@@ -1,3 +1,6 @@
+import { Numberblock } from './numberblock.js';
+import { updatePlayerListUI } from './player-sync.js';
+
 // Numberblocks game - Entity Factory for creating game entities
 
 class EntityFactory {

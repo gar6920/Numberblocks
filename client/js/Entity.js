@@ -1,3 +1,5 @@
+import { Numberblock } from './numberblock.js';
+
 // Numberblocks game - Base Entity class for all game entities
 
 class Entity {
@@ -30,7 +32,7 @@ class Entity {
         switch (this.type) {
             case 'numberblock':
                 // Create a new numberblock visual
-                visual = new window.Numberblock(this.value, this.color, this.name);
+                visual = new Numberblock(this.value, this.color, this.name);
                 return visual.mesh;
                 
             case 'operator':

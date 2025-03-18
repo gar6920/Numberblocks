@@ -122,31 +122,37 @@
     <div id="game-hud"></div>
     
     <!-- Three.js library via CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/renderers/CSS2DRenderer.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.132.2/build/three.module.js",
+            "three/examples/jsm/controls/PointerLockControls.js": "https://unpkg.com/three@0.132.2/examples/jsm/controls/PointerLockControls.js",
+            "three/examples/jsm/renderers/CSS2DRenderer.js": "https://unpkg.com/three@0.132.2/examples/jsm/renderers/CSS2DRenderer.js"
+        }
+    }
+    </script>
     
     <!-- Colyseus client library -->
-    <script src="https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js"></script>
+    <script type="module" src="https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js"></script>
     
     <!-- Numberblocks game scripts -->
-    <script src="js/collision.js"></script>
-    <script src="js/numberblock.js"></script>
-    <script src="js/operator.js"></script>
+    <script type="module" src="js/collision.js"></script>
+    <script type="module" src="js/numberblock.js"></script>
+    <script type="module" src="js/operator.js"></script>
     
     <!-- Entity System -->
-    <script src="js/Entity.js"></script>
-    <script src="js/Player.js"></script>
-    <script src="js/NPC.js"></script>
-    <script src="js/EntityFactory.js"></script>
+    <script type="module" src="js/Entity.js"></script>
+    <script type="module" src="js/Player.js"></script>
+    <script type="module" src="js/NPC.js"></script>
+    <script type="module" src="js/EntityFactory.js"></script>
     
     <!-- Network System (Modular) -->
-    <script src="js/network-core.js"></script>
-    <script src="js/player-sync.js"></script>
-    <script src="js/entity-sync.js"></script>
-    <script src="js/player-ui.js"></script>
+    <script type="module" src="js/network-core.js"></script>
+    <script type="module" src="js/player-sync.js"></script>
+    <script type="module" src="js/entity-sync.js"></script>
+    <script type="module" src="js/player-ui.js"></script>
     
-    <script src="js/controls.js"></script>
-    <script src="js/main-fixed.js"></script>
+    <script type="module" src="js/controls.js"></script>
+    <script type="module" src="js/main-fixed.js"></script>
 </body>
 </html>

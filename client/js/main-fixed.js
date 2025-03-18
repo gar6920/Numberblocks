@@ -1,4 +1,9 @@
 // Numberblocks game - Main game logic
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { updatePlayerListUI } from './player-sync.js';
+import { Numberblock } from './numberblock.js';
 
 // Debug support
 const DEBUG = false;
@@ -250,6 +255,10 @@ function switchToThirdPersonView() {
         // Set up third-person mouse handler if it doesn't exist
         if (!window.thirdPersonMouseHandler) {
             window.thirdPersonMouseHandler = function(event) {
+                if (!controls || !document.pointerLockElement) {
+                    return;
+                }
+                
                 // Only process if we're in third-person mode and pointer is locked
                 if (!window.isFirstPerson && controls.isLocked) {
                     // Skip processing extremely small movements to prevent drift
@@ -873,31 +882,6 @@ function updateHUD() {
     }
 }
 
-// For Numberblock prototype to enable getHeight() method
-if (typeof window.Numberblock === 'undefined') {
-    console.log("Creating temporary Numberblock class");
-    window.Numberblock = function(value, color) {
-        this.value = value || 1;
-        this.color = color || "#FFFF00";
-        
-        // Create a basic mesh for the numberblock
-        const geometry = new THREE.BoxGeometry(1, this.value, 1);
-        const material = new THREE.MeshStandardMaterial({ color: this.color });
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.castShadow = true;
-        this.mesh.receiveShadow = true;
-    };
-    
-    window.Numberblock.prototype.getHeight = function() {
-        return this.value; // Actual height is the value
-    };
-    
-    window.Numberblock.prototype.createNumberblock = function() {
-        // Method already called in constructor, but added for compatibility
-        return this.mesh;
-    };
-}
-
 // Handle window resize
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1065,86 +1049,140 @@ function initPlayerNumberblock() {
         
         // Update HUD
         updateHUD();
-        
-        // Make Numberblock class available globally
-        window.Numberblock = Numberblock;
     } catch (error) {
         debug(`Error creating player Numberblock: ${error.message}`, true);
     }
 }
 
 // Initialize networking for multiplayer
-function initNetworkingSystem() {
-    debug('Initializing networking system');
-    
+async function initNetworkingSystem() {
     try {
         console.log("Initializing networking system...");
         
-        // Check if initNetworking is defined in network-core.js
-        if (typeof window.initNetworking === 'function') {
-            debug('Found networking module, attempting to connect...');
-            window.initNetworking()
-                .then((roomInstance) => {
-                    debug('Networking initialized successfully');
-                    window.gameRoom = roomInstance; // Store room instance globally
-                    window.room = roomInstance; // For compatibility
-                    
-                    // Setup room event listeners
-                    setupRoomEventHandlers(roomInstance);
-                    
-                    // Create debug overlay if it doesn't exist
-                    createDebugOverlay();
-                    
-                    // Manually trigger player list update after successful connection
-                    if (typeof window.updatePlayerListUI === 'function') {
-                        setTimeout(window.updatePlayerListUI, 500);
-                        setTimeout(window.updatePlayerListUI, 2000);
-                    }
-                })
-                .catch(error => {
-                    debug(`Networking error: ${error.message}`, true);
-                });
-        } else {
-            debug('Networking module not detected, continuing in local mode');
+        // Initialize Colyseus client
+        if (!window.client) {
+            window.client = new Colyseus.Client('ws://localhost:3000');
         }
+        
+        // Join or create room
+        window.client.joinOrCreate("numberblocks").then(roomInstance => {
+            if (roomInstance) {
+                console.log("✅ Joined room:", roomInstance.name);
+                window.room = roomInstance; // For compatibility
+                
+                // Create debug overlay if it doesn't exist
+                createDebugOverlay();
+                
+                // Schedule UI updates
+                if (typeof window.updatePlayerListUI === 'function') {
+                    setTimeout(window.updatePlayerListUI, 500);
+                    setTimeout(window.updatePlayerListUI, 2000);
+                }
+            }
+        }).catch(e => {
+            console.error("❌ Error joining room:", e);
+        });
+        
     } catch (error) {
-        debug(`Error initializing networking: ${error.message}`, true);
+        console.error("❌ Error initializing networking:", error);
     }
 }
 
-// Setup room event handlers
-function setupRoomEventHandlers(room) {
-    if (!room) return;
-    
-    // Register for player join events
-    room.state.players.onAdd = function(player, sessionId) {
-        console.log("Player added to room state:", sessionId);
+// Add decorative objects to the scene
+function addDecorativeObjects() {
+    try {
+        debug('Adding decorative objects');
         
-        // Call the player join handler if available
-        if (typeof window.onPlayerJoin === 'function') {
-            window.onPlayerJoin(player);
+        // Add multiple trees scattered around
+        for (let i = 0; i < 20; i++) {
+            // Randomize positions but keep away from center
+            const distance = 15 + Math.random() * 30;
+            const angle = Math.random() * Math.PI * 2;
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            
+            // Create tree
+            createTree(x, 0, z);
         }
-    };
-    
-    // Register for player leave events
-    room.state.players.onRemove = function(player, sessionId) {
-        console.log("Player removed from room state:", sessionId);
         
-        // Call the player leave handler if available
-        if (typeof window.onPlayerLeave === 'function') {
-            window.onPlayerLeave(player);
+        // Add some rocks
+        for (let i = 0; i < 15; i++) {
+            // Randomize positions
+            const distance = 10 + Math.random() * 40;
+            const angle = Math.random() * Math.PI * 2;
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            
+            // Create rock
+            createRock(x, 0, z);
         }
-    };
+        
+        debug('Decorative objects added successfully');
+    } catch (error) {
+        debug(`Error adding decorative objects: ${error.message}`, true);
+    }
+}
+
+// Helper function to create a tree
+function createTree(x, y, z) {
+    // Create tree trunk (cylinder)
+    const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.position.set(x, y + 2.5, z);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    scene.add(trunk);
     
-    // Register for player change events
-    room.state.players.onChange = function(player, sessionId) {
-        // This could be used for player property changes if needed
-    };
+    // Create tree top (cone for evergreen tree)
+    const topGeometry = new THREE.ConeGeometry(2, 6, 8);
+    const topMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 }); // Green
+    const top = new THREE.Mesh(topGeometry, topMaterial);
+    top.position.set(x, y + 6, z);
+    top.castShadow = true;
+    top.receiveShadow = true;
+    scene.add(top);
+}
+
+// Helper function to create a rock
+function createRock(x, y, z) {
+    // Randomly scale the rock
+    const scale = 0.5 + Math.random() * 1.5;
     
-    // Register for state change events
-    room.onStateChange(function(state) {
-        // This could be used to handle full state changes if needed
+    // Create irregular rock shape using a scaled sphere
+    const rockGeometry = new THREE.SphereGeometry(1, 6, 4);
+    
+    // Randomly deform vertices to make it look more like a rock
+    const vertices = rockGeometry.attributes.position;
+    for (let i = 0; i < vertices.count; i++) {
+        const x = vertices.getX(i);
+        const y = vertices.getY(i);
+        const z = vertices.getZ(i);
+        
+        // Apply random offset to vertex
+        vertices.setX(i, x + (Math.random() - 0.5) * 0.3);
+        vertices.setY(i, y + (Math.random() - 0.5) * 0.3);
+        vertices.setZ(i, z + (Math.random() - 0.5) * 0.3);
+    }
+    
+    // Update normals after vertex modification
+    rockGeometry.computeVertexNormals();
+    
+    // Create rock material with random gray shade
+    const grayShade = 0.4 + Math.random() * 0.3;
+    const rockMaterial = new THREE.MeshStandardMaterial({ 
+        color: new THREE.Color(grayShade, grayShade, grayShade),
+        roughness: 0.9,
+        metalness: 0.1
     });
+    
+    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+    rock.scale.set(scale, scale * 0.7, scale);
+    rock.position.set(x, y + (scale * 0.35), z);
+    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    scene.add(rock);
 }
 
 // Create debug overlay for development
@@ -1258,101 +1296,4 @@ function emergencyRender() {
         debug(`Emergency render failed: ${error.message}`, true);
         alert('Critical rendering error: ' + error.message);
     }
-}
-
-// Add decorative objects to the scene
-function addDecorativeObjects() {
-    try {
-        debug('Adding decorative objects');
-        
-        // Add multiple trees scattered around
-        for (let i = 0; i < 20; i++) {
-            // Randomize positions but keep away from center
-            const distance = 15 + Math.random() * 30;
-            const angle = Math.random() * Math.PI * 2;
-            const x = Math.cos(angle) * distance;
-            const z = Math.sin(angle) * distance;
-            
-            // Create tree
-            createTree(x, 0, z);
-        }
-        
-        // Add some rocks
-        for (let i = 0; i < 15; i++) {
-            // Randomize positions
-            const distance = 10 + Math.random() * 40;
-            const angle = Math.random() * Math.PI * 2;
-            const x = Math.cos(angle) * distance;
-            const z = Math.sin(angle) * distance;
-            
-            // Create rock
-            createRock(x, 0, z);
-        }
-        
-        debug('Decorative objects added successfully');
-    } catch (error) {
-        debug(`Error adding decorative objects: ${error.message}`, true);
-    }
-}
-
-// Helper function to create a tree
-function createTree(x, y, z) {
-    // Create tree trunk (cylinder)
-    const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
-    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(x, y + 2.5, z);
-    trunk.castShadow = true;
-    trunk.receiveShadow = true;
-    scene.add(trunk);
-    
-    // Create tree top (cone for evergreen tree)
-    const topGeometry = new THREE.ConeGeometry(2, 6, 8);
-    const topMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 }); // Green
-    const top = new THREE.Mesh(topGeometry, topMaterial);
-    top.position.set(x, y + 6, z);
-    top.castShadow = true;
-    top.receiveShadow = true;
-    scene.add(top);
-}
-
-// Helper function to create a rock
-function createRock(x, y, z) {
-    // Randomly scale the rock
-    const scale = 0.5 + Math.random() * 1.5;
-    
-    // Create irregular rock shape using a scaled sphere
-    const rockGeometry = new THREE.SphereGeometry(1, 6, 4);
-    
-    // Randomly deform vertices to make it look more like a rock
-    const vertices = rockGeometry.attributes.position;
-    for (let i = 0; i < vertices.count; i++) {
-        const x = vertices.getX(i);
-        const y = vertices.getY(i);
-        const z = vertices.getZ(i);
-        
-        // Apply random offset to vertex
-        vertices.setX(i, x + (Math.random() - 0.5) * 0.3);
-        vertices.setY(i, y + (Math.random() - 0.5) * 0.3);
-        vertices.setZ(i, z + (Math.random() - 0.5) * 0.3);
-    }
-    
-    // Update normals after vertex modification
-    rockGeometry.computeVertexNormals();
-    
-    // Create rock material with random gray shade
-    const grayShade = 0.4 + Math.random() * 0.3;
-    const rockMaterial = new THREE.MeshStandardMaterial({ 
-        color: new THREE.Color(grayShade, grayShade, grayShade),
-        roughness: 0.9,
-        metalness: 0.1
-    });
-    
-    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
-    rock.scale.set(scale, scale * 0.7, scale);
-    rock.position.set(x, y + (scale * 0.35), z);
-    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-    rock.castShadow = true;
-    rock.receiveShadow = true;
-    scene.add(rock);
 }

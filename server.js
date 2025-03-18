@@ -169,7 +169,7 @@ class NumberblocksRoom extends Room {
         this.maxOperators = 10;
         
         // Setup static numberblocks
-        this.createStaticNumberblock("static1", 2, 0, 0, -5);
+        this.createStaticNumberblock("static1", 2, 2, 0, -5);
         this.createStaticNumberblock("static2", 3, 5, 0, -5);
         this.createStaticNumberblock("static3", 4, -5, 0, -5);
         this.createStaticNumberblock("static4", 5, 0, 0, -10);
@@ -406,7 +406,7 @@ class NumberblocksRoom extends Room {
         operator.z = (Math.random() * mapSize) - (mapSize / 2);
         
         // Add to state
-        this.state.operators[id] = operator;
+        this.state.operators.set(id, operator); // Using .set() for MapSchema
         console.log(`Spawned ${type} operator at (${operator.x.toFixed(2)}, ${operator.y}, ${operator.z.toFixed(2)})`);
     }
     
@@ -415,12 +415,11 @@ class NumberblocksRoom extends Room {
         const staticBlock = new StaticNumberblock();
         staticBlock.value = value;
         staticBlock.x = x;
-        // Set Y position to 0 (ground level)
-        staticBlock.y = 0;
+        staticBlock.y = y;
         staticBlock.z = z;
         
-        this.state.staticNumberblocks[id] = staticBlock;
-        console.log(`Created static numberblock with ID ${id}, value ${value} at (${x}, ${staticBlock.y}, ${z})`);
+        this.state.staticNumberblocks.set(id, staticBlock); // Using .set() for MapSchema
+        console.log(`Created static numberblock with ID ${id}, value ${value} at (${x}, ${y}, ${z})`);
     }
     
     onJoin(client, options) {

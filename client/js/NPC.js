@@ -1,5 +1,8 @@
 // Numberblocks game - NPC entity class
 
+import { Entity } from './Entity.js';
+import { Numberblock } from './numberblock.js';
+
 class NPC extends Entity {
     constructor(params) {
         super(params);
@@ -84,7 +87,7 @@ class NPC extends Entity {
         switch (this.type) {
             case 'numberblock':
                 // For static numberblocks, we use the same Numberblock class
-                const numberblock = new window.Numberblock(this.value, this.color, this.name);
+                const numberblock = new Numberblock(this.value, this.color, this.name);
                 
                 // Store the numberblock reference for later updates
                 numberblock.mesh.userData.numberblockRef = numberblock;
@@ -127,7 +130,7 @@ class NPC extends Entity {
             }
             
             // Create new numberblock with updated value
-            const numberblock = new window.Numberblock(newValue, this.color, this.name);
+            const numberblock = new Numberblock(newValue, this.color, this.name);
             this.mesh = numberblock.mesh;
             
             // Restore position and rotation

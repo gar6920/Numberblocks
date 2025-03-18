@@ -1607,7 +1607,7 @@ class NumberblocksRoom extends Room {
         this.maxOperators = 10;
         
         // Setup static numberblocks
-        this.createStaticNumberblock("static1", 2, 0, 0, -5);
+        this.createStaticNumberblock("static1", 2, 2, 0, -5);
         this.createStaticNumberblock("static2", 3, 5, 0, -5);
         this.createStaticNumberblock("static3", 4, -5, 0, -5);
         this.createStaticNumberblock("static4", 5, 0, 0, -10);
@@ -1844,7 +1844,7 @@ class NumberblocksRoom extends Room {
         operator.z = (Math.random() * mapSize) - (mapSize / 2);
         
         // Add to state
-        this.state.operators[id] = operator;
+        this.state.operators.set(id, operator); // Using .set() for MapSchema
         console.log(`Spawned ${type} operator at (${operator.x.toFixed(2)}, ${operator.y}, ${operator.z.toFixed(2)})`);
     }
     
@@ -1853,12 +1853,11 @@ class NumberblocksRoom extends Room {
         const staticBlock = new StaticNumberblock();
         staticBlock.value = value;
         staticBlock.x = x;
-        // Set Y position to 0 (ground level)
-        staticBlock.y = 0;
+        staticBlock.y = y;
         staticBlock.z = z;
         
-        this.state.staticNumberblocks[id] = staticBlock;
-        console.log(`Created static numberblock with ID ${id}, value ${value} at (${x}, ${staticBlock.y}, ${z})`);
+        this.state.staticNumberblocks.set(id, staticBlock); // Using .set() for MapSchema
+        console.log(`Created static numberblock with ID ${id}, value ${value} at (${x}, ${y}, ${z})`);
     }
     
     onJoin(client, options) {
@@ -2090,32 +2089,38 @@ FILE: client\index.html
     <div id="game-hud"></div>
     
     <!-- Three.js library via CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/renderers/CSS2DRenderer.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.132.2/build/three.module.js",
+            "three/examples/jsm/controls/PointerLockControls.js": "https://unpkg.com/three@0.132.2/examples/jsm/controls/PointerLockControls.js",
+            "three/examples/jsm/renderers/CSS2DRenderer.js": "https://unpkg.com/three@0.132.2/examples/jsm/renderers/CSS2DRenderer.js"
+        }
+    }
+    </script>
     
     <!-- Colyseus client library -->
-    <script src="https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js"></script>
+    <script type="module" src="https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js"></script>
     
     <!-- Numberblocks game scripts -->
-    <script src="js/collision.js"></script>
-    <script src="js/numberblock.js"></script>
-    <script src="js/operator.js"></script>
+    <script type="module" src="js/collision.js"></script>
+    <script type="module" src="js/numberblock.js"></script>
+    <script type="module" src="js/operator.js"></script>
     
     <!-- Entity System -->
-    <script src="js/Entity.js"></script>
-    <script src="js/Player.js"></script>
-    <script src="js/NPC.js"></script>
-    <script src="js/EntityFactory.js"></script>
+    <script type="module" src="js/Entity.js"></script>
+    <script type="module" src="js/Player.js"></script>
+    <script type="module" src="js/NPC.js"></script>
+    <script type="module" src="js/EntityFactory.js"></script>
     
     <!-- Network System (Modular) -->
-    <script src="js/network-core.js"></script>
-    <script src="js/player-sync.js"></script>
-    <script src="js/entity-sync.js"></script>
-    <script src="js/player-ui.js"></script>
+    <script type="module" src="js/network-core.js"></script>
+    <script type="module" src="js/player-sync.js"></script>
+    <script type="module" src="js/entity-sync.js"></script>
+    <script type="module" src="js/player-ui.js"></script>
     
-    <script src="js/controls.js"></script>
-    <script src="js/main-fixed.js"></script>
+    <script type="module" src="js/controls.js"></script>
+    <script type="module" src="js/main-fixed.js"></script>
 </body>
 </html>
  
@@ -2442,6 +2447,8 @@ function markAllObjectsAsCollidable(scene) {
 FILE: client\js\controls.js 
 ===================================================== 
  
+import * as THREE from 'three';
+
 // Numberblocks game - First-person controls implementation
 
 // Global variables
@@ -2655,6 +2662,10 @@ window.updateControls = function(controls, delta) {
 FILE: client\js\entity-sync.js 
 ===================================================== 
  
+import * as THREE from 'three';
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { setupPlayerListeners, removePlayerVisual, setupRoomEventListeners } from './player-sync.js';
+
 // Numberblocks game - Entity synchronization module
 // Handles entity synchronization (operators, static numberblocks)
 
@@ -2739,8 +2750,8 @@ function setupRoomListeners() {
     window.room.onStateChange.once((state) => {
         console.log("✅ State synchronized, setting up listeners.");
 
-        // Confirm 'players' is a MapSchema before adding listeners
-        if (state.players && typeof state.players.onAdd === 'function') {
+        // Verify players is a MapSchema or has correct Colyseus methods
+        if (state.players && state.players.onAdd && typeof state.players.onAdd === 'function') {
             state.players.onAdd((player, sessionId) => {
                 console.log(`Player ${sessionId} joined.`);
                 setupPlayerListeners(player, sessionId);
@@ -2756,11 +2767,11 @@ function setupRoomListeners() {
                 setupPlayerListeners(player, sessionId);
             });
         } else {
-            console.error("❌ state.players is not a valid MapSchema");
+            console.error("❌ state.players is not a valid MapSchema", state.players);
         }
 
-        // Operators collection listeners
-        if (state.operators && typeof state.operators.onAdd === 'function') {
+        // Verify operators is a MapSchema
+        if (state.operators && state.operators.onAdd && typeof state.operators.onAdd === 'function') {
             state.operators.onAdd((operator, operatorId) => {
                 createOperatorVisual(operator, operatorId);
             });
@@ -2773,11 +2784,11 @@ function setupRoomListeners() {
                 createOperatorVisual(operator, operatorId);
             });
         } else {
-            console.error("❌ state.operators is not a valid MapSchema");
+            console.error("❌ state.operators is not a valid MapSchema", state.operators);
         }
 
-        // Static Numberblocks listeners
-        if (state.staticNumberblocks && typeof state.staticNumberblocks.onAdd === 'function') {
+        // Verify staticNumberblocks is a MapSchema
+        if (state.staticNumberblocks && state.staticNumberblocks.onAdd && typeof state.staticNumberblocks.onAdd === 'function') {
             state.staticNumberblocks.onAdd((block, blockId) => {
                 createStaticNumberblockVisual(block, blockId);
             });
@@ -2790,7 +2801,7 @@ function setupRoomListeners() {
                 createStaticNumberblockVisual(block, blockId);
             });
         } else {
-            console.error("❌ state.staticNumberblocks is not a valid MapSchema");
+            console.error("❌ state.staticNumberblocks is not a valid MapSchema", state.staticNumberblocks);
         }
 
         console.log("✅ Room listeners fully set up.");
@@ -2943,7 +2954,7 @@ window.StaticNumberblocksVisual = class StaticNumberblocksVisual {
 };
 
 // Make functions available globally
-window.setupRoomListeners = setupRoomListeners;
+window.setupRoomEventListeners = setupRoomEventListeners;
 window.createOperatorVisual = createOperatorVisual;
 window.removeOperatorVisual = removeOperatorVisual;
 window.createStaticNumberblockVisual = createStaticNumberblockVisual;
@@ -2954,6 +2965,8 @@ window.removeStaticNumberblockVisual = removeStaticNumberblockVisual;
 FILE: client\js\Entity.js 
 ===================================================== 
  
+import { Numberblock } from './numberblock.js';
+
 // Numberblocks game - Base Entity class for all game entities
 
 class Entity {
@@ -2986,7 +2999,7 @@ class Entity {
         switch (this.type) {
             case 'numberblock':
                 // Create a new numberblock visual
-                visual = new window.Numberblock(this.value, this.color, this.name);
+                visual = new Numberblock(this.value, this.color, this.name);
                 return visual.mesh;
                 
             case 'operator':
@@ -3087,6 +3100,9 @@ if (typeof window !== 'undefined') {
 FILE: client\js\EntityFactory.js 
 ===================================================== 
  
+import { Numberblock } from './numberblock.js';
+import { updatePlayerListUI } from './player-sync.js';
+
 // Numberblocks game - Entity Factory for creating game entities
 
 class EntityFactory {
@@ -3431,6 +3447,11 @@ FILE: client\js\main-fixed.js
 ===================================================== 
  
 // Numberblocks game - Main game logic
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { updatePlayerListUI } from './player-sync.js';
+import { Numberblock } from './numberblock.js';
 
 // Debug support
 const DEBUG = false;
@@ -3682,6 +3703,10 @@ function switchToThirdPersonView() {
         // Set up third-person mouse handler if it doesn't exist
         if (!window.thirdPersonMouseHandler) {
             window.thirdPersonMouseHandler = function(event) {
+                if (!controls || !document.pointerLockElement) {
+                    return;
+                }
+                
                 // Only process if we're in third-person mode and pointer is locked
                 if (!window.isFirstPerson && controls.isLocked) {
                     // Skip processing extremely small movements to prevent drift
@@ -4305,31 +4330,6 @@ function updateHUD() {
     }
 }
 
-// For Numberblock prototype to enable getHeight() method
-if (typeof window.Numberblock === 'undefined') {
-    console.log("Creating temporary Numberblock class");
-    window.Numberblock = function(value, color) {
-        this.value = value || 1;
-        this.color = color || "#FFFF00";
-        
-        // Create a basic mesh for the numberblock
-        const geometry = new THREE.BoxGeometry(1, this.value, 1);
-        const material = new THREE.MeshStandardMaterial({ color: this.color });
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.castShadow = true;
-        this.mesh.receiveShadow = true;
-    };
-    
-    window.Numberblock.prototype.getHeight = function() {
-        return this.value; // Actual height is the value
-    };
-    
-    window.Numberblock.prototype.createNumberblock = function() {
-        // Method already called in constructor, but added for compatibility
-        return this.mesh;
-    };
-}
-
 // Handle window resize
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -4497,86 +4497,140 @@ function initPlayerNumberblock() {
         
         // Update HUD
         updateHUD();
-        
-        // Make Numberblock class available globally
-        window.Numberblock = Numberblock;
     } catch (error) {
         debug(`Error creating player Numberblock: ${error.message}`, true);
     }
 }
 
 // Initialize networking for multiplayer
-function initNetworkingSystem() {
-    debug('Initializing networking system');
-    
+async function initNetworkingSystem() {
     try {
         console.log("Initializing networking system...");
         
-        // Check if initNetworking is defined in network-core.js
-        if (typeof window.initNetworking === 'function') {
-            debug('Found networking module, attempting to connect...');
-            window.initNetworking()
-                .then((roomInstance) => {
-                    debug('Networking initialized successfully');
-                    window.gameRoom = roomInstance; // Store room instance globally
-                    window.room = roomInstance; // For compatibility
-                    
-                    // Setup room event listeners
-                    setupRoomEventHandlers(roomInstance);
-                    
-                    // Create debug overlay if it doesn't exist
-                    createDebugOverlay();
-                    
-                    // Manually trigger player list update after successful connection
-                    if (typeof window.updatePlayerListUI === 'function') {
-                        setTimeout(window.updatePlayerListUI, 500);
-                        setTimeout(window.updatePlayerListUI, 2000);
-                    }
-                })
-                .catch(error => {
-                    debug(`Networking error: ${error.message}`, true);
-                });
-        } else {
-            debug('Networking module not detected, continuing in local mode');
+        // Initialize Colyseus client
+        if (!window.client) {
+            window.client = new Colyseus.Client('ws://localhost:3000');
         }
+        
+        // Join or create room
+        window.client.joinOrCreate("numberblocks").then(roomInstance => {
+            if (roomInstance) {
+                console.log("✅ Joined room:", roomInstance.name);
+                window.room = roomInstance; // For compatibility
+                
+                // Create debug overlay if it doesn't exist
+                createDebugOverlay();
+                
+                // Schedule UI updates
+                if (typeof window.updatePlayerListUI === 'function') {
+                    setTimeout(window.updatePlayerListUI, 500);
+                    setTimeout(window.updatePlayerListUI, 2000);
+                }
+            }
+        }).catch(e => {
+            console.error("❌ Error joining room:", e);
+        });
+        
     } catch (error) {
-        debug(`Error initializing networking: ${error.message}`, true);
+        console.error("❌ Error initializing networking:", error);
     }
 }
 
-// Setup room event handlers
-function setupRoomEventHandlers(room) {
-    if (!room) return;
-    
-    // Register for player join events
-    room.state.players.onAdd = function(player, sessionId) {
-        console.log("Player added to room state:", sessionId);
+// Add decorative objects to the scene
+function addDecorativeObjects() {
+    try {
+        debug('Adding decorative objects');
         
-        // Call the player join handler if available
-        if (typeof window.onPlayerJoin === 'function') {
-            window.onPlayerJoin(player);
+        // Add multiple trees scattered around
+        for (let i = 0; i < 20; i++) {
+            // Randomize positions but keep away from center
+            const distance = 15 + Math.random() * 30;
+            const angle = Math.random() * Math.PI * 2;
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            
+            // Create tree
+            createTree(x, 0, z);
         }
-    };
-    
-    // Register for player leave events
-    room.state.players.onRemove = function(player, sessionId) {
-        console.log("Player removed from room state:", sessionId);
         
-        // Call the player leave handler if available
-        if (typeof window.onPlayerLeave === 'function') {
-            window.onPlayerLeave(player);
+        // Add some rocks
+        for (let i = 0; i < 15; i++) {
+            // Randomize positions
+            const distance = 10 + Math.random() * 40;
+            const angle = Math.random() * Math.PI * 2;
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
+            
+            // Create rock
+            createRock(x, 0, z);
         }
-    };
+        
+        debug('Decorative objects added successfully');
+    } catch (error) {
+        debug(`Error adding decorative objects: ${error.message}`, true);
+    }
+}
+
+// Helper function to create a tree
+function createTree(x, y, z) {
+    // Create tree trunk (cylinder)
+    const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
+    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    trunk.position.set(x, y + 2.5, z);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    scene.add(trunk);
     
-    // Register for player change events
-    room.state.players.onChange = function(player, sessionId) {
-        // This could be used for player property changes if needed
-    };
+    // Create tree top (cone for evergreen tree)
+    const topGeometry = new THREE.ConeGeometry(2, 6, 8);
+    const topMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 }); // Green
+    const top = new THREE.Mesh(topGeometry, topMaterial);
+    top.position.set(x, y + 6, z);
+    top.castShadow = true;
+    top.receiveShadow = true;
+    scene.add(top);
+}
+
+// Helper function to create a rock
+function createRock(x, y, z) {
+    // Randomly scale the rock
+    const scale = 0.5 + Math.random() * 1.5;
     
-    // Register for state change events
-    room.onStateChange(function(state) {
-        // This could be used to handle full state changes if needed
+    // Create irregular rock shape using a scaled sphere
+    const rockGeometry = new THREE.SphereGeometry(1, 6, 4);
+    
+    // Randomly deform vertices to make it look more like a rock
+    const vertices = rockGeometry.attributes.position;
+    for (let i = 0; i < vertices.count; i++) {
+        const x = vertices.getX(i);
+        const y = vertices.getY(i);
+        const z = vertices.getZ(i);
+        
+        // Apply random offset to vertex
+        vertices.setX(i, x + (Math.random() - 0.5) * 0.3);
+        vertices.setY(i, y + (Math.random() - 0.5) * 0.3);
+        vertices.setZ(i, z + (Math.random() - 0.5) * 0.3);
+    }
+    
+    // Update normals after vertex modification
+    rockGeometry.computeVertexNormals();
+    
+    // Create rock material with random gray shade
+    const grayShade = 0.4 + Math.random() * 0.3;
+    const rockMaterial = new THREE.MeshStandardMaterial({ 
+        color: new THREE.Color(grayShade, grayShade, grayShade),
+        roughness: 0.9,
+        metalness: 0.1
     });
+    
+    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+    rock.scale.set(scale, scale * 0.7, scale);
+    rock.position.set(x, y + (scale * 0.35), z);
+    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    scene.add(rock);
 }
 
 // Create debug overlay for development
@@ -4691,103 +4745,6 @@ function emergencyRender() {
         alert('Critical rendering error: ' + error.message);
     }
 }
-
-// Add decorative objects to the scene
-function addDecorativeObjects() {
-    try {
-        debug('Adding decorative objects');
-        
-        // Add multiple trees scattered around
-        for (let i = 0; i < 20; i++) {
-            // Randomize positions but keep away from center
-            const distance = 15 + Math.random() * 30;
-            const angle = Math.random() * Math.PI * 2;
-            const x = Math.cos(angle) * distance;
-            const z = Math.sin(angle) * distance;
-            
-            // Create tree
-            createTree(x, 0, z);
-        }
-        
-        // Add some rocks
-        for (let i = 0; i < 15; i++) {
-            // Randomize positions
-            const distance = 10 + Math.random() * 40;
-            const angle = Math.random() * Math.PI * 2;
-            const x = Math.cos(angle) * distance;
-            const z = Math.sin(angle) * distance;
-            
-            // Create rock
-            createRock(x, 0, z);
-        }
-        
-        debug('Decorative objects added successfully');
-    } catch (error) {
-        debug(`Error adding decorative objects: ${error.message}`, true);
-    }
-}
-
-// Helper function to create a tree
-function createTree(x, y, z) {
-    // Create tree trunk (cylinder)
-    const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
-    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(x, y + 2.5, z);
-    trunk.castShadow = true;
-    trunk.receiveShadow = true;
-    scene.add(trunk);
-    
-    // Create tree top (cone for evergreen tree)
-    const topGeometry = new THREE.ConeGeometry(2, 6, 8);
-    const topMaterial = new THREE.MeshStandardMaterial({ color: 0x228822 }); // Green
-    const top = new THREE.Mesh(topGeometry, topMaterial);
-    top.position.set(x, y + 6, z);
-    top.castShadow = true;
-    top.receiveShadow = true;
-    scene.add(top);
-}
-
-// Helper function to create a rock
-function createRock(x, y, z) {
-    // Randomly scale the rock
-    const scale = 0.5 + Math.random() * 1.5;
-    
-    // Create irregular rock shape using a scaled sphere
-    const rockGeometry = new THREE.SphereGeometry(1, 6, 4);
-    
-    // Randomly deform vertices to make it look more like a rock
-    const vertices = rockGeometry.attributes.position;
-    for (let i = 0; i < vertices.count; i++) {
-        const x = vertices.getX(i);
-        const y = vertices.getY(i);
-        const z = vertices.getZ(i);
-        
-        // Apply random offset to vertex
-        vertices.setX(i, x + (Math.random() - 0.5) * 0.3);
-        vertices.setY(i, y + (Math.random() - 0.5) * 0.3);
-        vertices.setZ(i, z + (Math.random() - 0.5) * 0.3);
-    }
-    
-    // Update normals after vertex modification
-    rockGeometry.computeVertexNormals();
-    
-    // Create rock material with random gray shade
-    const grayShade = 0.4 + Math.random() * 0.3;
-    const rockMaterial = new THREE.MeshStandardMaterial({ 
-        color: new THREE.Color(grayShade, grayShade, grayShade),
-        roughness: 0.9,
-        metalness: 0.1
-    });
-    
-    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
-    rock.scale.set(scale, scale * 0.7, scale);
-    rock.position.set(x, y + (scale * 0.35), z);
-    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-    rock.castShadow = true;
-    rock.receiveShadow = true;
-    scene.add(rock);
-}
  
  
 ===================================================== 
@@ -4796,6 +4753,10 @@ FILE: client\js\network-core.js
  
 // Numberblocks game - Core networking module
 // Handles connection to the server and basic network setup
+
+import * as Colyseus from "https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js";
+import { GameState } from './schema.js';
+import { updatePlayerListUI } from './player-sync.js';
 
 // Network configuration
 const endpoint = 'ws://localhost:3000';
@@ -5051,87 +5012,11 @@ function addReconnectButton() {
 
 // Function to initialize networking for multiplayer
 async function initNetworking() {
-    const endpoint = "ws://localhost:3000";
-    console.log("Initializing networking system...");
-    
-    try {
-        console.log(`Connecting to Colyseus server at: ${endpoint}`);
-        
-        // Create client if needed
-        if (!client) {
-            try {
-                client = new Colyseus.Client(endpoint);
-                console.log("Colyseus client created");
-            } catch (clientError) {
-                console.error("Failed to create Colyseus client:", clientError);
-                throw new Error(`Failed to create client: ${clientError.message}`);
-            }
-        }
-        
-        // Try to join the room
-        try {
-            console.log("Attempting to join room...");
-            room = await client.joinOrCreate("numberblocks", {
-                name: `Player_${Math.floor(Math.random() * 1000)}`,
-                color: getRandomColor()
-            });
-            console.log("Joined room successfully:", room.name);
-            
-            // Store room in global scope
-            window.room = room;
-            
-            // Initialize object collections
-            window.otherPlayers = {};
-            window.operators = {};
-            window.staticNumberblocks = {};
-            window.trees = {};
-            window.rocks = {};
-            
-            // Setup message handlers
-            setupMessageHandlers();
-            
-            // Setup automatic reconnection
-            setupReconnection(room, client);
-            
-            // Wait for the initial state before setting up listeners
-            room.onStateChange.once((state) => {
-                console.log("Initial state received, setting up room listeners");
-                
-                // Setup room listeners
-                window.roomInitialized = false;
-                setupRoomListeners(room);
-                
-                // Check if room initialization succeeded
-                const checkRoomInit = () => {
-                    if (window.roomInitialized) {
-                        // Process existing players
-                        processExistingPlayers();
-                        
-                        // Initial player list update
-                        updatePlayerListUI();
-                        
-                        // Notify that avatar is ready
-                        window.dispatchEvent(new CustomEvent('avatarReady'));
-                        console.log("Avatar is ready");
-                    } else {
-                        // Keep checking if not initialized yet
-                        setTimeout(checkRoomInit, 100);
-                    }
-                };
-                
-                // Start initialization check
-                checkRoomInit();
-            });
-            
-            return room;
-        } catch (roomError) {
-            console.error("Error joining room:", roomError);
-            throw roomError;
-        }
-    } catch (error) {
-        console.error("Error connecting to server:", error);
-        throw error;
-    }
+    window.client = new Colyseus.Client("ws://localhost:3000");
+    window.client.joinOrCreate("numberblocks", {}, GameState).then(room => {
+        window.room = room;
+        setupRoomListeners();
+    });
 }
 
 // Setup message handlers
@@ -5392,6 +5277,9 @@ FILE: client\js\NPC.js
  
 // Numberblocks game - NPC entity class
 
+import { Entity } from './Entity.js';
+import { Numberblock } from './numberblock.js';
+
 class NPC extends Entity {
     constructor(params) {
         super(params);
@@ -5476,7 +5364,7 @@ class NPC extends Entity {
         switch (this.type) {
             case 'numberblock':
                 // For static numberblocks, we use the same Numberblock class
-                const numberblock = new window.Numberblock(this.value, this.color, this.name);
+                const numberblock = new Numberblock(this.value, this.color, this.name);
                 
                 // Store the numberblock reference for later updates
                 numberblock.mesh.userData.numberblockRef = numberblock;
@@ -5519,7 +5407,7 @@ class NPC extends Entity {
             }
             
             // Create new numberblock with updated value
-            const numberblock = new window.Numberblock(newValue, this.color, this.name);
+            const numberblock = new Numberblock(newValue, this.color, this.name);
             this.mesh = numberblock.mesh;
             
             // Restore position and rotation
@@ -5597,7 +5485,7 @@ FILE: client\js\numberblock.js
  
 // Numberblocks game - Numberblock model implementation
 
-class Numberblock {
+export class Numberblock {
     constructor(value = 1, color = null) {
         this.value = value;
         this.mesh = new THREE.Group();
@@ -5896,11 +5784,7 @@ if (typeof module !== 'undefined') {
         Numberblock,
         createPlayerNumberblock
     };
-}
-
-// Always make Numberblock available globally
-window.Numberblock = Numberblock;
-console.log('Numberblock class exported to window object'); 
+} 
  
 ===================================================== 
 FILE: client\js\operator.js 
@@ -6242,10 +6126,15 @@ FILE: client\js\player-sync.js
 ===================================================== 
  
 // Numberblocks game - Player synchronization module
-// Handles player synchronization between clients
+import * as THREE from 'three';
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+
+// Initialize tracking collections
+const visuals = { players: {} };
+window.otherPlayers = {};
 
 // Helper functions for visual management
-function setupPlayerListeners(player, sessionId) {
+export function setupPlayerListeners(player, sessionId) {
     try {
         // Skip if it's our own player
         if (sessionId === window.room.sessionId) {
@@ -6280,7 +6169,7 @@ function setupPlayerListeners(player, sessionId) {
     }
 }
 
-function removePlayerVisual(sessionId) {
+export function removePlayerVisual(sessionId) {
     try {
         // Remove visual
         if (visuals.players && visuals.players[sessionId]) {
@@ -6302,7 +6191,7 @@ function removePlayerVisual(sessionId) {
 }
 
 // Update player list UI
-function updatePlayerListUI() {
+export function updatePlayerListUI() {
     try {
         const playerList = document.getElementById('playerList');
         if (!playerList) return;
@@ -6328,7 +6217,7 @@ function updatePlayerListUI() {
 }
 
 // Define visual class for Players
-window.PlayersVisual = class PlayersVisual {
+export class PlayersVisual {
     constructor(playerData) {
         this.group = new THREE.Group();
         this.numberblockMesh = null;
@@ -6382,71 +6271,56 @@ window.PlayersVisual = class PlayersVisual {
             console.error("Error updating player visual:", error);
         }
     }
-};
+}
 
 // Process players that already exist in the room when joining
-function processExistingPlayers() {
+export function processExistingPlayers() {
     if (!window.room) {
         console.warn("Room not available for processing existing players");
         return;
     }
-    
+
     try {
-        // Get all player objects from the room state
-        const players = window.room.state.players;
-        if (!players) {
-            console.warn("No players collection in room state");
-            return;
-        }
-        
-        // Track our own player ID
-        window.mySessionId = window.room.sessionId;
-        
-        // Process each player in the room
-        players.forEach((player, sessionId) => {
+        // Process all existing players
+        window.room.state.players.forEach((player, sessionId) => {
             setupPlayerListeners(player, sessionId);
         });
-        
-        console.log("Processed existing players. Total:", players.size);
+
+        // Update UI
+        updatePlayerListUI();
     } catch (error) {
         console.error("Error processing existing players:", error);
     }
 }
 
-// Setup specific schema listeners for Players
-function setupPlayerListeners(room) {
+// Setup room event listeners for player changes
+export function setupRoomEventListeners(room) {
     if (!room || !room.state || !room.state.players) {
         console.warn('Players state not available.');
         return;
     }
 
-    // Listen for player added
+    // Handle new players joining
     room.state.players.onAdd((player, sessionId) => {
-        console.log(`✅ Player ${sessionId} joined.`, player);
+        console.log(`Player joined (${sessionId})`);
         setupPlayerListeners(player, sessionId);
     });
 
-    // Listen for player removal
+    // Handle players leaving
     room.state.players.onRemove((player, sessionId) => {
-        console.log(`✅ Player ${sessionId} left.`, player);
+        console.log(`Player left (${sessionId})`);
         removePlayerVisual(sessionId);
     });
 
-    // Initial iteration (process existing players)
-    room.state.players.forEach((player, sessionId) => {
-        console.log(`✅ Processing existing player: ${sessionId}`, player);
+    // Handle player updates
+    room.state.players.onChange((player, sessionId) => {
+        console.log(`Player changed (${sessionId})`);
         setupPlayerListeners(player, sessionId);
     });
-    
+
     // Update UI after processing all players
     updatePlayerListUI();
 }
-
-// Make functions available globally
-window.setupPlayerListeners = setupPlayerListeners;
-window.removePlayerVisual = removePlayerVisual;
-window.updatePlayerListUI = updatePlayerListUI;
-window.processExistingPlayers = processExistingPlayers;
  
  
 ===================================================== 
@@ -6635,6 +6509,9 @@ FILE: client\js\Player.js
  
 // Numberblocks game - Player entity class
 
+import { Entity } from './Entity.js';
+import { Numberblock } from './numberblock.js';
+
 class Player extends Entity {
     constructor(params) {
         super(params);
@@ -6684,7 +6561,7 @@ class Player extends Entity {
             case 'numberblock':
             default:
                 // Default to numberblock for now
-                const numberblock = new window.Numberblock(this.value, this.color, this.name);
+                const numberblock = new Numberblock(this.value, this.color, this.name);
                 return numberblock.mesh;
         }
     }
@@ -6704,7 +6581,7 @@ class Player extends Entity {
             }
             
             // Create new numberblock with updated value
-            const numberblock = new window.Numberblock(newValue, this.color, this.name);
+            const numberblock = new Numberblock(newValue, this.color, this.name);
             this.mesh = numberblock.mesh;
             
             // Restore position and rotation
@@ -6750,6 +6627,95 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined') {
     module.exports = { Player };
 }
+ 
+ 
+===================================================== 
+FILE: client\js\schema.js 
+===================================================== 
+ 
+import { Schema, MapSchema, defineTypes } from "https://unpkg.com/@colyseus/schema@1.1.2/dist/Schema.mjs";
+
+// Player schema
+export class Player extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.value = 1;
+        this.rotationY = 0;
+        this.pitch = 0;
+        this.operator = "";
+        this.color = "#ff0000";
+        this.name = "";
+        this.velocityY = 0;
+    }
+}
+defineTypes(Player, {
+    x: "number",
+    y: "number",
+    z: "number",
+    value: "number",
+    rotationY: "number",
+    pitch: "number",
+    operator: "string",
+    color: "string",
+    name: "string",
+    velocityY: "number"
+});
+
+// Operator schema
+export class Operator extends Schema {
+    constructor() {
+        super();
+        this.id = "";
+        this.type = "";
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+    }
+}
+defineTypes(Operator, {
+    id: "string",
+    type: "string",
+    x: "number",
+    y: "number",
+    z: "number"
+});
+
+// StaticNumberblock schema
+export class StaticNumberblock extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.value = 1;
+        this.color = "#ff0000";
+    }
+}
+defineTypes(StaticNumberblock, {
+    x: "number",
+    y: "number",
+    z: "number",
+    value: "number",
+    color: "string"
+});
+
+// GameState schema
+export class GameState extends Schema {
+    constructor() {
+        super();
+        this.players = new MapSchema();
+        this.operators = new MapSchema();
+        this.staticNumberblocks = new MapSchema();
+    }
+}
+defineTypes(GameState, {
+    players: { map: Player },
+    operators: { map: Operator },
+    staticNumberblocks: { map: StaticNumberblock }
+});
  
  
 ===================================================== 

@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 // Numberblocks game - First-person controls implementation
 
 // Global variables

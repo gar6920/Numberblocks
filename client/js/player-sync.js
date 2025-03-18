@@ -1,8 +1,13 @@
 // Numberblocks game - Player synchronization module
-// Handles player synchronization between clients
+import * as THREE from 'three';
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+
+// Initialize tracking collections
+const visuals = { players: {} };
+window.otherPlayers = {};
 
 // Helper functions for visual management
-function setupPlayerListeners(player, sessionId) {
+export function setupPlayerListeners(player, sessionId) {
     try {
         // Skip if it's our own player
         if (sessionId === window.room.sessionId) {
@@ -37,7 +42,7 @@ function setupPlayerListeners(player, sessionId) {
     }
 }
 
-function removePlayerVisual(sessionId) {
+export function removePlayerVisual(sessionId) {
     try {
         // Remove visual
         if (visuals.players && visuals.players[sessionId]) {
@@ -59,7 +64,7 @@ function removePlayerVisual(sessionId) {
 }
 
 // Update player list UI
-function updatePlayerListUI() {
+export function updatePlayerListUI() {
     try {
         const playerList = document.getElementById('playerList');
         if (!playerList) return;
@@ -85,7 +90,7 @@ function updatePlayerListUI() {
 }
 
 // Define visual class for Players
-window.PlayersVisual = class PlayersVisual {
+export class PlayersVisual {
     constructor(playerData) {
         this.group = new THREE.Group();
         this.numberblockMesh = null;
@@ -139,68 +144,53 @@ window.PlayersVisual = class PlayersVisual {
             console.error("Error updating player visual:", error);
         }
     }
-};
+}
 
 // Process players that already exist in the room when joining
-function processExistingPlayers() {
+export function processExistingPlayers() {
     if (!window.room) {
         console.warn("Room not available for processing existing players");
         return;
     }
-    
+
     try {
-        // Get all player objects from the room state
-        const players = window.room.state.players;
-        if (!players) {
-            console.warn("No players collection in room state");
-            return;
-        }
-        
-        // Track our own player ID
-        window.mySessionId = window.room.sessionId;
-        
-        // Process each player in the room
-        players.forEach((player, sessionId) => {
+        // Process all existing players
+        window.room.state.players.forEach((player, sessionId) => {
             setupPlayerListeners(player, sessionId);
         });
-        
-        console.log("Processed existing players. Total:", players.size);
+
+        // Update UI
+        updatePlayerListUI();
     } catch (error) {
         console.error("Error processing existing players:", error);
     }
 }
 
-// Setup specific schema listeners for Players
-function setupPlayerListeners(room) {
+// Setup room event listeners for player changes
+export function setupRoomEventListeners(room) {
     if (!room || !room.state || !room.state.players) {
         console.warn('Players state not available.');
         return;
     }
 
-    // Listen for player added
+    // Handle new players joining
     room.state.players.onAdd((player, sessionId) => {
-        console.log(`✅ Player ${sessionId} joined.`, player);
+        console.log(`Player joined (${sessionId})`);
         setupPlayerListeners(player, sessionId);
     });
 
-    // Listen for player removal
+    // Handle players leaving
     room.state.players.onRemove((player, sessionId) => {
-        console.log(`✅ Player ${sessionId} left.`, player);
+        console.log(`Player left (${sessionId})`);
         removePlayerVisual(sessionId);
     });
 
-    // Initial iteration (process existing players)
-    room.state.players.forEach((player, sessionId) => {
-        console.log(`✅ Processing existing player: ${sessionId}`, player);
+    // Handle player updates
+    room.state.players.onChange((player, sessionId) => {
+        console.log(`Player changed (${sessionId})`);
         setupPlayerListeners(player, sessionId);
     });
-    
+
     // Update UI after processing all players
     updatePlayerListUI();
 }
-
-// Make functions available globally
-window.setupPlayerListeners = setupPlayerListeners;
-window.removePlayerVisual = removePlayerVisual;
-window.updatePlayerListUI = updatePlayerListUI;
-window.processExistingPlayers = processExistingPlayers;

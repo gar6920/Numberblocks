@@ -1,3 +1,7 @@
+import * as THREE from 'three';
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { setupPlayerListeners, removePlayerVisual, setupRoomEventListeners } from './player-sync.js';
+
 // Numberblocks game - Entity synchronization module
 // Handles entity synchronization (operators, static numberblocks)
 
@@ -82,8 +86,8 @@ function setupRoomListeners() {
     window.room.onStateChange.once((state) => {
         console.log("✅ State synchronized, setting up listeners.");
 
-        // Confirm 'players' is a MapSchema before adding listeners
-        if (state.players && typeof state.players.onAdd === 'function') {
+        // Verify players is a MapSchema or has correct Colyseus methods
+        if (state.players && state.players.onAdd && typeof state.players.onAdd === 'function') {
             state.players.onAdd((player, sessionId) => {
                 console.log(`Player ${sessionId} joined.`);
                 setupPlayerListeners(player, sessionId);
@@ -99,11 +103,11 @@ function setupRoomListeners() {
                 setupPlayerListeners(player, sessionId);
             });
         } else {
-            console.error("❌ state.players is not a valid MapSchema");
+            console.error("❌ state.players is not a valid MapSchema", state.players);
         }
 
-        // Operators collection listeners
-        if (state.operators && typeof state.operators.onAdd === 'function') {
+        // Verify operators is a MapSchema
+        if (state.operators && state.operators.onAdd && typeof state.operators.onAdd === 'function') {
             state.operators.onAdd((operator, operatorId) => {
                 createOperatorVisual(operator, operatorId);
             });
@@ -116,11 +120,11 @@ function setupRoomListeners() {
                 createOperatorVisual(operator, operatorId);
             });
         } else {
-            console.error("❌ state.operators is not a valid MapSchema");
+            console.error("❌ state.operators is not a valid MapSchema", state.operators);
         }
 
-        // Static Numberblocks listeners
-        if (state.staticNumberblocks && typeof state.staticNumberblocks.onAdd === 'function') {
+        // Verify staticNumberblocks is a MapSchema
+        if (state.staticNumberblocks && state.staticNumberblocks.onAdd && typeof state.staticNumberblocks.onAdd === 'function') {
             state.staticNumberblocks.onAdd((block, blockId) => {
                 createStaticNumberblockVisual(block, blockId);
             });
@@ -133,7 +137,7 @@ function setupRoomListeners() {
                 createStaticNumberblockVisual(block, blockId);
             });
         } else {
-            console.error("❌ state.staticNumberblocks is not a valid MapSchema");
+            console.error("❌ state.staticNumberblocks is not a valid MapSchema", state.staticNumberblocks);
         }
 
         console.log("✅ Room listeners fully set up.");
@@ -286,7 +290,7 @@ window.StaticNumberblocksVisual = class StaticNumberblocksVisual {
 };
 
 // Make functions available globally
-window.setupRoomListeners = setupRoomListeners;
+window.setupRoomEventListeners = setupRoomEventListeners;
 window.createOperatorVisual = createOperatorVisual;
 window.removeOperatorVisual = removeOperatorVisual;
 window.createStaticNumberblockVisual = createStaticNumberblockVisual;

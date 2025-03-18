@@ -1,6 +1,10 @@
 // Numberblocks game - Core networking module
 // Handles connection to the server and basic network setup
 
+import * as Colyseus from "https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js";
+import { GameState } from './schema.js';
+import { updatePlayerListUI } from './player-sync.js';
+
 // Network configuration
 const endpoint = 'ws://localhost:3000';
 let client = null;
@@ -255,87 +259,11 @@ function addReconnectButton() {
 
 // Function to initialize networking for multiplayer
 async function initNetworking() {
-    const endpoint = "ws://localhost:3000";
-    console.log("Initializing networking system...");
-    
-    try {
-        console.log(`Connecting to Colyseus server at: ${endpoint}`);
-        
-        // Create client if needed
-        if (!client) {
-            try {
-                client = new Colyseus.Client(endpoint);
-                console.log("Colyseus client created");
-            } catch (clientError) {
-                console.error("Failed to create Colyseus client:", clientError);
-                throw new Error(`Failed to create client: ${clientError.message}`);
-            }
-        }
-        
-        // Try to join the room
-        try {
-            console.log("Attempting to join room...");
-            room = await client.joinOrCreate("numberblocks", {
-                name: `Player_${Math.floor(Math.random() * 1000)}`,
-                color: getRandomColor()
-            });
-            console.log("Joined room successfully:", room.name);
-            
-            // Store room in global scope
-            window.room = room;
-            
-            // Initialize object collections
-            window.otherPlayers = {};
-            window.operators = {};
-            window.staticNumberblocks = {};
-            window.trees = {};
-            window.rocks = {};
-            
-            // Setup message handlers
-            setupMessageHandlers();
-            
-            // Setup automatic reconnection
-            setupReconnection(room, client);
-            
-            // Wait for the initial state before setting up listeners
-            room.onStateChange.once((state) => {
-                console.log("Initial state received, setting up room listeners");
-                
-                // Setup room listeners
-                window.roomInitialized = false;
-                setupRoomListeners(room);
-                
-                // Check if room initialization succeeded
-                const checkRoomInit = () => {
-                    if (window.roomInitialized) {
-                        // Process existing players
-                        processExistingPlayers();
-                        
-                        // Initial player list update
-                        updatePlayerListUI();
-                        
-                        // Notify that avatar is ready
-                        window.dispatchEvent(new CustomEvent('avatarReady'));
-                        console.log("Avatar is ready");
-                    } else {
-                        // Keep checking if not initialized yet
-                        setTimeout(checkRoomInit, 100);
-                    }
-                };
-                
-                // Start initialization check
-                checkRoomInit();
-            });
-            
-            return room;
-        } catch (roomError) {
-            console.error("Error joining room:", roomError);
-            throw roomError;
-        }
-    } catch (error) {
-        console.error("Error connecting to server:", error);
-        throw error;
-    }
+    window.client = new Colyseus.Client("ws://localhost:3000");
+    window.client.joinOrCreate("numberblocks", {}, GameState).then(room => {
+        window.room = room;
+        setupRoomListeners();
+    });
 }
 
 // Setup message handlers

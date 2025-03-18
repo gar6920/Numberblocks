@@ -1,5 +1,8 @@
 // Numberblocks game - Player entity class
 
+import { Entity } from './Entity.js';
+import { Numberblock } from './numberblock.js';
+
 class Player extends Entity {
     constructor(params) {
         super(params);
@@ -49,7 +52,7 @@ class Player extends Entity {
             case 'numberblock':
             default:
                 // Default to numberblock for now
-                const numberblock = new window.Numberblock(this.value, this.color, this.name);
+                const numberblock = new Numberblock(this.value, this.color, this.name);
                 return numberblock.mesh;
         }
     }
@@ -69,7 +72,7 @@ class Player extends Entity {
             }
             
             // Create new numberblock with updated value
-            const numberblock = new window.Numberblock(newValue, this.color, this.name);
+            const numberblock = new Numberblock(newValue, this.color, this.name);
             this.mesh = numberblock.mesh;
             
             // Restore position and rotation

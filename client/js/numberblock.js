@@ -1,6 +1,6 @@
 // Numberblocks game - Numberblock model implementation
 
-class Numberblock {
+export class Numberblock {
     constructor(value = 1, color = null) {
         this.value = value;
         this.mesh = new THREE.Group();
@@ -300,7 +300,3 @@ if (typeof module !== 'undefined') {
         createPlayerNumberblock
     };
 }
-
-// Always make Numberblock available globally
-window.Numberblock = Numberblock;
-console.log('Numberblock class exported to window object');
