@@ -7,6 +7,7 @@ function setupPlayerListeners(player, sessionId) {
         // Skip if it's our own player
         if (sessionId === window.room.sessionId) {
             console.log("✅ This is my player, not creating visual");
+            updatePlayerListUI(); // <-- explicitly ensure own player triggers UI update
             return;
         }
 
@@ -28,14 +29,16 @@ function setupPlayerListeners(player, sessionId) {
             if (visuals.players[sessionId]) {
                 visuals.players[sessionId].update(player);
             }
+            updatePlayerListUI(); // <-- explicitly update UI on player changes
         });
 
-        // Update UI
+        // Update UI explicitly right after visual setup
         updatePlayerListUI();
     } catch (error) {
         console.error(`Error setting up player (${sessionId}):`, error);
     }
 }
+
 
 function removePlayerVisual(sessionId) {
     try {
@@ -182,12 +185,14 @@ function setupRoomPlayerListeners(room) {
     room.state.players.onAdd((player, sessionId) => {
         console.log(`✅ Player ${sessionId} joined.`, player);
         setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
+        updatePlayerListUI();  // <-- explicitly update UI on new player joins
     });
 
     // Listen for player removal
     room.state.players.onRemove((player, sessionId) => {
         console.log(`✅ Player ${sessionId} left.`, player);
         removePlayerVisual(sessionId);
+        updatePlayerListUI();  // <-- explicitly update UI when player leaves
     });
 
     // Initial iteration (process existing players)
@@ -196,9 +201,10 @@ function setupRoomPlayerListeners(room) {
         setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
     });
     
-    // Update UI after processing all players
+    // Explicitly update UI after initial processing
     updatePlayerListUI();
 }
+
 
 // Make this explicitly available globally
 window.setupRoomPlayerListeners = setupRoomPlayerListeners;
