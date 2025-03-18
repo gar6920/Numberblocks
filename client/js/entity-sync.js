@@ -216,126 +216,51 @@ function setupRoomListeners() {
 // Define Operators Visual class
 window.OperatorsVisual = class OperatorsVisual {
     constructor(operatorData) {
-        // Create a group for the operator
-        this.group = new THREE.Group();
-        
         // Store operator data
-        this.type = operatorData.type || '+';
         this.id = operatorData.id;
+        this.type = operatorData.type === "plus" ? "plus" : "minus";
         
-        // Create operator mesh
-        this.createOperatorMesh();
-        
-        // Set initial position
-        this.update(operatorData);
-        
-        // Setup animation properties
-        this.floatOffset = Math.random() * Math.PI * 2; // Random starting offset
-        this.floatSpeed = 1 + Math.random() * 0.5; // Slightly different speeds
-        this.floatAmplitude = 0.2; // How high it floats up and down
-        this.rotationSpeed = 0.5 + Math.random() * 0.5; // How fast it rotates
-    }
-    
-    createOperatorMesh() {
-        try {
-            // Determine color based on operator type
-            let color;
-            switch(this.type) {
-                case '+':
-                    color = 0x00ff00; // Green for addition
-                    break;
-                case '-':
-                    color = 0xff0000; // Red for subtraction
-                    break;
-                case '*':
-                    color = 0x0000ff; // Blue for multiplication
-                    break;
-                case '/':
-                    color = 0xffff00; // Yellow for division
-                    break;
-                default:
-                    color = 0xffffff; // White for unknown operators
-            }
+        // Use the OperatorManager to create the operator instead of creating meshes directly
+        if (window.operatorManager) {
+            this.operator = window.operatorManager.createOperatorFromServer(
+                this.id,
+                this.type,
+                operatorData.x || 0,
+                operatorData.y || 0.6,
+                operatorData.z || 0
+            );
             
-            // Try to create specific operator model
-            try {
-                // Create plus or minus symbol
-                if (this.type === '+' || this.type === '-') {
-                    const operatorGeometry = new THREE.BoxGeometry(0.8, 0.2, 0.2);
-                    const operatorMaterial = new THREE.MeshBasicMaterial({
-                        color: color,
-                        transparent: true,
-                        opacity: 0.8
-                    });
-                    
-                    // Create main bar
-                    this.operatorMesh = new THREE.Mesh(operatorGeometry, operatorMaterial);
-                    this.group.add(this.operatorMesh);
-                    
-                    // For plus operator, add vertical bar
-                    if (this.type === '+') {
-                        const verticalGeometry = new THREE.BoxGeometry(0.2, 0.8, 0.2);
-                        const verticalBar = new THREE.Mesh(verticalGeometry, operatorMaterial);
-                        this.group.add(verticalBar);
-                    }
-                    
-                    // Add glow effect
-                    const glowGeometry = new THREE.SphereGeometry(0.5);
-                    const glowMaterial = new THREE.MeshBasicMaterial({
-                        color: color,
-                        transparent: true,
-                        opacity: a => a * 0.5
-                    });
-                    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
-                    this.group.add(glowMesh);
-                } else {
-                    // Fall back to simple representation for other operators
-                    this.createFallbackMesh(color);
-                }
-            } catch (modelError) {
-                console.warn("Error creating operator model, using fallback:", modelError);
-                this.createFallbackMesh(color);
-            }
-        } catch (error) {
-            console.error("Failed to create operator mesh:", error);
-            // Create a very basic fallback
-            this.createFallbackMesh(0xffffff);
+            // Use the operator's group as our visual representation
+            this.group = this.operator.group || this.operator.mesh;
+        } else {
+            console.error("OperatorManager not available - can't create operator visual");
+            // Create a fallback visual so we don't crash
+            this.createFallbackMesh(this.type === "plus" ? 0x00ff00 : 0xff0000);
         }
     }
     
+    // Create a simple fallback mesh if operatorManager is not available
     createFallbackMesh(color) {
-        // Simple sphere as fallback
-        const geometry = new THREE.SphereGeometry(0.4);
-        const material = new THREE.MeshBasicMaterial({
-            color: color,
-            transparent: true,
-            opacity: 0.8
-        });
-        this.operatorMesh = new THREE.Mesh(geometry, material);
-        this.group.add(this.operatorMesh);
-        
-        // Add text label
-        const textMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: false,
-            opacity: 1
-        });
-        
-        // Text sprite would go here in a full implementation
-        // For simplicity, just creating another small indicator
-        const indicatorGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-        const indicator = new THREE.Mesh(indicatorGeometry, textMaterial);
-        indicator.position.y = 0.5;
-        this.group.add(indicator);
+        this.group = new THREE.Group();
+        const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const material = new THREE.MeshBasicMaterial({ color });
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.group.add(this.mesh);
     }
     
     update(operatorData) {
         if (!operatorData) return;
         
-        // Update position if provided
-        if (operatorData.x !== undefined && 
-            operatorData.y !== undefined && 
-            operatorData.z !== undefined) {
+        // Use the OperatorManager to update the operator's position
+        if (window.operatorManager && this.id) {
+            window.operatorManager.updateOperatorFromServer(
+                this.id,
+                operatorData.x,
+                operatorData.y,
+                operatorData.z
+            );
+        } else if (this.group) {
+            // Fallback update directly if OperatorManager not available
             this.group.position.set(
                 operatorData.x,
                 operatorData.y,
@@ -343,56 +268,20 @@ window.OperatorsVisual = class OperatorsVisual {
             );
         }
         
-        // Update rotation if provided
-        if (operatorData.rotation !== undefined) {
-            this.group.rotation.y = operatorData.rotation;
-        }
-        
         // Update type if changed
         if (operatorData.type !== undefined && this.type !== operatorData.type) {
             this.type = operatorData.type;
-            
-            // Remove old mesh
-            this.group.remove(this.operatorMesh);
-            
-            // Create new mesh with updated type
-            this.createOperatorMesh();
+            console.log(`Operator ${this.id} type changed to ${this.type}`);
+            // Currently we don't handle type changes - would need to remove and recreate
         }
     }
     
-    // Animate the operator (rotation and floating effect)
-    animate(deltaTime) {
-        if (!this.group) return;
-        
-        // Rotate operator
-        this.group.rotation.y += this.rotationSpeed * deltaTime;
-        
-        // Float up and down
-        const floatOffset = Math.sin(
-            (performance.now() / 1000) * this.floatSpeed + this.floatOffset
-        ) * this.floatAmplitude;
-        
-        // Apply float to current position
-        if (this.group.position.y !== undefined) {
-            // Store base position if not set
-            if (this.baseY === undefined) {
-                this.baseY = this.group.position.y;
-            }
-            
-            // Apply floating animation
-            this.group.position.y = this.baseY + floatOffset;
-        }
-        
-        // Make operator face the player
-        if (window.camera && this.group) {
-            // Calculate direction to camera
-            const cameraPosition = window.camera.position;
-            const direction = new THREE.Vector3();
-            direction.subVectors(cameraPosition, this.group.position);
-            
-            // Only rotate on Y axis (keep upright)
-            const angle = Math.atan2(direction.x, direction.z);
-            this.group.rotation.y = angle;
+    // Method called when this operator is removed
+    remove() {
+        if (window.operatorManager && this.id) {
+            window.operatorManager.removeOperatorByServerId(this.id);
+        } else if (this.group && this.group.parent) {
+            this.group.parent.remove(this.group);
         }
     }
 };

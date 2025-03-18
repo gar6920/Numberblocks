@@ -316,6 +316,10 @@ function initScene() {
         const hemisphereLight = new THREE.HemisphereLight(0xddeeff, 0x3e2200, 0.4); // Reduced from 0.7
         scene.add(hemisphereLight);
         
+        // Initialize operator manager and make it globally available
+        operatorManager = new OperatorManager(scene);
+        window.operatorManager = operatorManager;
+        
         debug('Scene created successfully with softer lighting');
     } catch (error) {
         debug(`Error creating scene: ${error.message}`, true);
@@ -764,21 +768,25 @@ function updateThirdPersonCamera() {
 // Update operators (animate them)
 function updateOperators() {
     try {
-        if (!window.visuals || !window.visuals.operators) {
-            return;
+        // First, update operators managed by the OperatorManager
+        if (window.operatorManager) {
+            window.operatorManager.update(1/60); // Pass approximate deltaTime
         }
         
-        // Get all operator visuals
-        const operators = window.visuals.operators;
-        
-        // Calculate deltaTime (approximate)
-        const deltaTime = 1/60;
-        
-        // Animate each operator
-        for (const operatorId in operators) {
-            const operator = operators[operatorId];
-            if (operator && typeof operator.animate === 'function') {
-                operator.animate(deltaTime);
+        // For backwards compatibility, also check for visuals.operators
+        if (window.visuals && window.visuals.operators) {
+            // Get all operator visuals
+            const operators = window.visuals.operators;
+            
+            // Calculate deltaTime (approximate)
+            const deltaTime = 1/60;
+            
+            // Animate each operator
+            for (const operatorId in operators) {
+                const operator = operators[operatorId];
+                if (operator && typeof operator.animate === 'function') {
+                    operator.animate(deltaTime);
+                }
             }
         }
     } catch (error) {

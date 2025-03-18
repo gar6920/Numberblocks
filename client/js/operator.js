@@ -138,11 +138,7 @@ class OperatorManager {
     constructor(scene) {
         this.scene = scene;
         this.operators = [];
-        this.spawnTimer = 0;
-        this.spawnInterval = this.getRandomSpawnInterval();
-        this.maxOperators = 10; // Maximum number of operators allowed at once
         this.groundY = 0; // Y position of the ground
-        this.mapSize = 40; // Size of the playable area (40x40)
         
         // Player's held operator
         this.heldOperator = null;
@@ -152,11 +148,6 @@ class OperatorManager {
         console.log("OperatorManager initialized");
     }
     
-    // Get a random spawn interval between 5-10 seconds
-    getRandomSpawnInterval() {
-        return 5 + Math.random() * 5; // 5-10 seconds
-    }
-    
     // Update function to be called in animation loop
     update(deltaTime) {
         // Update existing operators
@@ -164,36 +155,41 @@ class OperatorManager {
             operator.animate(deltaTime);
         });
         
-        // Check if it's time to spawn a new operator
-        this.spawnTimer += deltaTime;
-        if (this.spawnTimer >= this.spawnInterval && this.operators.length < this.maxOperators) {
-            this.spawnOperator();
-            this.spawnTimer = 0;
-            this.spawnInterval = this.getRandomSpawnInterval();
-        }
+        // NOTE: We no longer spawn operators locally
+        // Operators are created by the server and synchronized via Colyseus
     }
     
-    // Spawn a new operator at a random position
-    spawnOperator() {
-        // Randomly choose between plus and minus
-        const type = Math.random() > 0.5 ? 'plus' : 'minus';
-        
+    // Create an operator from server data
+    // This is called by the entity-sync system when a new operator is received from the server
+    createOperatorFromServer(id, type, x, y, z) {
         // Create the operator
         const operator = new Operator(type, this.scene);
         
-        // Set a random position on the ground
-        const posX = (Math.random() * this.mapSize) - (this.mapSize / 2);
-        const posZ = (Math.random() * this.mapSize) - (this.mapSize / 2);
+        // Set the position from server data
+        operator.setPosition(x, y, z);
         
-        // Set the Y position slightly above the ground to prevent z-fighting
-        operator.setPosition(posX, this.groundY + 0.6, posZ);
+        // Store server ID for reference
+        operator.serverId = id;
         
         // Add to the array of active operators
         this.operators.push(operator);
         
-        console.log(`Spawned ${type} operator at (${posX.toFixed(2)}, ${this.groundY + 0.6}, ${posZ.toFixed(2)})`);
+        console.log(`Created ${type} operator from server at (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
         
         return operator;
+    }
+    
+    // Find an operator by server ID
+    getOperatorByServerId(id) {
+        return this.operators.find(op => op.serverId === id);
+    }
+    
+    // Update an operator's position based on server data
+    updateOperatorFromServer(id, x, y, z) {
+        const operator = this.getOperatorByServerId(id);
+        if (operator) {
+            operator.setPosition(x, y, z);
+        }
     }
     
     // Remove an operator from the scene and the operators array
@@ -202,6 +198,14 @@ class OperatorManager {
         if (index !== -1) {
             operator.remove();
             this.operators.splice(index, 1);
+        }
+    }
+    
+    // Remove an operator by server ID
+    removeOperatorByServerId(id) {
+        const operator = this.getOperatorByServerId(id);
+        if (operator) {
+            this.removeOperator(operator);
         }
     }
     
