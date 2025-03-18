@@ -1444,6 +1444,17 @@ const { Room } = require("colyseus");
 const { Schema, MapSchema, type } = require("@colyseus/schema");
 const path = require('path');
 
+// Define the InputState schema
+class InputState extends Schema {
+    constructor() {
+        super();
+        // Default initialization for input state
+        this.keys = { w: false, a: false, s: false, d: false, space: false };
+        this.mouseDelta = { x: 0, y: 0 };
+        this.viewMode = "third-person"; // Default view mode
+    }
+}
+
 // Define the state schema for Colyseus
 class Player extends Schema {
     constructor() {
@@ -1454,11 +1465,11 @@ class Player extends Schema {
         this.value = 1;
         this.rotationY = 0;
         this.pitch = 0;
-        this.operator = null;
+        this.operator = ""; // Changed from null to empty string
         this.color = "#FFFFFF";
         this.name = "";
         this.velocityY = 0; // Add velocity for physics
-        this.input = null;  // Add input state storage
+        this.input = new InputState();  // Initialize with InputState schema
     }
 }
 
@@ -1473,16 +1484,61 @@ class Operator extends Schema {
     }
 }
 
+// Create a dedicated schema for static numberblocks
+class StaticNumberblock extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.value = 1;
+        this.color = "#FFFFFF";
+    }
+}
+
+// Add schemas for other entities
+class Tree extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.scale = 1;
+    }
+}
+
+class Rock extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+        this.scale = 1;
+    }
+}
+
 class GameState extends Schema {
     constructor() {
         super();
         this.players = new MapSchema();
         this.operators = new MapSchema();
         this.staticNumberblocks = new MapSchema();
+        this.trees = new MapSchema();
+        this.rocks = new MapSchema();
     }
 }
 
-// Register schema types
+// Register schema types for InputState
+type("boolean")(InputState.prototype, "keys.w");
+type("boolean")(InputState.prototype, "keys.a");
+type("boolean")(InputState.prototype, "keys.s");
+type("boolean")(InputState.prototype, "keys.d");
+type("boolean")(InputState.prototype, "keys.space");
+type("number")(InputState.prototype, "mouseDelta.x");
+type("number")(InputState.prototype, "mouseDelta.y");
+type("string")(InputState.prototype, "viewMode");
+
+// Register schema types for Player
 type("number")(Player.prototype, "x");
 type("number")(Player.prototype, "y");
 type("number")(Player.prototype, "z");
@@ -1493,17 +1549,40 @@ type("string")(Player.prototype, "operator");
 type("string")(Player.prototype, "color");
 type("string")(Player.prototype, "name");
 type("number")(Player.prototype, "velocityY");
-type("*")(Player.prototype, "input"); // Use wildcard type for complex object
+type(InputState)(Player.prototype, "input"); // Use InputState type instead of wildcard
 
+// Register schema types for Operator
 type("string")(Operator.prototype, "id");
 type("string")(Operator.prototype, "type");
 type("number")(Operator.prototype, "x");
 type("number")(Operator.prototype, "y");
 type("number")(Operator.prototype, "z");
 
+// Register schema types for StaticNumberblock
+type("number")(StaticNumberblock.prototype, "x");
+type("number")(StaticNumberblock.prototype, "y");
+type("number")(StaticNumberblock.prototype, "z");
+type("number")(StaticNumberblock.prototype, "value");
+type("string")(StaticNumberblock.prototype, "color");
+
+// Register schema types for Tree
+type("number")(Tree.prototype, "x");
+type("number")(Tree.prototype, "y");
+type("number")(Tree.prototype, "z");
+type("number")(Tree.prototype, "scale");
+
+// Register schema types for Rock
+type("number")(Rock.prototype, "x");
+type("number")(Rock.prototype, "y");
+type("number")(Rock.prototype, "z");
+type("number")(Rock.prototype, "scale");
+
+// Register schema types for GameState
 type({ map: Player })(GameState.prototype, "players");
 type({ map: Operator })(GameState.prototype, "operators");
-type({ map: Player })(GameState.prototype, "staticNumberblocks");
+type({ map: StaticNumberblock })(GameState.prototype, "staticNumberblocks"); // Updated to use StaticNumberblock
+type({ map: Tree })(GameState.prototype, "trees");
+type({ map: Rock })(GameState.prototype, "rocks");
 
 // Define the game room
 class NumberblocksRoom extends Room {
@@ -1544,14 +1623,29 @@ class NumberblocksRoom extends Room {
             }
             
             const player = this.state.players.get(client.sessionId);
-            if (player) {
-                // Store input state for processing in the next update
-                player.input = message;
+            if (player && player.input) {
+                // Update the InputState schema with the incoming data
+                player.input.keys.w = message.keys.w || false;
+                player.input.keys.a = message.keys.a || false;
+                player.input.keys.s = message.keys.s || false;
+                player.input.keys.d = message.keys.d || false;
+                player.input.keys.space = message.keys.space || false;
+                
+                if (message.mouseDelta) {
+                    player.input.mouseDelta.x = message.mouseDelta.x || 0;
+                    player.input.mouseDelta.y = message.mouseDelta.y || 0;
+                }
+                
+                // Update view mode if provided
+                if (message.viewMode) {
+                    player.input.viewMode = message.viewMode;
+                }
+                
                 console.log(`Received input from player ${client.sessionId}:`, 
-                    message.keys.w ? "W" : "", 
-                    message.keys.a ? "A" : "", 
-                    message.keys.s ? "S" : "", 
-                    message.keys.d ? "D" : "");
+                    player.input.keys.w ? "W" : "", 
+                    player.input.keys.a ? "A" : "", 
+                    player.input.keys.s ? "S" : "", 
+                    player.input.keys.d ? "D" : "");
             }
         });
         
@@ -1756,7 +1850,7 @@ class NumberblocksRoom extends Room {
     
     // Create a static numberblock (for players to interact with)
     createStaticNumberblock(id, value, x, y, z) {
-        const staticBlock = new Player();
+        const staticBlock = new StaticNumberblock();
         staticBlock.value = value;
         staticBlock.x = x;
         // Set Y position to 0 (ground level)
@@ -2564,341 +2658,193 @@ FILE: client\js\entity-sync.js
 // Numberblocks game - Entity synchronization module
 // Handles entity synchronization (operators, static numberblocks)
 
-// Setup schema listeners for a specific object type
-function setupSpecificSchemaListeners(schemaName, schema) {
-    if (!room || !schema) {
-        console.warn(`Room or schema not available for ${schemaName}`);
-        return;
-    }
-    
+// Helper functions for visual management
+function createOperatorVisual(operator, operatorId) {
     try {
-        // Create the appropriate tracking collections if they don't exist
-        if (!window[schemaName]) {
-            window[schemaName] = {};
+        const visual = new OperatorsVisual(operator);
+        if (!visuals.operators) visuals.operators = {};
+        visuals.operators[operatorId] = visual;
+        
+        if (window.scene) {
+            window.scene.add(visual.group || visual.mesh);
         }
         
-        // Check if schema is a MapSchema with onAdd method
-        if (!schema || typeof schema.onAdd !== 'function') {
-            console.error(`${schemaName} collection is not a valid MapSchema or not yet initialized:`, schema);
-            console.log("Current room.state:", room.state);
-            return;
-        }
-        
-        // Determine which visual class to use
-        let VisualClass;
-        switch(schemaName) {
-            case 'operators':
-                VisualClass = OperatorsVisual;
-                break;
-            case 'staticNumberblocks':
-                VisualClass = StaticNumberblocksVisual;
-                break;
-            default:
-                console.warn(`No visual class defined for schema: ${schemaName}`);
-                return;
-        }
-        
-        // Setup listeners
-        schema.onAdd((entity, entityId) => {
-            console.log(`${schemaName} added:`, entityId);
-            
-            // Store entity in tracking collection
-            window[schemaName][entityId] = entity;
-            
-            // Create visual
-            try {
-                const visual = new VisualClass(entity);
-                visuals[schemaName][entityId] = visual;
-                
-                // Add to scene
-                if (window.scene) {
-                    window.scene.add(visual.group || visual.mesh);
-                } else {
-                    console.warn("Scene not available for adding entity visual");
-                }
-            } catch (error) {
-                console.error(`Error creating ${schemaName} visual:`, error);
+        // Setup change listener
+        operator.onChange(() => {
+            if (visuals.operators[operatorId]) {
+                visuals.operators[operatorId].update(operator);
             }
-            
-            // Setup change listener
-            entity.onChange(() => {
-                // Update visual
-                if (visuals[schemaName][entityId]) {
-                    visuals[schemaName][entityId].update(entity);
-                }
-            });
-        });
-        
-        // Listen for removals
-        schema.onRemove((entity, entityId) => {
-            console.log(`${schemaName} removed:`, entityId);
-            
-            // Remove visual
-            if (visuals[schemaName][entityId]) {
-                if (window.scene) {
-                    window.scene.remove(visuals[schemaName][entityId].group || 
-                                      visuals[schemaName][entityId].mesh);
-                }
-                delete visuals[schemaName][entityId];
-            }
-            
-            // Remove from tracking
-            delete window[schemaName][entityId];
         });
     } catch (error) {
-        console.error(`Error setting up ${schemaName} listeners:`, error);
+        console.error(`Error creating operator visual (${operatorId}):`, error);
     }
 }
 
-// Setup generic schema listeners
-function setupGenericSchemaListeners(room, schemaName) {
-    if (!room || !room.state || !room.state[schemaName]) {
-        console.warn(`Room or ${schemaName} not available`);
-        return;
-    }
-    
+function removeOperatorVisual(operatorId) {
     try {
-        const schema = room.state[schemaName];
+        if (visuals.operators && visuals.operators[operatorId]) {
+            if (window.scene) {
+                window.scene.remove(visuals.operators[operatorId].group || 
+                                  visuals.operators[operatorId].mesh);
+            }
+            delete visuals.operators[operatorId];
+        }
+    } catch (error) {
+        console.error(`Error removing operator visual (${operatorId}):`, error);
+    }
+}
+
+function createStaticNumberblockVisual(block, blockId) {
+    try {
+        const visual = new StaticNumberblocksVisual(block);
+        if (!visuals.staticNumberblocks) visuals.staticNumberblocks = {};
+        visuals.staticNumberblocks[blockId] = visual;
         
-        // Initialize the tracking collection
-        if (!window[schemaName]) {
-            window[schemaName] = {};
+        if (window.scene) {
+            window.scene.add(visual.group || visual.mesh);
         }
         
-        // Setup add listener
-        schema.onAdd((entity, entityId) => {
-            console.log(`Generic ${schemaName} added:`, entityId);
-            
-            // Store in tracking
-            window[schemaName][entityId] = entity;
-            
-            // Create simple visual representation
-            const geometry = new THREE.SphereGeometry(0.5);
-            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-            const mesh = new THREE.Mesh(geometry, material);
-            
-            // Set position if available
-            if (entity.x !== undefined && entity.y !== undefined && entity.z !== undefined) {
-                mesh.position.set(entity.x, entity.y, entity.z);
+        // Setup change listener
+        block.onChange(() => {
+            if (visuals.staticNumberblocks[blockId]) {
+                visuals.staticNumberblocks[blockId].update(block);
             }
-            
-            // Store visual
-            visuals[schemaName] = visuals[schemaName] || {};
-            visuals[schemaName][entityId] = { mesh };
-            
-            // Add to scene
-            if (window.scene) {
-                window.scene.add(mesh);
-            }
-            
-            // Listen for changes
-            entity.onChange(() => {
-                // Update position
-                if (visuals[schemaName][entityId] && visuals[schemaName][entityId].mesh) {
-                    if (entity.x !== undefined && entity.y !== undefined && entity.z !== undefined) {
-                        visuals[schemaName][entityId].mesh.position.set(entity.x, entity.y, entity.z);
-                    }
-                }
-            });
-        });
-        
-        // Listen for removals
-        schema.onRemove((entity, entityId) => {
-            console.log(`Generic ${schemaName} removed:`, entityId);
-            
-            // Remove visual
-            if (visuals[schemaName] && visuals[schemaName][entityId]) {
-                if (window.scene && visuals[schemaName][entityId].mesh) {
-                    window.scene.remove(visuals[schemaName][entityId].mesh);
-                }
-                delete visuals[schemaName][entityId];
-            }
-            
-            // Remove from tracking
-            delete window[schemaName][entityId];
         });
     } catch (error) {
-        console.error(`Error setting up generic ${schemaName} listeners:`, error);
+        console.error(`Error creating static numberblock visual (${blockId}):`, error);
+    }
+}
+
+function removeStaticNumberblockVisual(blockId) {
+    try {
+        if (visuals.staticNumberblocks && visuals.staticNumberblocks[blockId]) {
+            if (window.scene) {
+                window.scene.remove(visuals.staticNumberblocks[blockId].group || 
+                                  visuals.staticNumberblocks[blockId].mesh);
+            }
+            delete visuals.staticNumberblocks[blockId];
+        }
+    } catch (error) {
+        console.error(`Error removing static numberblock visual (${blockId}):`, error);
     }
 }
 
 // Setup room listeners
 function setupRoomListeners() {
-    if (!room) {
-        console.warn("Room not available for listeners");
-        setTimeout(setupRoomListeners, 500);
+    if (!window.room) {
+        console.error("No room available!");
         return;
     }
-    
-    try {
-        console.log("Setting up room listeners");
-        
-        // Debug: Log the entire room.state object to inspect its structure
-        console.log("Room state before setting up listeners:", room.state);
-        console.log("Players collection type:", room.state.players ? typeof room.state.players : 'undefined');
-        console.log("Players collection methods:", room.state.players ? Object.getOwnPropertyNames(Object.getPrototypeOf(room.state.players)) : 'undefined');
-        
-        // Player listeners
-        setupPlayerListeners(room);
-        
-        // Operators listeners
-        if (room.state.operators) {
-            console.log("Setting up operators listeners");
-            setupSpecificSchemaListeners('operators', room.state.operators);
+
+    window.room.onStateChange.once((state) => {
+        console.log("✅ State synchronized, setting up listeners.");
+
+        // Confirm 'players' is a MapSchema before adding listeners
+        if (state.players && typeof state.players.onAdd === 'function') {
+            state.players.onAdd((player, sessionId) => {
+                console.log(`Player ${sessionId} joined.`);
+                setupPlayerListeners(player, sessionId);
+            });
+
+            state.players.onRemove((player, sessionId) => {
+                console.log(`Player ${sessionId} left.`);
+                removePlayerVisual(sessionId);
+            });
+
+            state.players.forEach((player, sessionId) => {
+                console.log(`Existing player: ${sessionId}`);
+                setupPlayerListeners(player, sessionId);
+            });
         } else {
-            console.warn("Operators collection not found in room state");
+            console.error("❌ state.players is not a valid MapSchema");
         }
-        
-        // Static numberblocks listeners
-        if (room.state.staticNumberblocks) {
-            console.log("Setting up staticNumberblocks listeners");
-            setupSpecificSchemaListeners('staticNumberblocks', room.state.staticNumberblocks);
+
+        // Operators collection listeners
+        if (state.operators && typeof state.operators.onAdd === 'function') {
+            state.operators.onAdd((operator, operatorId) => {
+                createOperatorVisual(operator, operatorId);
+            });
+
+            state.operators.onRemove((operator, operatorId) => {
+                removeOperatorVisual(operatorId);
+            });
+
+            state.operators.forEach((operator, operatorId) => {
+                createOperatorVisual(operator, operatorId);
+            });
         } else {
-            console.warn("StaticNumberblocks collection not found in room state");
+            console.error("❌ state.operators is not a valid MapSchema");
         }
-        
-        // Other generic schemas
-        const genericSchemas = ['trees', 'rocks'];
-        genericSchemas.forEach(schemaName => {
-            if (room.state[schemaName]) {
-                console.log(`Setting up ${schemaName} listeners`);
-                setupGenericSchemaListeners(room, schemaName);
-            } else {
-                console.warn(`${schemaName} collection not found in room state`);
-            }
-        });
-        
-        // Mark as initialized
-        window.roomInitialized = true;
-        console.log("Room listeners setup complete");
-    } catch (error) {
-        console.error("Error setting up room listeners:", error);
-    }
+
+        // Static Numberblocks listeners
+        if (state.staticNumberblocks && typeof state.staticNumberblocks.onAdd === 'function') {
+            state.staticNumberblocks.onAdd((block, blockId) => {
+                createStaticNumberblockVisual(block, blockId);
+            });
+
+            state.staticNumberblocks.onRemove((block, blockId) => {
+                removeStaticNumberblockVisual(blockId);
+            });
+
+            state.staticNumberblocks.forEach((block, blockId) => {
+                createStaticNumberblockVisual(block, blockId);
+            });
+        } else {
+            console.error("❌ state.staticNumberblocks is not a valid MapSchema");
+        }
+
+        console.log("✅ Room listeners fully set up.");
+    });
 }
 
 // Define Operators Visual class
 window.OperatorsVisual = class OperatorsVisual {
     constructor(operatorData) {
-        // Create a group for the operator
-        this.group = new THREE.Group();
-        
         // Store operator data
-        this.type = operatorData.type || '+';
         this.id = operatorData.id;
+        this.type = operatorData.type === "plus" ? "plus" : "minus";
         
-        // Create operator mesh
-        this.createOperatorMesh();
-        
-        // Set initial position
-        this.update(operatorData);
-        
-        // Setup animation properties
-        this.floatOffset = Math.random() * Math.PI * 2; // Random starting offset
-        this.floatSpeed = 1 + Math.random() * 0.5; // Slightly different speeds
-        this.floatAmplitude = 0.2; // How high it floats up and down
-        this.rotationSpeed = 0.5 + Math.random() * 0.5; // How fast it rotates
-    }
-    
-    createOperatorMesh() {
-        try {
-            // Determine color based on operator type
-            let color;
-            switch(this.type) {
-                case '+':
-                    color = 0x00ff00; // Green for addition
-                    break;
-                case '-':
-                    color = 0xff0000; // Red for subtraction
-                    break;
-                case '*':
-                    color = 0x0000ff; // Blue for multiplication
-                    break;
-                case '/':
-                    color = 0xffff00; // Yellow for division
-                    break;
-                default:
-                    color = 0xffffff; // White for unknown operators
-            }
+        // Use the OperatorManager to create the operator instead of creating meshes directly
+        if (window.operatorManager) {
+            this.operator = window.operatorManager.createOperatorFromServer(
+                this.id,
+                this.type,
+                operatorData.x || 0,
+                operatorData.y || 0.6,
+                operatorData.z || 0
+            );
             
-            // Try to create specific operator model
-            try {
-                // Create plus or minus symbol
-                if (this.type === '+' || this.type === '-') {
-                    const operatorGeometry = new THREE.BoxGeometry(0.8, 0.2, 0.2);
-                    const operatorMaterial = new THREE.MeshBasicMaterial({
-                        color: color,
-                        transparent: true,
-                        opacity: 0.8
-                    });
-                    
-                    // Create main bar
-                    this.operatorMesh = new THREE.Mesh(operatorGeometry, operatorMaterial);
-                    this.group.add(this.operatorMesh);
-                    
-                    // For plus operator, add vertical bar
-                    if (this.type === '+') {
-                        const verticalGeometry = new THREE.BoxGeometry(0.2, 0.8, 0.2);
-                        const verticalBar = new THREE.Mesh(verticalGeometry, operatorMaterial);
-                        this.group.add(verticalBar);
-                    }
-                    
-                    // Add glow effect
-                    const glowGeometry = new THREE.SphereGeometry(0.5);
-                    const glowMaterial = new THREE.MeshBasicMaterial({
-                        color: color,
-                        transparent: true,
-                        opacity: a => a * 0.5
-                    });
-                    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
-                    this.group.add(glowMesh);
-                } else {
-                    // Fall back to simple representation for other operators
-                    this.createFallbackMesh(color);
-                }
-            } catch (modelError) {
-                console.warn("Error creating operator model, using fallback:", modelError);
-                this.createFallbackMesh(color);
-            }
-        } catch (error) {
-            console.error("Failed to create operator mesh:", error);
-            // Create a very basic fallback
-            this.createFallbackMesh(0xffffff);
+            // Use the operator's group as our visual representation
+            this.group = this.operator.group || this.operator.mesh;
+        } else {
+            console.error("OperatorManager not available - can't create operator visual");
+            // Create a fallback visual so we don't crash
+            this.createFallbackMesh(this.type === "plus" ? 0x00ff00 : 0xff0000);
         }
     }
     
+    // Create a simple fallback mesh if operatorManager is not available
     createFallbackMesh(color) {
-        // Simple sphere as fallback
-        const geometry = new THREE.SphereGeometry(0.4);
-        const material = new THREE.MeshBasicMaterial({
-            color: color,
-            transparent: true,
-            opacity: 0.8
-        });
-        this.operatorMesh = new THREE.Mesh(geometry, material);
-        this.group.add(this.operatorMesh);
-        
-        // Add text label
-        const textMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: false,
-            opacity: 1
-        });
-        
-        // Text sprite would go here in a full implementation
-        // For simplicity, just creating another small indicator
-        const indicatorGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-        const indicator = new THREE.Mesh(indicatorGeometry, textMaterial);
-        indicator.position.y = 0.5;
-        this.group.add(indicator);
+        this.group = new THREE.Group();
+        const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const material = new THREE.MeshBasicMaterial({ color });
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.group.add(this.mesh);
     }
     
     update(operatorData) {
         if (!operatorData) return;
         
-        // Update position if provided
-        if (operatorData.x !== undefined && 
-            operatorData.y !== undefined && 
-            operatorData.z !== undefined) {
+        // Use the OperatorManager to update the operator's position
+        if (window.operatorManager && this.id) {
+            window.operatorManager.updateOperatorFromServer(
+                this.id,
+                operatorData.x,
+                operatorData.y,
+                operatorData.z
+            );
+        } else if (this.group) {
+            // Fallback update directly if OperatorManager not available
             this.group.position.set(
                 operatorData.x,
                 operatorData.y,
@@ -2906,56 +2852,20 @@ window.OperatorsVisual = class OperatorsVisual {
             );
         }
         
-        // Update rotation if provided
-        if (operatorData.rotation !== undefined) {
-            this.group.rotation.y = operatorData.rotation;
-        }
-        
         // Update type if changed
         if (operatorData.type !== undefined && this.type !== operatorData.type) {
             this.type = operatorData.type;
-            
-            // Remove old mesh
-            this.group.remove(this.operatorMesh);
-            
-            // Create new mesh with updated type
-            this.createOperatorMesh();
+            console.log(`Operator ${this.id} type changed to ${this.type}`);
+            // Currently we don't handle type changes - would need to remove and recreate
         }
     }
     
-    // Animate the operator (rotation and floating effect)
-    animate(deltaTime) {
-        if (!this.group) return;
-        
-        // Rotate operator
-        this.group.rotation.y += this.rotationSpeed * deltaTime;
-        
-        // Float up and down
-        const floatOffset = Math.sin(
-            (performance.now() / 1000) * this.floatSpeed + this.floatOffset
-        ) * this.floatAmplitude;
-        
-        // Apply float to current position
-        if (this.group.position.y !== undefined) {
-            // Store base position if not set
-            if (this.baseY === undefined) {
-                this.baseY = this.group.position.y;
-            }
-            
-            // Apply floating animation
-            this.group.position.y = this.baseY + floatOffset;
-        }
-        
-        // Make operator face the player
-        if (window.camera && this.group) {
-            // Calculate direction to camera
-            const cameraPosition = window.camera.position;
-            const direction = new THREE.Vector3();
-            direction.subVectors(cameraPosition, this.group.position);
-            
-            // Only rotate on Y axis (keep upright)
-            const angle = Math.atan2(direction.x, direction.z);
-            this.group.rotation.y = angle;
+    // Method called when this operator is removed
+    remove() {
+        if (window.operatorManager && this.id) {
+            window.operatorManager.removeOperatorByServerId(this.id);
+        } else if (this.group && this.group.parent) {
+            this.group.parent.remove(this.group);
         }
     }
 };
@@ -3033,9 +2943,11 @@ window.StaticNumberblocksVisual = class StaticNumberblocksVisual {
 };
 
 // Make functions available globally
-window.setupSpecificSchemaListeners = setupSpecificSchemaListeners;
-window.setupGenericSchemaListeners = setupGenericSchemaListeners;
 window.setupRoomListeners = setupRoomListeners;
+window.createOperatorVisual = createOperatorVisual;
+window.removeOperatorVisual = removeOperatorVisual;
+window.createStaticNumberblockVisual = createStaticNumberblockVisual;
+window.removeStaticNumberblockVisual = removeStaticNumberblockVisual;
  
  
 ===================================================== 
@@ -3566,6 +3478,65 @@ let lastPositionUpdate = 0;
 let inputUpdateInterval = 1000 / 30; // 30Hz input updates
 let lastInputUpdate = 0;
 
+// Initialize physics variables and flags
+function initPhysics() {
+    try {
+        debug('Initializing physics');
+        
+        // Basic physics setup
+        window.velocity = new THREE.Vector3(0, 0, 0);
+        window.direction = new THREE.Vector3(0, 0, 0);
+        window.canJump = false;
+        
+        // Setup movement flags
+        window.moveForward = false;
+        window.moveBackward = false;
+        window.moveLeft = false;
+        window.moveRight = false;
+        window.turnLeft = false;
+        window.turnRight = false;
+        
+        // Setup rotation utilities
+        window.worldUp = new THREE.Vector3(0, 1, 0);
+        window.rotationAxis = new THREE.Vector3();
+        window.rotationQuaternion = new THREE.Quaternion();
+        
+        debug('Physics initialized successfully');
+    } catch (error) {
+        debug(`Error initializing physics: ${error.message}`, true);
+    }
+}
+
+// Initialize the floor
+function initFloor() {
+    try {
+        debug('Creating floor');
+        
+        // Create a larger green floor with darker color
+        const floorGeometry = new THREE.PlaneGeometry(100, 100);
+        const floorMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x114411,
+            roughness: 0.8, 
+            metalness: 0.2 
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        
+        // Rotate and position the floor
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = 0;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        // Add a grid helper for visual reference
+        const gridHelper = new THREE.GridHelper(100, 100, 0x000000, 0x444444);
+        scene.add(gridHelper);
+        
+        debug('Floor created successfully');
+    } catch (error) {
+        debug(`Error creating floor: ${error.message}`, true);
+    }
+}
+
 // Initialize the game
 window.onload = function() {
     debug('Window loaded, initializing game...');
@@ -3645,7 +3616,7 @@ function toggleCameraView() {
         
         // Force a position update to the server to ensure sync
         if (typeof window.room !== 'undefined' && window.room) {
-            window.room.send("updatePosition", {
+            window.room.send("move", {
                 x: playerNumberblock.mesh.position.x,
                 y: playerNumberblock.mesh.position.y,
                 z: playerNumberblock.mesh.position.z,
@@ -3743,12 +3714,17 @@ function init() {
     try {
         debug('Initializing game');
         
-        // Initialize scene
+        // Create the scene first
         initScene();
         
+        // Initialize physics variables and flags
+        initPhysics();
+        
         // Create the camera
+        debug('Creating camera');
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 2, 5); // Start a bit back to see the player
+        window.camera = camera; // Make globally available
         
         // Setup renderer
         debug('Setting up renderer');
@@ -3762,34 +3738,41 @@ function init() {
         
         // Add renderer to document
         document.body.appendChild(renderer.domElement);
-        
-        // Make renderer globally available
-        window.renderer = renderer;
+        window.renderer = renderer; // Make globally available
         
         // Initialize the floor
         initFloor();
         
-        // Add decorative objects back
-        addDecorativeObjects();
+        // Setup controls for player movement
+        setupPointerLockControls();
         
-        // Add static Numberblocks
-        addStaticNumberblocks();
-        
-        // Create player's Numberblock
+        // Initialize the player
         initPlayerNumberblock();
         
-        // Setup event listeners
-        window.addEventListener('resize', onWindowResize, false);
+        // Add static numberblocks
+        addStaticNumberblocks();
         
-        // Setup controls based on the view mode
-        debug('Setting up controls for initial view mode');
-        setupPointerLockControls();
+        // Add decorative objects
+        addDecorativeObjects();
         
         // Initialize networking for multiplayer
         initNetworkingSystem();
         
-        // Add button to toggle between first and third person
-        addViewToggleButton();
+        // Add resize event listener
+        window.addEventListener('resize', onWindowResize, false);
+        
+        // Make key handlers available for player movement
+        document.addEventListener('keydown', onKeyDown, false);
+        document.addEventListener('keyup', onKeyUp, false);
+        
+        // Make sure global variables are properly declared
+        window.scene = scene;
+        window.camera = camera;
+        window.renderer = renderer;
+        window.controls = controls;
+        window.playerNumberblock = playerNumberblock;
+        window.playerValue = playerValue;
+        window.isFirstPerson = true;
         
         // Start the animation loop
         requestAnimationFrame(animate);
@@ -3798,7 +3781,6 @@ function init() {
     } catch (error) {
         debug(`Full initialization error: ${error.message}`, true);
         console.error('Full initialization error:', error);
-        emergencyRender();
     }
 }
 
@@ -3836,39 +3818,13 @@ function initScene() {
         const hemisphereLight = new THREE.HemisphereLight(0xddeeff, 0x3e2200, 0.4); // Reduced from 0.7
         scene.add(hemisphereLight);
         
+        // Initialize operator manager and make it globally available
+        operatorManager = new OperatorManager(scene);
+        window.operatorManager = operatorManager;
+        
         debug('Scene created successfully with softer lighting');
     } catch (error) {
         debug(`Error creating scene: ${error.message}`, true);
-    }
-}
-
-// Initialize the floor
-function initFloor() {
-    try {
-        debug('Creating floor');
-        
-        // Create a larger green floor with even darker color
-        const floorGeometry = new THREE.PlaneGeometry(100, 100); // Extended size
-        const floorMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x114411,  // Much darker green color (almost forest green)
-            roughness: 0.8, 
-            metalness: 0.2 
-        });
-        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        
-        // Rotate and position the floor
-        floor.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-        floor.position.y = 0;
-        floor.receiveShadow = true;
-        scene.add(floor);
-        
-        // Add a grid helper for visual reference
-        const gridHelper = new THREE.GridHelper(100, 100, 0x000000, 0x444444);
-        scene.add(gridHelper);
-        
-        debug('Floor and grid created successfully');
-    } catch (error) {
-        debug(`Error creating floor: ${error.message}`, true);
     }
 }
 
@@ -3879,37 +3835,57 @@ function setupPointerLockControls() {
     try {
         // Create controls
         controls = new THREE.PointerLockControls(camera, document.body);
-        debug('PointerLockControls initialized: ' + controls);
-        
-        // Make controls globally available
-        window.controls = controls;
         
         // Use the existing instructions element from HTML
         let instructions = document.getElementById('lock-instructions');
         
-        // Function to handle pointer lock change - simplified
+        // Create instructions if it doesn't exist
+        if (!instructions) {
+            console.warn('Lock instructions element not found, creating one');
+            instructions = document.createElement('div');
+            instructions.id = 'lock-instructions';
+            instructions.style.position = 'absolute';
+            instructions.style.width = '100%';
+            instructions.style.height = '100%';
+            instructions.style.top = '0';
+            instructions.style.left = '0';
+            instructions.style.display = 'flex';
+            instructions.style.flexDirection = 'column';
+            instructions.style.justifyContent = 'center';
+            instructions.style.alignItems = 'center';
+            instructions.style.color = '#ffffff';
+            instructions.style.textAlign = 'center';
+            instructions.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            instructions.style.cursor = 'pointer';
+            instructions.style.zIndex = '1000';
+            instructions.innerHTML = '<p>Click to enable controls</p>';
+            document.body.appendChild(instructions);
+        }
+        
+        // Function to handle pointer lock change
         function onPointerLockChange() {
             if (document.pointerLockElement === document.body || 
                 document.mozPointerLockElement === document.body ||
                 document.webkitPointerLockElement === document.body) {
                 
-                // Pointer is locked, hide instructions
+                debug('Pointer is now locked');
                 if (instructions) {
                     instructions.style.display = 'none';
                 }
                 
-                // Set first person active flag
-                window.isFirstPerson = true;
-                debug('Pointer is locked - first person active');
+                // Set document focused state
+                document.body.classList.add('controls-enabled');
                 
-                // Ensure player starts on the ground when re-entering
-                if (controls && controls.getObject()) {
-                    // Only reset the Y position, not X and Z
-                    const currentPos = controls.getObject().position;
-                    if (currentPos.y > 5) { // If they're way up in the air
-                        currentPos.y = 1.0; // Set to floor level + player height
-                        window.velocity.y = 0;     // Reset vertical velocity
-                    }
+                // Set physics flag
+                window.canJump = true;
+                
+                // Set control movement flags
+                window.isControlsEnabled = true;
+                
+                // Start the game loop if not already running
+                if (!window.isAnimating) {
+                    window.isAnimating = true;
+                    animate();
                 }
             } else {
                 // Only show instructions if we're not in preview mode
@@ -3920,53 +3896,32 @@ function setupPointerLockControls() {
             }
         }
         
-        // Function to handle pointer lock error - simplified
-        function onPointerLockError() {
-            debug('Pointer lock error', true);
-            
-            // Enable preview controls without extra messages
-            window.previewControlsMode = true;
-            
-            // Hide instructions after a delay
-            setTimeout(() => {
-                if (instructions) {
-                    instructions.style.display = 'none';
-                }
-            }, 3000);
+        // Event handler click to lock
+        if (instructions) {
+            instructions.addEventListener('click', function() {
+                controls.lock();
+            }, false);
         }
         
-        // Add event listeners for pointer lock
-        document.addEventListener('click', function() {
-            if (instructions && instructions.style.display !== 'none') {
-                controls.lock();
-            }
-        });
+        // Add pointer lock events
+        document.addEventListener('pointerlockchange', onPointerLockChange, false);
+        document.addEventListener('mozpointerlockchange', onPointerLockChange, false);
+        document.addEventListener('webkitpointerlockchange', onPointerLockChange, false);
         
-        // Add pointer lock change and error event listeners
-        document.addEventListener('pointerlockchange', onPointerLockChange);
-        document.addEventListener('mozpointerlockchange', onPointerLockChange);
-        document.addEventListener('webkitpointerlockchange', onPointerLockChange);
-        
-        document.addEventListener('pointerlockerror', onPointerLockError);
-        document.addEventListener('mozpointerlockerror', onPointerLockError);
-        document.addEventListener('webkitpointerlockerror', onPointerLockError);
+        // Add error handler
+        document.addEventListener('pointerlockerror', function() {
+            debug('Pointer lock error', true);
+        }, false);
         
         // Add controls to scene
         scene.add(controls.getObject());
         
-        // Setup movement
-        window.moveForward = false;
-        window.moveBackward = false;
-        window.moveLeft = false;
-        window.moveRight = false;
-        window.canJump = false;
+        // Set first/third person flag
+        window.isFirstPerson = true;
         
-        // Set up keyboard event listeners
+        // Add keyboard event listeners
         document.addEventListener('keydown', onKeyDown, false);
         document.addEventListener('keyup', onKeyUp, false);
-        
-        // Ensure camera rotation is properly handled
-        camera.rotation.order = 'YXZ';
         
         debug('PointerLock controls setup complete');
     } catch (error) {
@@ -4284,21 +4239,25 @@ function updateThirdPersonCamera() {
 // Update operators (animate them)
 function updateOperators() {
     try {
-        if (!window.visuals || !window.visuals.operators) {
-            return;
+        // First, update operators managed by the OperatorManager
+        if (window.operatorManager) {
+            window.operatorManager.update(1/60); // Pass approximate deltaTime
         }
         
-        // Get all operator visuals
-        const operators = window.visuals.operators;
-        
-        // Calculate deltaTime (approximate)
-        const deltaTime = 1/60;
-        
-        // Animate each operator
-        for (const operatorId in operators) {
-            const operator = operators[operatorId];
-            if (operator && typeof operator.animate === 'function') {
-                operator.animate(deltaTime);
+        // For backwards compatibility, also check for visuals.operators
+        if (window.visuals && window.visuals.operators) {
+            // Get all operator visuals
+            const operators = window.visuals.operators;
+            
+            // Calculate deltaTime (approximate)
+            const deltaTime = 1/60;
+            
+            // Animate each operator
+            for (const operatorId in operators) {
+                const operator = operators[operatorId];
+                if (operator && typeof operator.animate === 'function') {
+                    operator.animate(deltaTime);
+                }
             }
         }
     } catch (error) {
@@ -4348,10 +4307,26 @@ function updateHUD() {
 
 // For Numberblock prototype to enable getHeight() method
 if (typeof window.Numberblock === 'undefined') {
-    window.Numberblock = function() {};
+    console.log("Creating temporary Numberblock class");
+    window.Numberblock = function(value, color) {
+        this.value = value || 1;
+        this.color = color || "#FFFF00";
+        
+        // Create a basic mesh for the numberblock
+        const geometry = new THREE.BoxGeometry(1, this.value, 1);
+        const material = new THREE.MeshStandardMaterial({ color: this.color });
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh.castShadow = true;
+        this.mesh.receiveShadow = true;
+    };
+    
     window.Numberblock.prototype.getHeight = function() {
-        // Default height if not available
-        return 2;
+        return this.value; // Actual height is the value
+    };
+    
+    window.Numberblock.prototype.createNumberblock = function() {
+        // Method already called in constructor, but added for compatibility
+        return this.mesh;
     };
 }
 
@@ -5196,12 +5171,20 @@ function sendPlayerUpdate(position, rotationY, pitch, value) {
         }
         
         // Send update to the server
-        room.send("player-update", {
-            x: position.x,
-            y: position.y,
-            z: position.z,
-            rotationY: rotationY || 0,
-            pitch: pitch || 0,
+        room.send("input", {
+            version: 2,
+            keys: {}, // Add appropriate key state here if needed
+            mouseDelta: { x: 0, y: 0 }, // Add mouse delta if needed
+            viewMode: window.isFirstPerson ? "first-person" : "third-person",
+            position: {
+                x: position.x,
+                y: position.y,
+                z: position.z
+            },
+            rotation: {
+                y: rotationY || 0,
+                pitch: pitch || 0
+            },
             value: value || 1
         });
     } catch (error) {
@@ -6063,11 +6046,7 @@ class OperatorManager {
     constructor(scene) {
         this.scene = scene;
         this.operators = [];
-        this.spawnTimer = 0;
-        this.spawnInterval = this.getRandomSpawnInterval();
-        this.maxOperators = 10; // Maximum number of operators allowed at once
         this.groundY = 0; // Y position of the ground
-        this.mapSize = 40; // Size of the playable area (40x40)
         
         // Player's held operator
         this.heldOperator = null;
@@ -6077,11 +6056,6 @@ class OperatorManager {
         console.log("OperatorManager initialized");
     }
     
-    // Get a random spawn interval between 5-10 seconds
-    getRandomSpawnInterval() {
-        return 5 + Math.random() * 5; // 5-10 seconds
-    }
-    
     // Update function to be called in animation loop
     update(deltaTime) {
         // Update existing operators
@@ -6089,36 +6063,41 @@ class OperatorManager {
             operator.animate(deltaTime);
         });
         
-        // Check if it's time to spawn a new operator
-        this.spawnTimer += deltaTime;
-        if (this.spawnTimer >= this.spawnInterval && this.operators.length < this.maxOperators) {
-            this.spawnOperator();
-            this.spawnTimer = 0;
-            this.spawnInterval = this.getRandomSpawnInterval();
-        }
+        // NOTE: We no longer spawn operators locally
+        // Operators are created by the server and synchronized via Colyseus
     }
     
-    // Spawn a new operator at a random position
-    spawnOperator() {
-        // Randomly choose between plus and minus
-        const type = Math.random() > 0.5 ? 'plus' : 'minus';
-        
+    // Create an operator from server data
+    // This is called by the entity-sync system when a new operator is received from the server
+    createOperatorFromServer(id, type, x, y, z) {
         // Create the operator
         const operator = new Operator(type, this.scene);
         
-        // Set a random position on the ground
-        const posX = (Math.random() * this.mapSize) - (this.mapSize / 2);
-        const posZ = (Math.random() * this.mapSize) - (this.mapSize / 2);
+        // Set the position from server data
+        operator.setPosition(x, y, z);
         
-        // Set the Y position slightly above the ground to prevent z-fighting
-        operator.setPosition(posX, this.groundY + 0.6, posZ);
+        // Store server ID for reference
+        operator.serverId = id;
         
         // Add to the array of active operators
         this.operators.push(operator);
         
-        console.log(`Spawned ${type} operator at (${posX.toFixed(2)}, ${this.groundY + 0.6}, ${posZ.toFixed(2)})`);
+        console.log(`Created ${type} operator from server at (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
         
         return operator;
+    }
+    
+    // Find an operator by server ID
+    getOperatorByServerId(id) {
+        return this.operators.find(op => op.serverId === id);
+    }
+    
+    // Update an operator's position based on server data
+    updateOperatorFromServer(id, x, y, z) {
+        const operator = this.getOperatorByServerId(id);
+        if (operator) {
+            operator.setPosition(x, y, z);
+        }
     }
     
     // Remove an operator from the scene and the operators array
@@ -6127,6 +6106,14 @@ class OperatorManager {
         if (index !== -1) {
             operator.remove();
             this.operators.splice(index, 1);
+        }
+    }
+    
+    // Remove an operator by server ID
+    removeOperatorByServerId(id) {
+        const operator = this.getOperatorByServerId(id);
+        if (operator) {
+            this.removeOperator(operator);
         }
     }
     
@@ -6257,77 +6244,167 @@ FILE: client\js\player-sync.js
 // Numberblocks game - Player synchronization module
 // Handles player synchronization between clients
 
+// Helper functions for visual management
+function setupPlayerListeners(player, sessionId) {
+    try {
+        // Skip if it's our own player
+        if (sessionId === window.room.sessionId) {
+            console.log("✅ This is my player, not creating visual");
+            return;
+        }
+
+        // Create visual for remote player
+        const visual = new PlayersVisual(player);
+        if (!visuals.players) visuals.players = {};
+        visuals.players[sessionId] = visual;
+        
+        // Store in tracking collection
+        window.otherPlayers[sessionId] = player;
+
+        // Add to scene
+        if (window.scene) {
+            window.scene.add(visual.group || visual.mesh);
+        }
+
+        // Setup change listener for updates
+        player.onChange(() => {
+            if (visuals.players[sessionId]) {
+                visuals.players[sessionId].update(player);
+            }
+        });
+
+        // Update UI
+        updatePlayerListUI();
+    } catch (error) {
+        console.error(`Error setting up player (${sessionId}):`, error);
+    }
+}
+
+function removePlayerVisual(sessionId) {
+    try {
+        // Remove visual
+        if (visuals.players && visuals.players[sessionId]) {
+            if (window.scene) {
+                window.scene.remove(visuals.players[sessionId].group || 
+                                  visuals.players[sessionId].mesh);
+            }
+            delete visuals.players[sessionId];
+        }
+
+        // Remove from tracking
+        delete window.otherPlayers[sessionId];
+
+        // Update UI
+        updatePlayerListUI();
+    } catch (error) {
+        console.error(`Error removing player visual (${sessionId}):`, error);
+    }
+}
+
+// Update player list UI
+function updatePlayerListUI() {
+    try {
+        const playerList = document.getElementById('playerList');
+        if (!playerList) return;
+
+        // Clear existing list
+        playerList.innerHTML = '';
+
+        // Add all players
+        if (window.room && window.room.state) {
+            window.room.state.players.forEach((player, sessionId) => {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'player-item';
+                playerDiv.textContent = `${player.name || sessionId} (Value: ${player.value || 1})`;
+                if (sessionId === window.room.sessionId) {
+                    playerDiv.classList.add('current-player');
+                }
+                playerList.appendChild(playerDiv);
+            });
+        }
+    } catch (error) {
+        console.error("Error updating player list UI:", error);
+    }
+}
+
+// Define visual class for Players
+window.PlayersVisual = class PlayersVisual {
+    constructor(playerData) {
+        this.group = new THREE.Group();
+        this.numberblockMesh = null;
+        this.nameLabel = null;
+        this.update(playerData);
+    }
+
+    createNumberblockMesh(value, color) {
+        // Create numberblock mesh based on value
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const material = new THREE.MeshPhongMaterial({ color: color || 0xff0000 });
+        const mesh = new THREE.Mesh(geometry, material);
+        
+        // Scale based on value (stack of cubes)
+        mesh.scale.y = value || 1;
+        mesh.position.y = (value || 1) / 2;
+        
+        return mesh;
+    }
+
+    update(playerData) {
+        try {
+            // Update numberblock
+            if (this.numberblockMesh) {
+                this.group.remove(this.numberblockMesh);
+            }
+            this.numberblockMesh = this.createNumberblockMesh(playerData.value, playerData.color);
+            this.group.add(this.numberblockMesh);
+
+            // Update position and rotation
+            if (playerData.x !== undefined && playerData.y !== undefined && playerData.z !== undefined) {
+                this.group.position.set(playerData.x, playerData.y, playerData.z);
+            }
+            if (playerData.rotationY !== undefined) {
+                this.group.rotation.y = playerData.rotationY;
+            }
+
+            // Update name label
+            if (!this.nameLabel && playerData.name) {
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'player-label';
+                labelDiv.textContent = playerData.name;
+                this.nameLabel = new CSS2DObject(labelDiv);
+                this.nameLabel.position.set(0, (playerData.value || 1) + 0.5, 0);
+                this.group.add(this.nameLabel);
+            } else if (this.nameLabel && playerData.name) {
+                this.nameLabel.element.textContent = playerData.name;
+                this.nameLabel.position.y = (playerData.value || 1) + 0.5;
+            }
+        } catch (error) {
+            console.error("Error updating player visual:", error);
+        }
+    }
+};
+
 // Process players that already exist in the room when joining
 function processExistingPlayers() {
-    if (!room) {
+    if (!window.room) {
         console.warn("Room not available for processing existing players");
         return;
     }
     
     try {
         // Get all player objects from the room state
-        const players = room.state.players;
+        const players = window.room.state.players;
         if (!players) {
             console.warn("No players collection in room state");
             return;
         }
         
         // Track our own player ID
-        window.mySessionId = room.sessionId;
+        window.mySessionId = window.room.sessionId;
         
         // Process each player in the room
         players.forEach((player, sessionId) => {
-            // Skip our own player
-            if (sessionId === room.sessionId) {
-                console.log("Found myself in the player list, sessionId:", sessionId);
-                
-                // Update our own player value if needed
-                if (window.player && player.value) {
-                    window.player.value = player.value;
-                    
-                    // Update the HUD
-                    if (window.updateHUD) {
-                        window.updateHUD();
-                    }
-                }
-                return;
-            }
-            
-            // Check if player is valid
-            if (!player || !player.x || player.x === undefined) {
-                console.warn("Invalid player data for sessionId:", sessionId);
-                return;
-            }
-            
-            // Create visual for other player if it doesn't exist
-            if (!visuals.players[sessionId]) {
-                try {
-                    // Create new visual using player data
-                    const playerVisual = new PlayersVisual(player);
-                    
-                    // Store the visual
-                    visuals.players[sessionId] = playerVisual;
-                    
-                    // Add to the scene
-                    if (window.scene) {
-                        window.scene.add(playerVisual.group);
-                    } else {
-                        console.warn("Scene not available, cannot add player visual");
-                    }
-                    
-                    // Add player to other players collection
-                    window.otherPlayers[sessionId] = player;
-                    
-                    console.log("Created visual for existing player:", sessionId);
-                } catch (error) {
-                    console.error("Error creating player visual:", error);
-                }
-            } else {
-                console.log("Visual already exists for player:", sessionId);
-                
-                // Update player data
-                visuals.players[sessionId].update(player);
-            }
+            setupPlayerListeners(player, sessionId);
         });
         
         console.log("Processed existing players. Total:", players.size);
@@ -6338,204 +6415,38 @@ function processExistingPlayers() {
 
 // Setup specific schema listeners for Players
 function setupPlayerListeners(room) {
-    if (!room || !room.state) {
-        console.warn("Room not available for player listeners");
+    if (!room || !room.state || !room.state.players) {
+        console.warn('Players state not available.');
         return;
     }
-    
-    try {
-        const players = room.state.players;
-        
-        // Check if players is a MapSchema with onAdd method
-        if (!players || typeof players.onAdd !== 'function') {
-            console.error("Players collection is not a valid MapSchema or not yet initialized:", players);
-            // Log the state for debugging
-            console.log("Current room.state:", room.state);
-            return;
-        }
-        
-        // Listen for player additions
-        players.onAdd((player, sessionId) => {
-            console.log(`Player added: ${sessionId}`);
-            
-            // Skip if it's our own player
-            if (sessionId === room.sessionId) {
-                console.log("This is my player, not creating visual");
-                return;
-            }
-            
-            // Store the player in our tracking object
-            window.otherPlayers[sessionId] = player;
-            
-            // Create visual for player
-            try {
-                const playerVisual = new PlayersVisual(player);
-                visuals.players[sessionId] = playerVisual;
-                
-                // Add to scene
-                if (window.scene) {
-                    window.scene.add(playerVisual.group);
-                } else {
-                    console.warn("Scene not available, cannot add player visual");
-                }
-                
-                // Update the player list UI
-                updatePlayerListUI();
-            } catch (error) {
-                console.error("Error creating player visual:", error);
-            }
-            
-            // Listen for player removal
-            player.listen("active", (isActive) => {
-                if (!isActive) {
-                    // If player becomes inactive, remove from scene
-                    if (visuals.players[sessionId] && window.scene) {
-                        window.scene.remove(visuals.players[sessionId].group);
-                        delete visuals.players[sessionId];
-                    }
-                    
-                    // Remove from tracking object
-                    delete window.otherPlayers[sessionId];
-                    
-                    // Update UI
-                    updatePlayerListUI();
-                }
-            });
-            
-            // Listen for player position updates
-            player.onChange(() => {
-                // Update visual if it exists
-                if (visuals.players[sessionId]) {
-                    visuals.players[sessionId].update(player);
-                }
-            });
-        });
-        
-        // Listen for player removals
-        players.onRemove((player, sessionId) => {
-            console.log(`Player removed: ${sessionId}`);
-            
-            // If visual exists, remove it
-            if (visuals.players[sessionId]) {
-                if (window.scene) {
-                    window.scene.remove(visuals.players[sessionId].group);
-                }
-                delete visuals.players[sessionId];
-            }
-            
-            // Remove from tracking object
-            delete window.otherPlayers[sessionId];
-            
-            // Update UI
-            updatePlayerListUI();
-        });
-    } catch (error) {
-        console.error("Error setting up player listeners:", error);
-    }
-}
 
-// Define visual class for Players
-window.PlayersVisual = class PlayersVisual {
-    constructor(playerData) {
-        this.group = new THREE.Group();
-        this.lastPosition = new THREE.Vector3();
-        this.targetPosition = new THREE.Vector3();
-        this.interpolationFactor = 0.15; // Smooth movement factor
-        
-        // Player name display
-        this.nameLabel = document.createElement('div');
-        this.nameLabel.className = 'player-label';
-        this.nameLabel.style.color = 'white';
-        this.nameLabel.style.backgroundColor = 'rgba(0,0,0,0.5)';
-        this.nameLabel.style.padding = '2px 5px';
-        this.nameLabel.style.borderRadius = '3px';
-        this.nameLabel.style.fontSize = '12px';
-        this.nameLabel.style.pointerEvents = 'none';
-        this.nameLabel.style.userSelect = 'none';
-        this.nameLabel.textContent = playerData.name || 'Player';
-        
-        // Create CSS2D object for name
-        this.nameObject = new CSS2DObject(this.nameLabel);
-        this.nameObject.position.set(0, 3, 0); // Position above player
-        this.group.add(this.nameObject);
-        
-        // Create numberblock for player
-        this.createNumberblockMesh(playerData.value || 1, playerData.color || '#FF0000');
-        
-        // Set initial position
-        this.update(playerData);
-    }
-    
-    createNumberblockMesh(value, color) {
-        // Create basic mesh for now
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshBasicMaterial({ 
-            color: color || window.getColorForValue(value || 1)
-        });
-        
-        // Create multiple cubes for higher values
-        const blockHeight = 1;
-        this.mesh = new THREE.Group();
-        
-        for (let i = 0; i < value; i++) {
-            const cube = new THREE.Mesh(geometry, material);
-            cube.position.y = i * blockHeight;
-            this.mesh.add(cube);
-        }
-        
-        // Center the mesh
-        const totalHeight = value * blockHeight;
-        this.mesh.position.y = totalHeight / 2;
-        
-        // Add to the group
-        this.group.add(this.mesh);
-    }
-    
-    update(playerData) {
-        // Get player position with validation
-        const position = window.getPlayerPosition(playerData);
-        
-        if (position) {
-            // Store target position for interpolation
-            this.targetPosition.copy(position);
-            
-            // Update position with smooth interpolation
-            this.group.position.lerp(this.targetPosition, this.interpolationFactor);
-            
-            // Update rotation if available
-            if (playerData.rotationY !== undefined) {
-                this.group.rotation.y = playerData.rotationY;
-            }
-            
-            // Update value if changed
-            if (this.lastValue !== playerData.value && playerData.value > 0) {
-                this.lastValue = playerData.value;
-                
-                // Remove old mesh
-                if (this.mesh) {
-                    this.group.remove(this.mesh);
-                }
-                
-                // Create new mesh with updated value
-                this.createNumberblockMesh(playerData.value, playerData.color);
-            }
-        }
-    }
-};
+    // Listen for player added
+    room.state.players.onAdd((player, sessionId) => {
+        console.log(`✅ Player ${sessionId} joined.`, player);
+        setupPlayerListeners(player, sessionId);
+    });
 
-// Get position from player object, with validation
-function getPlayerPosition(player) {
-    if (!player || player.x === undefined || player.y === undefined || player.z === undefined) {
-        return null;
-    }
+    // Listen for player removal
+    room.state.players.onRemove((player, sessionId) => {
+        console.log(`✅ Player ${sessionId} left.`, player);
+        removePlayerVisual(sessionId);
+    });
+
+    // Initial iteration (process existing players)
+    room.state.players.forEach((player, sessionId) => {
+        console.log(`✅ Processing existing player: ${sessionId}`, player);
+        setupPlayerListeners(player, sessionId);
+    });
     
-    return new THREE.Vector3(player.x, player.y, player.z);
+    // Update UI after processing all players
+    updatePlayerListUI();
 }
 
 // Make functions available globally
-window.processExistingPlayers = processExistingPlayers;
 window.setupPlayerListeners = setupPlayerListeners;
-window.getPlayerPosition = getPlayerPosition;
+window.removePlayerVisual = removePlayerVisual;
+window.updatePlayerListUI = updatePlayerListUI;
+window.processExistingPlayers = processExistingPlayers;
  
  
 ===================================================== 

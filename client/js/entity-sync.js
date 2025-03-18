@@ -1,216 +1,143 @@
 // Numberblocks game - Entity synchronization module
 // Handles entity synchronization (operators, static numberblocks)
 
-// Setup schema listeners for a specific object type
-function setupSpecificSchemaListeners(schemaName, schema) {
-    if (!room || !schema) {
-        console.warn(`Room or schema not available for ${schemaName}`);
-        return;
-    }
-    
+// Helper functions for visual management
+function createOperatorVisual(operator, operatorId) {
     try {
-        // Create the appropriate tracking collections if they don't exist
-        if (!window[schemaName]) {
-            window[schemaName] = {};
+        const visual = new OperatorsVisual(operator);
+        if (!visuals.operators) visuals.operators = {};
+        visuals.operators[operatorId] = visual;
+        
+        if (window.scene) {
+            window.scene.add(visual.group || visual.mesh);
         }
         
-        // Check if schema is a MapSchema with onAdd method
-        if (!schema || typeof schema.onAdd !== 'function') {
-            console.error(`${schemaName} collection is not a valid MapSchema or not yet initialized:`, schema);
-            console.log("Current room.state:", room.state);
-            return;
-        }
-        
-        // Determine which visual class to use
-        let VisualClass;
-        switch(schemaName) {
-            case 'operators':
-                VisualClass = OperatorsVisual;
-                break;
-            case 'staticNumberblocks':
-                VisualClass = StaticNumberblocksVisual;
-                break;
-            default:
-                console.warn(`No visual class defined for schema: ${schemaName}`);
-                return;
-        }
-        
-        // Setup listeners
-        schema.onAdd((entity, entityId) => {
-            console.log(`${schemaName} added:`, entityId);
-            
-            // Store entity in tracking collection
-            window[schemaName][entityId] = entity;
-            
-            // Create visual
-            try {
-                const visual = new VisualClass(entity);
-                visuals[schemaName][entityId] = visual;
-                
-                // Add to scene
-                if (window.scene) {
-                    window.scene.add(visual.group || visual.mesh);
-                } else {
-                    console.warn("Scene not available for adding entity visual");
-                }
-            } catch (error) {
-                console.error(`Error creating ${schemaName} visual:`, error);
+        // Setup change listener
+        operator.onChange(() => {
+            if (visuals.operators[operatorId]) {
+                visuals.operators[operatorId].update(operator);
             }
-            
-            // Setup change listener
-            entity.onChange(() => {
-                // Update visual
-                if (visuals[schemaName][entityId]) {
-                    visuals[schemaName][entityId].update(entity);
-                }
-            });
-        });
-        
-        // Listen for removals
-        schema.onRemove((entity, entityId) => {
-            console.log(`${schemaName} removed:`, entityId);
-            
-            // Remove visual
-            if (visuals[schemaName][entityId]) {
-                if (window.scene) {
-                    window.scene.remove(visuals[schemaName][entityId].group || 
-                                      visuals[schemaName][entityId].mesh);
-                }
-                delete visuals[schemaName][entityId];
-            }
-            
-            // Remove from tracking
-            delete window[schemaName][entityId];
         });
     } catch (error) {
-        console.error(`Error setting up ${schemaName} listeners:`, error);
+        console.error(`Error creating operator visual (${operatorId}):`, error);
     }
 }
 
-// Setup generic schema listeners
-function setupGenericSchemaListeners(room, schemaName) {
-    if (!room || !room.state || !room.state[schemaName]) {
-        console.warn(`Room or ${schemaName} not available`);
-        return;
-    }
-    
+function removeOperatorVisual(operatorId) {
     try {
-        const schema = room.state[schemaName];
+        if (visuals.operators && visuals.operators[operatorId]) {
+            if (window.scene) {
+                window.scene.remove(visuals.operators[operatorId].group || 
+                                  visuals.operators[operatorId].mesh);
+            }
+            delete visuals.operators[operatorId];
+        }
+    } catch (error) {
+        console.error(`Error removing operator visual (${operatorId}):`, error);
+    }
+}
+
+function createStaticNumberblockVisual(block, blockId) {
+    try {
+        const visual = new StaticNumberblocksVisual(block);
+        if (!visuals.staticNumberblocks) visuals.staticNumberblocks = {};
+        visuals.staticNumberblocks[blockId] = visual;
         
-        // Initialize the tracking collection
-        if (!window[schemaName]) {
-            window[schemaName] = {};
+        if (window.scene) {
+            window.scene.add(visual.group || visual.mesh);
         }
         
-        // Setup add listener
-        schema.onAdd((entity, entityId) => {
-            console.log(`Generic ${schemaName} added:`, entityId);
-            
-            // Store in tracking
-            window[schemaName][entityId] = entity;
-            
-            // Create simple visual representation
-            const geometry = new THREE.SphereGeometry(0.5);
-            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-            const mesh = new THREE.Mesh(geometry, material);
-            
-            // Set position if available
-            if (entity.x !== undefined && entity.y !== undefined && entity.z !== undefined) {
-                mesh.position.set(entity.x, entity.y, entity.z);
+        // Setup change listener
+        block.onChange(() => {
+            if (visuals.staticNumberblocks[blockId]) {
+                visuals.staticNumberblocks[blockId].update(block);
             }
-            
-            // Store visual
-            visuals[schemaName] = visuals[schemaName] || {};
-            visuals[schemaName][entityId] = { mesh };
-            
-            // Add to scene
-            if (window.scene) {
-                window.scene.add(mesh);
-            }
-            
-            // Listen for changes
-            entity.onChange(() => {
-                // Update position
-                if (visuals[schemaName][entityId] && visuals[schemaName][entityId].mesh) {
-                    if (entity.x !== undefined && entity.y !== undefined && entity.z !== undefined) {
-                        visuals[schemaName][entityId].mesh.position.set(entity.x, entity.y, entity.z);
-                    }
-                }
-            });
-        });
-        
-        // Listen for removals
-        schema.onRemove((entity, entityId) => {
-            console.log(`Generic ${schemaName} removed:`, entityId);
-            
-            // Remove visual
-            if (visuals[schemaName] && visuals[schemaName][entityId]) {
-                if (window.scene && visuals[schemaName][entityId].mesh) {
-                    window.scene.remove(visuals[schemaName][entityId].mesh);
-                }
-                delete visuals[schemaName][entityId];
-            }
-            
-            // Remove from tracking
-            delete window[schemaName][entityId];
         });
     } catch (error) {
-        console.error(`Error setting up generic ${schemaName} listeners:`, error);
+        console.error(`Error creating static numberblock visual (${blockId}):`, error);
+    }
+}
+
+function removeStaticNumberblockVisual(blockId) {
+    try {
+        if (visuals.staticNumberblocks && visuals.staticNumberblocks[blockId]) {
+            if (window.scene) {
+                window.scene.remove(visuals.staticNumberblocks[blockId].group || 
+                                  visuals.staticNumberblocks[blockId].mesh);
+            }
+            delete visuals.staticNumberblocks[blockId];
+        }
+    } catch (error) {
+        console.error(`Error removing static numberblock visual (${blockId}):`, error);
     }
 }
 
 // Setup room listeners
 function setupRoomListeners() {
-    if (!room) {
-        console.warn("Room not available for listeners");
-        setTimeout(setupRoomListeners, 500);
+    if (!window.room) {
+        console.error("No room available!");
         return;
     }
-    
-    try {
-        console.log("Setting up room listeners");
-        
-        // Debug: Log the entire room.state object to inspect its structure
-        console.log("Room state before setting up listeners:", room.state);
-        console.log("Players collection type:", room.state.players ? typeof room.state.players : 'undefined');
-        console.log("Players collection methods:", room.state.players ? Object.getOwnPropertyNames(Object.getPrototypeOf(room.state.players)) : 'undefined');
-        
-        // Player listeners
-        setupPlayerListeners(room);
-        
-        // Operators listeners
-        if (room.state.operators) {
-            console.log("Setting up operators listeners");
-            setupSpecificSchemaListeners('operators', room.state.operators);
+
+    window.room.onStateChange.once((state) => {
+        console.log("✅ State synchronized, setting up listeners.");
+
+        // Confirm 'players' is a MapSchema before adding listeners
+        if (state.players && typeof state.players.onAdd === 'function') {
+            state.players.onAdd((player, sessionId) => {
+                console.log(`Player ${sessionId} joined.`);
+                setupPlayerListeners(player, sessionId);
+            });
+
+            state.players.onRemove((player, sessionId) => {
+                console.log(`Player ${sessionId} left.`);
+                removePlayerVisual(sessionId);
+            });
+
+            state.players.forEach((player, sessionId) => {
+                console.log(`Existing player: ${sessionId}`);
+                setupPlayerListeners(player, sessionId);
+            });
         } else {
-            console.warn("Operators collection not found in room state");
+            console.error("❌ state.players is not a valid MapSchema");
         }
-        
-        // Static numberblocks listeners
-        if (room.state.staticNumberblocks) {
-            console.log("Setting up staticNumberblocks listeners");
-            setupSpecificSchemaListeners('staticNumberblocks', room.state.staticNumberblocks);
+
+        // Operators collection listeners
+        if (state.operators && typeof state.operators.onAdd === 'function') {
+            state.operators.onAdd((operator, operatorId) => {
+                createOperatorVisual(operator, operatorId);
+            });
+
+            state.operators.onRemove((operator, operatorId) => {
+                removeOperatorVisual(operatorId);
+            });
+
+            state.operators.forEach((operator, operatorId) => {
+                createOperatorVisual(operator, operatorId);
+            });
         } else {
-            console.warn("StaticNumberblocks collection not found in room state");
+            console.error("❌ state.operators is not a valid MapSchema");
         }
-        
-        // Other generic schemas
-        const genericSchemas = ['trees', 'rocks'];
-        genericSchemas.forEach(schemaName => {
-            if (room.state[schemaName]) {
-                console.log(`Setting up ${schemaName} listeners`);
-                setupGenericSchemaListeners(room, schemaName);
-            } else {
-                console.warn(`${schemaName} collection not found in room state`);
-            }
-        });
-        
-        // Mark as initialized
-        window.roomInitialized = true;
-        console.log("Room listeners setup complete");
-    } catch (error) {
-        console.error("Error setting up room listeners:", error);
-    }
+
+        // Static Numberblocks listeners
+        if (state.staticNumberblocks && typeof state.staticNumberblocks.onAdd === 'function') {
+            state.staticNumberblocks.onAdd((block, blockId) => {
+                createStaticNumberblockVisual(block, blockId);
+            });
+
+            state.staticNumberblocks.onRemove((block, blockId) => {
+                removeStaticNumberblockVisual(blockId);
+            });
+
+            state.staticNumberblocks.forEach((block, blockId) => {
+                createStaticNumberblockVisual(block, blockId);
+            });
+        } else {
+            console.error("❌ state.staticNumberblocks is not a valid MapSchema");
+        }
+
+        console.log("✅ Room listeners fully set up.");
+    });
 }
 
 // Define Operators Visual class
@@ -359,6 +286,8 @@ window.StaticNumberblocksVisual = class StaticNumberblocksVisual {
 };
 
 // Make functions available globally
-window.setupSpecificSchemaListeners = setupSpecificSchemaListeners;
-window.setupGenericSchemaListeners = setupGenericSchemaListeners;
 window.setupRoomListeners = setupRoomListeners;
+window.createOperatorVisual = createOperatorVisual;
+window.removeOperatorVisual = removeOperatorVisual;
+window.createStaticNumberblockVisual = createStaticNumberblockVisual;
+window.removeStaticNumberblockVisual = removeStaticNumberblockVisual;

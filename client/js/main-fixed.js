@@ -46,6 +46,65 @@ let lastPositionUpdate = 0;
 let inputUpdateInterval = 1000 / 30; // 30Hz input updates
 let lastInputUpdate = 0;
 
+// Initialize physics variables and flags
+function initPhysics() {
+    try {
+        debug('Initializing physics');
+        
+        // Basic physics setup
+        window.velocity = new THREE.Vector3(0, 0, 0);
+        window.direction = new THREE.Vector3(0, 0, 0);
+        window.canJump = false;
+        
+        // Setup movement flags
+        window.moveForward = false;
+        window.moveBackward = false;
+        window.moveLeft = false;
+        window.moveRight = false;
+        window.turnLeft = false;
+        window.turnRight = false;
+        
+        // Setup rotation utilities
+        window.worldUp = new THREE.Vector3(0, 1, 0);
+        window.rotationAxis = new THREE.Vector3();
+        window.rotationQuaternion = new THREE.Quaternion();
+        
+        debug('Physics initialized successfully');
+    } catch (error) {
+        debug(`Error initializing physics: ${error.message}`, true);
+    }
+}
+
+// Initialize the floor
+function initFloor() {
+    try {
+        debug('Creating floor');
+        
+        // Create a larger green floor with darker color
+        const floorGeometry = new THREE.PlaneGeometry(100, 100);
+        const floorMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x114411,
+            roughness: 0.8, 
+            metalness: 0.2 
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        
+        // Rotate and position the floor
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = 0;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        // Add a grid helper for visual reference
+        const gridHelper = new THREE.GridHelper(100, 100, 0x000000, 0x444444);
+        scene.add(gridHelper);
+        
+        debug('Floor created successfully');
+    } catch (error) {
+        debug(`Error creating floor: ${error.message}`, true);
+    }
+}
+
 // Initialize the game
 window.onload = function() {
     debug('Window loaded, initializing game...');
@@ -125,7 +184,7 @@ function toggleCameraView() {
         
         // Force a position update to the server to ensure sync
         if (typeof window.room !== 'undefined' && window.room) {
-            window.room.send("updatePosition", {
+            window.room.send("move", {
                 x: playerNumberblock.mesh.position.x,
                 y: playerNumberblock.mesh.position.y,
                 z: playerNumberblock.mesh.position.z,
@@ -223,12 +282,17 @@ function init() {
     try {
         debug('Initializing game');
         
-        // Initialize scene
+        // Create the scene first
         initScene();
         
+        // Initialize physics variables and flags
+        initPhysics();
+        
         // Create the camera
+        debug('Creating camera');
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 2, 5); // Start a bit back to see the player
+        window.camera = camera; // Make globally available
         
         // Setup renderer
         debug('Setting up renderer');
@@ -242,34 +306,41 @@ function init() {
         
         // Add renderer to document
         document.body.appendChild(renderer.domElement);
-        
-        // Make renderer globally available
-        window.renderer = renderer;
+        window.renderer = renderer; // Make globally available
         
         // Initialize the floor
         initFloor();
         
-        // Add decorative objects back
-        addDecorativeObjects();
+        // Setup controls for player movement
+        setupPointerLockControls();
         
-        // Add static Numberblocks
-        addStaticNumberblocks();
-        
-        // Create player's Numberblock
+        // Initialize the player
         initPlayerNumberblock();
         
-        // Setup event listeners
-        window.addEventListener('resize', onWindowResize, false);
+        // Add static numberblocks
+        addStaticNumberblocks();
         
-        // Setup controls based on the view mode
-        debug('Setting up controls for initial view mode');
-        setupPointerLockControls();
+        // Add decorative objects
+        addDecorativeObjects();
         
         // Initialize networking for multiplayer
         initNetworkingSystem();
         
-        // Add button to toggle between first and third person
-        addViewToggleButton();
+        // Add resize event listener
+        window.addEventListener('resize', onWindowResize, false);
+        
+        // Make key handlers available for player movement
+        document.addEventListener('keydown', onKeyDown, false);
+        document.addEventListener('keyup', onKeyUp, false);
+        
+        // Make sure global variables are properly declared
+        window.scene = scene;
+        window.camera = camera;
+        window.renderer = renderer;
+        window.controls = controls;
+        window.playerNumberblock = playerNumberblock;
+        window.playerValue = playerValue;
+        window.isFirstPerson = true;
         
         // Start the animation loop
         requestAnimationFrame(animate);
@@ -278,7 +349,6 @@ function init() {
     } catch (error) {
         debug(`Full initialization error: ${error.message}`, true);
         console.error('Full initialization error:', error);
-        emergencyRender();
     }
 }
 
@@ -326,36 +396,6 @@ function initScene() {
     }
 }
 
-// Initialize the floor
-function initFloor() {
-    try {
-        debug('Creating floor');
-        
-        // Create a larger green floor with even darker color
-        const floorGeometry = new THREE.PlaneGeometry(100, 100); // Extended size
-        const floorMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x114411,  // Much darker green color (almost forest green)
-            roughness: 0.8, 
-            metalness: 0.2 
-        });
-        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        
-        // Rotate and position the floor
-        floor.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-        floor.position.y = 0;
-        floor.receiveShadow = true;
-        scene.add(floor);
-        
-        // Add a grid helper for visual reference
-        const gridHelper = new THREE.GridHelper(100, 100, 0x000000, 0x444444);
-        scene.add(gridHelper);
-        
-        debug('Floor and grid created successfully');
-    } catch (error) {
-        debug(`Error creating floor: ${error.message}`, true);
-    }
-}
-
 // Setup PointerLock controls
 function setupPointerLockControls() {
     debug('Setting up PointerLock controls');
@@ -363,37 +403,57 @@ function setupPointerLockControls() {
     try {
         // Create controls
         controls = new THREE.PointerLockControls(camera, document.body);
-        debug('PointerLockControls initialized: ' + controls);
-        
-        // Make controls globally available
-        window.controls = controls;
         
         // Use the existing instructions element from HTML
         let instructions = document.getElementById('lock-instructions');
         
-        // Function to handle pointer lock change - simplified
+        // Create instructions if it doesn't exist
+        if (!instructions) {
+            console.warn('Lock instructions element not found, creating one');
+            instructions = document.createElement('div');
+            instructions.id = 'lock-instructions';
+            instructions.style.position = 'absolute';
+            instructions.style.width = '100%';
+            instructions.style.height = '100%';
+            instructions.style.top = '0';
+            instructions.style.left = '0';
+            instructions.style.display = 'flex';
+            instructions.style.flexDirection = 'column';
+            instructions.style.justifyContent = 'center';
+            instructions.style.alignItems = 'center';
+            instructions.style.color = '#ffffff';
+            instructions.style.textAlign = 'center';
+            instructions.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            instructions.style.cursor = 'pointer';
+            instructions.style.zIndex = '1000';
+            instructions.innerHTML = '<p>Click to enable controls</p>';
+            document.body.appendChild(instructions);
+        }
+        
+        // Function to handle pointer lock change
         function onPointerLockChange() {
             if (document.pointerLockElement === document.body || 
                 document.mozPointerLockElement === document.body ||
                 document.webkitPointerLockElement === document.body) {
                 
-                // Pointer is locked, hide instructions
+                debug('Pointer is now locked');
                 if (instructions) {
                     instructions.style.display = 'none';
                 }
                 
-                // Set first person active flag
-                window.isFirstPerson = true;
-                debug('Pointer is locked - first person active');
+                // Set document focused state
+                document.body.classList.add('controls-enabled');
                 
-                // Ensure player starts on the ground when re-entering
-                if (controls && controls.getObject()) {
-                    // Only reset the Y position, not X and Z
-                    const currentPos = controls.getObject().position;
-                    if (currentPos.y > 5) { // If they're way up in the air
-                        currentPos.y = 1.0; // Set to floor level + player height
-                        window.velocity.y = 0;     // Reset vertical velocity
-                    }
+                // Set physics flag
+                window.canJump = true;
+                
+                // Set control movement flags
+                window.isControlsEnabled = true;
+                
+                // Start the game loop if not already running
+                if (!window.isAnimating) {
+                    window.isAnimating = true;
+                    animate();
                 }
             } else {
                 // Only show instructions if we're not in preview mode
@@ -404,53 +464,32 @@ function setupPointerLockControls() {
             }
         }
         
-        // Function to handle pointer lock error - simplified
-        function onPointerLockError() {
-            debug('Pointer lock error', true);
-            
-            // Enable preview controls without extra messages
-            window.previewControlsMode = true;
-            
-            // Hide instructions after a delay
-            setTimeout(() => {
-                if (instructions) {
-                    instructions.style.display = 'none';
-                }
-            }, 3000);
+        // Event handler click to lock
+        if (instructions) {
+            instructions.addEventListener('click', function() {
+                controls.lock();
+            }, false);
         }
         
-        // Add event listeners for pointer lock
-        document.addEventListener('click', function() {
-            if (instructions && instructions.style.display !== 'none') {
-                controls.lock();
-            }
-        });
+        // Add pointer lock events
+        document.addEventListener('pointerlockchange', onPointerLockChange, false);
+        document.addEventListener('mozpointerlockchange', onPointerLockChange, false);
+        document.addEventListener('webkitpointerlockchange', onPointerLockChange, false);
         
-        // Add pointer lock change and error event listeners
-        document.addEventListener('pointerlockchange', onPointerLockChange);
-        document.addEventListener('mozpointerlockchange', onPointerLockChange);
-        document.addEventListener('webkitpointerlockchange', onPointerLockChange);
-        
-        document.addEventListener('pointerlockerror', onPointerLockError);
-        document.addEventListener('mozpointerlockerror', onPointerLockError);
-        document.addEventListener('webkitpointerlockerror', onPointerLockError);
+        // Add error handler
+        document.addEventListener('pointerlockerror', function() {
+            debug('Pointer lock error', true);
+        }, false);
         
         // Add controls to scene
         scene.add(controls.getObject());
         
-        // Setup movement
-        window.moveForward = false;
-        window.moveBackward = false;
-        window.moveLeft = false;
-        window.moveRight = false;
-        window.canJump = false;
+        // Set first/third person flag
+        window.isFirstPerson = true;
         
-        // Set up keyboard event listeners
+        // Add keyboard event listeners
         document.addEventListener('keydown', onKeyDown, false);
         document.addEventListener('keyup', onKeyUp, false);
-        
-        // Ensure camera rotation is properly handled
-        camera.rotation.order = 'YXZ';
         
         debug('PointerLock controls setup complete');
     } catch (error) {
@@ -836,10 +875,26 @@ function updateHUD() {
 
 // For Numberblock prototype to enable getHeight() method
 if (typeof window.Numberblock === 'undefined') {
-    window.Numberblock = function() {};
+    console.log("Creating temporary Numberblock class");
+    window.Numberblock = function(value, color) {
+        this.value = value || 1;
+        this.color = color || "#FFFF00";
+        
+        // Create a basic mesh for the numberblock
+        const geometry = new THREE.BoxGeometry(1, this.value, 1);
+        const material = new THREE.MeshStandardMaterial({ color: this.color });
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh.castShadow = true;
+        this.mesh.receiveShadow = true;
+    };
+    
     window.Numberblock.prototype.getHeight = function() {
-        // Default height if not available
-        return 2;
+        return this.value; // Actual height is the value
+    };
+    
+    window.Numberblock.prototype.createNumberblock = function() {
+        // Method already called in constructor, but added for compatibility
+        return this.mesh;
     };
 }
 

@@ -375,12 +375,20 @@ function sendPlayerUpdate(position, rotationY, pitch, value) {
         }
         
         // Send update to the server
-        room.send("player-update", {
-            x: position.x,
-            y: position.y,
-            z: position.z,
-            rotationY: rotationY || 0,
-            pitch: pitch || 0,
+        room.send("input", {
+            version: 2,
+            keys: {}, // Add appropriate key state here if needed
+            mouseDelta: { x: 0, y: 0 }, // Add mouse delta if needed
+            viewMode: window.isFirstPerson ? "first-person" : "third-person",
+            position: {
+                x: position.x,
+                y: position.y,
+                z: position.z
+            },
+            rotation: {
+                y: rotationY || 0,
+                pitch: pitch || 0
+            },
             value: value || 1
         });
     } catch (error) {
