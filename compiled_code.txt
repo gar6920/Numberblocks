@@ -2737,78 +2737,99 @@ function setupRoomListeners() {
 
     window.room.onStateChange.once((state) => {
         console.log("✅ State synchronized, setting up listeners.");
-
-        // Players
+    
+        // Players (CORRECTED LOOP)
         if (state.players) {
-            for (const sessionId in state.players) {
-                const player = state.players[sessionId];
+            state.players.forEach((player, sessionId) => {  // <-- CORRECT METHOD
                 setupPlayerListeners(player, sessionId);
-            }
+            });
         } else {
             console.error("❌ state.players not found");
         }
-
-        // Operators
+    
+        // Operators (CORRECTED LOOP)
         if (state.operators) {
-            for (const operatorId in state.operators) {
-                const operator = state.operators[operatorId];
+            state.operators.forEach((operator, operatorId) => {  // <-- CORRECT METHOD
                 createOperatorVisual(operator, operatorId);
-            }
+            });
         } else {
             console.error("❌ state.operators not found");
         }
-
-        // Static Numberblocks
+    
+        // Static Numberblocks (CORRECTED LOOP)
         if (state.staticNumberblocks) {
-            for (const blockId in state.staticNumberblocks) {
-                const block = state.staticNumberblocks[blockId];
+            state.staticNumberblocks.forEach((block, blockId) => {  // <-- CORRECT METHOD
                 createStaticNumberblockVisual(block, blockId);
-            }
+            });
         } else {
             console.error("❌ state.staticNumberblocks not found");
         }
-
+    
         console.log("✅ Room listeners fully set up.");
     });
+    
+    
 
     // Continuous state updates without schema methods
     window.room.onStateChange((state) => {
-        for (const sessionId in state.players) {
-            updatePlayerVisual(state.players[sessionId], sessionId);
-        }
-
+        // Players handled explicitly here because there's no onChange defined for them yet
+        state.players.forEach((playerState, sessionId) => {
+            if (playerState.x !== undefined && playerState.y !== undefined && playerState.z !== undefined) {
+                updatePlayerVisual(playerState, sessionId);
+            } else {
+                console.warn("[DEBUG] playerState has undefined position values:", sessionId, playerState);
+            }
+        });
+    
+        // Operators and staticNumberblocks are handled ALREADY via their onChange listeners
+        // REMOVE THE FOLLOWING LINES ENTIRELY:
+        /*
         for (const operatorId in state.operators) {
             updateOperatorVisual(state.operators[operatorId], operatorId);
         }
-
+    
         for (const blockId in state.staticNumberblocks) {
             updateStaticNumberblockVisual(state.staticNumberblocks[blockId], blockId);
         }
+        */
     });
+    
 }
 
 // Update functions you need to implement if you haven't yet
-function updatePlayerVisual(player, sessionId) {
-    // Update position, rotation, value, etc.
-    const playerVisual = window.visuals.players[sessionId];
-    if (playerVisual) {
-        playerVisual.updatePosition(player.x, player.y, player.z);
-        playerVisual.updateRotation(player.rotationY);
-        playerVisual.updateValue(player.value);
+function updatePlayerVisual(playerState, sessionId) {
+    if (!playerState) {
+        console.warn(`[DEBUG] updatePlayerVisual called with undefined playerState for sessionId: ${sessionId}`);
+        return;
     }
+
+    let playerVisual = window.visuals.players[sessionId];
+
+    if (!playerVisual) {
+        console.warn(`[DEBUG] Player visual doesn't exist yet for sessionId: ${sessionId}, creating now.`);
+        playerVisual = new Player({
+            id: sessionId,
+            name: playerState.name,
+            color: playerState.color,
+            value: playerState.value
+        });
+        scene.add(playerVisual.mesh);
+        window.visuals.players[sessionId] = playerVisual;
+    }
+
+    if (playerState.x === undefined || playerState.y === undefined || playerState.z === undefined) {
+        console.warn(`[DEBUG] playerState has undefined position values:`, playerState);
+        return;
+    }
+
+    playerVisual.updatePosition({
+        x: playerState.x,
+        y: playerState.y,
+        z: playerState.z,
+        rotationY: playerState.rotationY
+    });
 }
 
-function updateOperatorVisual(operator, operatorId) {
-    const operatorVisual = window.visuals.operators[operatorId];
-    if (operatorVisual) {
-        operatorVisual.update({
-            x: operator.x,
-            y: operator.y,
-            z: operator.z,
-            type: operator.type
-        });
-    }
-}
 
 function updateStaticNumberblockVisual(block, blockId) {
     const blockVisual = window.visuals.staticNumberblocks[blockId];
@@ -3036,29 +3057,32 @@ class Entity {
     }
 
     // Update the entity's position and rotation
-    updatePosition({ x, y, z, rotationY }) {
-        if (this.mesh) {
-            if (x !== undefined) {
-                this.x = x;
-                this.mesh.position.x = x;
-            }
-            
-            if (y !== undefined) {
-                this.y = y;
-                this.mesh.position.y = y;
-            }
-            
-            if (z !== undefined) {
-                this.z = z;
-                this.mesh.position.z = z;
-            }
-            
-            if (rotationY !== undefined) {
-                this.rotationY = rotationY;
-                this.mesh.rotation.y = rotationY;
-            }
+    updatePosition(pos) {
+        if (!pos) {
+            console.warn("updatePosition called with undefined position!");
+            return;
+        }
+    
+        const { x, y, z, rotationY } = pos;
+    
+        if (x !== undefined) {
+            this.x = x;
+            this.mesh.position.x = x;
+        }
+        if (y !== undefined) {
+            this.y = y;
+            this.mesh.position.y = y;
+        }
+        if (z !== undefined) {
+            this.z = z;
+            this.mesh.position.z = z;
+        }
+        if (rotationY !== undefined) {
+            this.rotationY = rotationY;
+            this.mesh.rotation.y = rotationY;
         }
     }
+    
 
     // Update the entity's value and rebuild the mesh if needed
     updateValue(newValue) {
@@ -5113,6 +5137,8 @@ async function initNetworking() {
                 // Setup room listeners
                 window.roomInitialized = false;
                 setupRoomListeners(room);
+
+                animate();
                 
                 // Check if room initialization succeeded
                 const checkRoomInit = () => {
@@ -6263,6 +6289,7 @@ function setupPlayerListeners(player, sessionId) {
         // Skip if it's our own player
         if (sessionId === window.room.sessionId) {
             console.log("✅ This is my player, not creating visual");
+            updatePlayerListUI(); // <-- explicitly ensure own player triggers UI update
             return;
         }
 
@@ -6284,14 +6311,16 @@ function setupPlayerListeners(player, sessionId) {
             if (visuals.players[sessionId]) {
                 visuals.players[sessionId].update(player);
             }
+            updatePlayerListUI(); // <-- explicitly update UI on player changes
         });
 
-        // Update UI
+        // Update UI explicitly right after visual setup
         updatePlayerListUI();
     } catch (error) {
         console.error(`Error setting up player (${sessionId}):`, error);
     }
 }
+
 
 function removePlayerVisual(sessionId) {
     try {
@@ -6427,7 +6456,8 @@ function processExistingPlayers() {
 }
 
 // Setup specific schema listeners for Players
-function setupPlayerListeners(room) {
+// Setup room-level listeners specifically for Players
+function setupRoomPlayerListeners(room) {
     if (!room || !room.state || !room.state.players) {
         console.warn('Players state not available.');
         return;
@@ -6436,24 +6466,31 @@ function setupPlayerListeners(room) {
     // Listen for player added
     room.state.players.onAdd((player, sessionId) => {
         console.log(`✅ Player ${sessionId} joined.`, player);
-        setupPlayerListeners(player, sessionId);
+        setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
+        updatePlayerListUI();  // <-- explicitly update UI on new player joins
     });
 
     // Listen for player removal
     room.state.players.onRemove((player, sessionId) => {
         console.log(`✅ Player ${sessionId} left.`, player);
         removePlayerVisual(sessionId);
+        updatePlayerListUI();  // <-- explicitly update UI when player leaves
     });
 
     // Initial iteration (process existing players)
     room.state.players.forEach((player, sessionId) => {
         console.log(`✅ Processing existing player: ${sessionId}`, player);
-        setupPlayerListeners(player, sessionId);
+        setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
     });
     
-    // Update UI after processing all players
+    // Explicitly update UI after initial processing
     updatePlayerListUI();
 }
+
+
+// Make this explicitly available globally
+window.setupRoomPlayerListeners = setupRoomPlayerListeners;
+
 
 // Make functions available globally
 window.setupPlayerListeners = setupPlayerListeners;
