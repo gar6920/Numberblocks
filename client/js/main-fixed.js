@@ -317,11 +317,8 @@ function init() {
         // Initialize the player
         initPlayerNumberblock();
         
-        // Add static numberblocks
+        // Prepare for static numberblocks (but don't create them client-side)
         addStaticNumberblocks();
-        
-        // Add decorative objects
-        addDecorativeObjects();
         
         // Initialize networking for multiplayer
         initNetworkingSystem();
@@ -366,8 +363,8 @@ function initScene() {
         // Set background color
         scene.background = new THREE.Color(0x87CEEB); // Sky blue
         
-        // Add fog for depth perception
-        scene.fog = new THREE.Fog(0x87CEEB, 10, 100);
+        // Add fog for depth perception - COMMENTED OUT client-side terrain setting
+        // scene.fog = new THREE.Fog(0x87CEEB, 10, 100);
         
         // Add proper lighting with reduced intensity
         // Ambient light - provides overall illumination to the scene
@@ -390,7 +387,7 @@ function initScene() {
         operatorManager = new OperatorManager(scene);
         window.operatorManager = operatorManager;
         
-        debug('Scene created successfully with softer lighting');
+        debug('Scene created successfully');
     } catch (error) {
         debug(`Error creating scene: ${error.message}`, true);
     }
@@ -989,9 +986,11 @@ function onKeyUp(event) {
 
 // Add static Numberblocks of various values
 function addStaticNumberblocks() {
-    debug('Adding static Numberblocks');
+    debug('Static Numberblocks function - disabled client-side instantiation');
     
     try {
+        // COMMENTED OUT: Client-side static Numberblock creation
+        /*
         // Define positions and values for static Numberblocks
         const numberblockData = [
             { value: 2, x: 8, z: 3 },
@@ -1030,33 +1029,35 @@ function addStaticNumberblocks() {
                 debug(`Error creating static Numberblock: ${error.message}`, true);
             }
         });
+        */
         
-        debug('Static Numberblocks added');
+        debug('Static Numberblocks: Waiting for server-driven creation');
     } catch (error) {
-        debug(`Error adding static Numberblocks: ${error.message}`, true);
+        debug(`Error in static Numberblocks function: ${error.message}`, true);
     }
 }
 
 // Initialize the player's Numberblock
 function initPlayerNumberblock() {
-    debug('Creating player Numberblock');
+    debug('Player Numberblock initialization - disabled client-side instantiation');
     
     try {
+        // COMMENTED OUT: Client-side player Numberblock creation
+        /*
         playerNumberblock = new Numberblock(playerValue);
         scene.add(playerNumberblock.mesh);
         playerNumberblock.mesh.position.set(0, 0, 0);
-        debug('Player Numberblock created');
+        */
         
-        // Make player Numberblock globally available for networking
-        window.playerNumberblock = playerNumberblock;
+        debug('Player Numberblock: Waiting for server-driven creation');
+        
+        // Still make Numberblock class available globally for server-initiated creation
+        window.Numberblock = Numberblock;
         
         // Update HUD
         updateHUD();
-        
-        // Make Numberblock class available globally
-        window.Numberblock = Numberblock;
     } catch (error) {
-        debug(`Error creating player Numberblock: ${error.message}`, true);
+        debug(`Error in player Numberblock initialization: ${error.message}`, true);
     }
 }
 
@@ -1249,7 +1250,11 @@ function emergencyRender() {
 
 // Add decorative objects to the scene
 function addDecorativeObjects() {
+    debug('Decorative objects function - disabled client-side instantiation');
+    
     try {
+        // COMMENTED OUT: Client-side decorative object creation
+        /*
         debug('Adding decorative objects');
         
         // Add multiple trees scattered around
@@ -1275,15 +1280,19 @@ function addDecorativeObjects() {
             // Create rock
             createRock(x, 0, z);
         }
+        */
         
-        debug('Decorative objects added successfully');
+        debug('Decorative objects: Waiting for server-driven creation');
     } catch (error) {
-        debug(`Error adding decorative objects: ${error.message}`, true);
+        debug(`Error in decorative objects function: ${error.message}`, true);
     }
 }
 
 // Helper function to create a tree
 function createTree(x, y, z) {
+    // Function kept for server-driven object creation
+    // But not called directly from client-side initialization
+    
     // Create tree trunk (cylinder)
     const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
     const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
@@ -1305,6 +1314,8 @@ function createTree(x, y, z) {
 
 // Helper function to create a rock
 function createRock(x, y, z) {
+    // Function kept for server-driven object creation
+    // But not called directly from client-side initialization
     // Randomly scale the rock
     const scale = 0.5 + Math.random() * 1.5;
     
