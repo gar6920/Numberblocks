@@ -35,22 +35,27 @@ window.initControls = function(camera, domElement) {
     console.log("Initializing PointerLockControls properly...");
 
     const controls = new THREE.PointerLockControls(camera, domElement);
-
-    domElement.addEventListener('click', () => {
-        controls.lock();
-    });
+    
+    // We don't need a click listener here anymore - it's handled in main-fixed.js
 
     controls.addEventListener('lock', () => {
-        if (window.isFirstPerson) {
-            document.getElementById('controls-info').style.display = 'none';
+        const instructions = document.getElementById('lock-instructions');
+        if (instructions) {
+            instructions.style.display = 'none';
         }
-        // Always hide cursor when locked, regardless of view mode
-        document.body.style.cursor = 'none';
     });
-
+    
     controls.addEventListener('unlock', () => {
+        const instructions = document.getElementById('lock-instructions');
+        if (instructions) {
+            instructions.style.display = 'block';
+        }
+        
         if (window.isFirstPerson) {
-            document.getElementById('controls-info').style.display = 'block';
+            const controlsInfo = document.getElementById('controls-info');
+            if (controlsInfo) {
+                controlsInfo.style.display = 'block';
+            }
         }
         // Always show cursor when unlocked, regardless of view mode
         document.body.style.cursor = 'auto';

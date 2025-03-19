@@ -189,43 +189,7 @@ class NumberblocksRoom extends Room {
             }
         });
         
-        
-        
-        
-        // Keep the existing move message handler for backward compatibility
-        this.onMessage("move", (client, message) => {
-            const player = this.state.players.get(client.sessionId);
-            if (player) {
-                // Validate movement with speed limit
-                const speedLimit = 5.0 * (1/30); // moveSpeed * delta
-                const dx = message.x - player.x;
-                const dz = message.z - player.z;
-                
-                // Simple distance check for speed hacking prevention
-                const distance = Math.sqrt(dx * dx + dz * dz);
-                if (distance <= speedLimit * 2) { // Allow some flexibility with speed
-                    player.x = message.x;
-                    player.y = message.y;
-                    player.z = message.z;
-                    player.rotationY = message.rotationY;
-                    player.pitch = message.pitch;
-                    
-                    // Debug log occasional position updates (every 5 seconds)
-                    if (Math.random() < 0.01) {
-                        console.log(`Player ${client.sessionId} at position: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)})`);
-                    }
-                } else {
-                    console.log(`Rejected movement from ${client.sessionId}: too fast (${distance.toFixed(2)} > ${speedLimit.toFixed(2)})`);
-                    // Send correction message
-                    client.send("correction", {
-                        x: player.x,
-                        y: player.y,
-                        z: player.z
-                    });
-                }
-            }
-        });
-        
+                                
         this.onMessage("collectOperator", (client, message) => {
             const player = this.state.players.get(client.sessionId);
             const operator = this.state.operators.get(message.id);
@@ -308,22 +272,28 @@ class NumberblocksRoom extends Room {
         if (input.keys.w) {
             dx += Math.sin(player.rotationY) * speed;
             dz += Math.cos(player.rotationY) * speed;
+            console.log("W pressed - moving forward");
         }
         if (input.keys.s) {
             dx -= Math.sin(player.rotationY) * speed;
             dz -= Math.cos(player.rotationY) * speed;
+            console.log("S pressed - moving backward");
         }
         if (input.keys.a) {
-            dx += Math.sin(player.rotationY - Math.PI/2) * speed;
-            dz += Math.cos(player.rotationY - Math.PI/2) * speed;
+            dx += Math.sin(player.rotationY - Math.PI / 2) * speed;
+            dz += Math.cos(player.rotationY - Math.PI / 2) * speed;
+            console.log("A pressed - moving left");
         }
         if (input.keys.d) {
-            dx += Math.sin(player.rotationY + Math.PI/2) * speed;
-            dz += Math.cos(player.rotationY + Math.PI/2) * speed;
+            dx += Math.sin(player.rotationY + Math.PI / 2) * speed;
+            dz += Math.cos(player.rotationY + Math.PI / 2) * speed;
+            console.log("D pressed - moving right");
         }
     
         player.x += dx;
         player.z += dz;
+    
+        console.log(`[SERVER] New player position: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)})`);
     
         // Mouse rotation handled universally, independent of view mode
         const sensitivity = 0.002;
@@ -343,6 +313,7 @@ class NumberblocksRoom extends Room {
     
         console.log(`[SERVER MOVE] ${player.name}: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)}) rotationY=${player.rotationY.toFixed(2)} pitch=${player.pitch.toFixed(2)}`);
     }
+    
     
     
     

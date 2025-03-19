@@ -29,8 +29,14 @@ function setupPlayerListeners(player, sessionId) {
             if (visuals.players[sessionId]) {
                 visuals.players[sessionId].update(player);
             }
-            updatePlayerListUI(); // <-- explicitly update UI on player changes
+            updatePlayerListUI();
+        
+            // ✅ ADD this line explicitly to confirm actual state updates clearly
+            if (sessionId === window.room.sessionId) {
+                console.log(`✅ CLIENT: Actual player change received (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)})`);
+            }
         });
+        
 
         // Update UI explicitly right after visual setup
         updatePlayerListUI();

@@ -301,6 +301,16 @@ async function initNetworking() {
             room.onStateChange.once((state) => {
                 setupRoomListeners(room);
                 setupRoomPlayerListeners(room);
+                
+                // Explicitly create local player object
+                window.myPlayer = new Player({ 
+                    id: window.room.sessionId, 
+                    isLocalPlayer: true,
+                    value: 1, 
+                    color: "#FFFF00"
+                });
+                console.log("Local player created and linked to existing Numberblock mesh:", window.myPlayer);
+                
                 animate();
                 window.dispatchEvent(new CustomEvent('avatarReady'));
             });
@@ -345,37 +355,7 @@ function setupMessageHandlers() {
 
 // Send player position updates to the server
 // Send player position updates to the server correctly
-function sendPlayerUpdate(position, rotationY, pitch, value) {
-    if (!room) return;
 
-    try {
-        // Validate inputs before sending
-        if (!position || position.x === undefined) {
-            console.warn("Invalid position for player update");
-            return;
-        }
-
-        // Send exactly what the server expects ('move' event)
-        room.send("move", {
-            x: position.x,
-            y: position.y,
-            z: position.z,
-            rotationY: rotationY || 0,
-            pitch: pitch || 0,
-            value: value || 1
-        });
-    } catch (error) {
-        console.error("Error sending player update:", error);
-    }
-}
-
-
-// Send operator collection message
-function sendOperatorCollect(operatorId) {
-    if (!room) return;
-    
-    room.send("collect-operator", { id: operatorId });
-}
 
 // Send numberblock collision message
 function sendNumberblockCollision(targetId) {
@@ -553,8 +533,6 @@ window.updateRemotePlayers = function() {
 // Make functions available globally
 window.initNetworking = initNetworking;
 window.setupMessageHandlers = setupMessageHandlers;
-window.sendPlayerUpdate = sendPlayerUpdate;
-window.sendOperatorCollect = sendOperatorCollect;
 window.sendNumberblockCollision = sendNumberblockCollision;
 window.getRandomColor = getRandomColor;
 window.getColorForValue = getColorForValue;
