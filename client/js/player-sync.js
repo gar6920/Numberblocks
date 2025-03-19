@@ -4,46 +4,44 @@
 // Helper functions for visual management
 function setupPlayerListeners(player, sessionId) {
     try {
-        // Skip if it's our own player
+        // Explicitly skip listener setup for own local player
         if (sessionId === window.room.sessionId) {
-            console.log("✅ This is my player, not creating visual");
-            updatePlayerListUI(); // <-- explicitly ensure own player triggers UI update
+            console.log("✅ This is my player, explicitly not setting listeners");
+            updatePlayerListUI(); // Update UI clearly
             return;
         }
 
-        // Create visual for remote player
+        // Ensure 'player.onChange' explicitly exists for remote players
+        if (typeof player.onChange === "function") {
+            player.onChange(() => {
+                if (visuals.players[sessionId]) {
+                    visuals.players[sessionId].update(player);
+                }
+                updatePlayerListUI();
+            });
+        } else {
+            // Clearly log critical error if remote player lacks onChange
+            console.error("🚨 CRITICAL: Remote player without onChange detected:", sessionId, player);
+        }
+
+        // Create visual explicitly for remote player
         const visual = new PlayersVisual(player);
         if (!visuals.players) visuals.players = {};
         visuals.players[sessionId] = visual;
-        
-        // Store in tracking collection
-        window.otherPlayers[sessionId] = player;
 
-        // Add to scene
+        // Add to tracking and scene
+        window.otherPlayers[sessionId] = player;
         if (window.scene) {
             window.scene.add(visual.group || visual.mesh);
         }
 
-        // Setup change listener for updates
-        player.onChange(() => {
-            if (visuals.players[sessionId]) {
-                visuals.players[sessionId].update(player);
-            }
-            updatePlayerListUI();
-        
-            // ✅ ADD this line explicitly to confirm actual state updates clearly
-            if (sessionId === window.room.sessionId) {
-                console.log(`✅ CLIENT: Actual player change received (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)})`);
-            }
-        });
-        
-
-        // Update UI explicitly right after visual setup
+        // Immediately update UI clearly
         updatePlayerListUI();
     } catch (error) {
-        console.error(`Error setting up player (${sessionId}):`, error);
+        console.error(`Error explicitly setting up player (${sessionId}):`, error);
     }
 }
+
 
 
 function removePlayerVisual(sessionId) {

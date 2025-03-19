@@ -243,8 +243,7 @@ function init() {
             window.room = roomInstance;
         
             setInterval(sendInputUpdate, 1000 / 30);
-            setInterval(sendRegularPositionUpdate, 100);
-            
+                        
             animate(); // Explicitly start animation here if needed
         }).catch((error) => {
             debug(`Networking error: ${error.message}`, true);
