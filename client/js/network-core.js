@@ -299,35 +299,13 @@ async function initNetworking() {
             
             // Wait for the initial state before setting up listeners
             room.onStateChange.once((state) => {
-                console.log("Initial state received, setting up room listeners");
-                
-                // Setup room listeners
-                window.roomInitialized = false;
                 setupRoomListeners(room);
-
+                setupRoomPlayerListeners(room);
                 animate();
-                
-                // Check if room initialization succeeded
-                const checkRoomInit = () => {
-                    if (window.roomInitialized) {
-                        // Process existing players
-                        processExistingPlayers();
-                        
-                        // Initial player list update
-                        updatePlayerListUI();
-                        
-                        // Notify that avatar is ready
-                        window.dispatchEvent(new CustomEvent('avatarReady'));
-                        console.log("Avatar is ready");
-                    } else {
-                        // Keep checking if not initialized yet
-                        setTimeout(checkRoomInit, 100);
-                    }
-                };
-                
-                // Start initialization check
-                checkRoomInit();
+                window.dispatchEvent(new CustomEvent('avatarReady'));
             });
+            
+            
             
             return room;
         } catch (roomError) {
@@ -366,37 +344,31 @@ function setupMessageHandlers() {
 }
 
 // Send player position updates to the server
+// Send player position updates to the server correctly
 function sendPlayerUpdate(position, rotationY, pitch, value) {
     if (!room) return;
-    
+
     try {
         // Validate inputs before sending
         if (!position || position.x === undefined) {
             console.warn("Invalid position for player update");
             return;
         }
-        
-        // Send update to the server
-        room.send("input", {
-            version: 2,
-            keys: {}, // Add appropriate key state here if needed
-            mouseDelta: { x: 0, y: 0 }, // Add mouse delta if needed
-            viewMode: window.isFirstPerson ? "first-person" : "third-person",
-            position: {
-                x: position.x,
-                y: position.y,
-                z: position.z
-            },
-            rotation: {
-                y: rotationY || 0,
-                pitch: pitch || 0
-            },
+
+        // Send exactly what the server expects ('move' event)
+        room.send("move", {
+            x: position.x,
+            y: position.y,
+            z: position.z,
+            rotationY: rotationY || 0,
+            pitch: pitch || 0,
             value: value || 1
         });
     } catch (error) {
         console.error("Error sending player update:", error);
     }
 }
+
 
 // Send operator collection message
 function sendOperatorCollect(operatorId) {

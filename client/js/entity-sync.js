@@ -79,65 +79,36 @@ function setupRoomListeners() {
     }
 
     window.room.onStateChange.once((state) => {
-        console.log("✅ State synchronized, setting up listeners.");
-    
-        // Players (CORRECTED LOOP)
-        if (state.players) {
-            state.players.forEach((player, sessionId) => {  // <-- CORRECT METHOD
-                setupPlayerListeners(player, sessionId);
-            });
-        } else {
-            console.error("❌ state.players not found");
-        }
-    
-        // Operators (CORRECTED LOOP)
+        console.log("✅ State synchronized, setting up entity listeners.");
+
+        // ✅ REMOVE PLAYER HANDLING FROM HERE! (Now handled in player-sync.js)
+        // ONLY HANDLE OPERATORS AND STATIC NUMBERBLOCKS IN entity-sync.js
+
         if (state.operators) {
-            state.operators.forEach((operator, operatorId) => {  // <-- CORRECT METHOD
+            state.operators.forEach((operator, operatorId) => {
                 createOperatorVisual(operator, operatorId);
             });
         } else {
             console.error("❌ state.operators not found");
         }
-    
-        // Static Numberblocks (CORRECTED LOOP)
+
         if (state.staticNumberblocks) {
-            state.staticNumberblocks.forEach((block, blockId) => {  // <-- CORRECT METHOD
+            state.staticNumberblocks.forEach((block, blockId) => {
                 createStaticNumberblockVisual(block, blockId);
             });
         } else {
             console.error("❌ state.staticNumberblocks not found");
         }
-    
-        console.log("✅ Room listeners fully set up.");
+
+        console.log("✅ Entity listeners fully set up (operators & static numberblocks only).");
     });
-    
-    
 
     // Continuous state updates without schema methods
     window.room.onStateChange((state) => {
-        // Players handled explicitly here because there's no onChange defined for them yet
-        state.players.forEach((playerState, sessionId) => {
-            if (playerState.x !== undefined && playerState.y !== undefined && playerState.z !== undefined) {
-                updatePlayerVisual(playerState, sessionId);
-            } else {
-                console.warn("[DEBUG] playerState has undefined position values:", sessionId, playerState);
-            }
-        });
-    
-        // Operators and staticNumberblocks are handled ALREADY via their onChange listeners
-        // REMOVE THE FOLLOWING LINES ENTIRELY:
-        /*
-        for (const operatorId in state.operators) {
-            updateOperatorVisual(state.operators[operatorId], operatorId);
-        }
-    
-        for (const blockId in state.staticNumberblocks) {
-            updateStaticNumberblockVisual(state.staticNumberblocks[blockId], blockId);
-        }
-        */
+        // Players are handled explicitly in player-sync.js. REMOVE ANY PLAYER HANDLING HERE.
     });
-    
 }
+
 
 // Update functions you need to implement if you haven't yet
 function updatePlayerVisual(playerState, sessionId) {

@@ -157,6 +157,7 @@ class NumberblocksRoom extends Room {
         // Set maximum number of clients
         this.maxClients = 4;
         
+        
         // Set frequency of patches to send
         this.setPatchRate(1000 / 30); // 30 fps
         
@@ -178,38 +179,18 @@ class NumberblocksRoom extends Room {
         console.log("Room initialized with GameState:", this.state);
         
         // Listen for input messages from clients
-        this.onMessage("input", (client, message) => {
-            // Check for version 2 (new input-based system)
-            if (!message.version || message.version < 2) {
-                return; // Ignore old messages
-            }
-            
+        this.onMessage("input", (client, input) => {
             const player = this.state.players.get(client.sessionId);
-            if (player && player.input) {
-                // Update the InputState schema with the incoming data
-                player.input.keys.w = message.keys.w || false;
-                player.input.keys.a = message.keys.a || false;
-                player.input.keys.s = message.keys.s || false;
-                player.input.keys.d = message.keys.d || false;
-                player.input.keys.space = message.keys.space || false;
-                
-                if (message.mouseDelta) {
-                    player.input.mouseDelta.x = message.mouseDelta.x || 0;
-                    player.input.mouseDelta.y = message.mouseDelta.y || 0;
-                }
-                
-                // Update view mode if provided
-                if (message.viewMode) {
-                    player.input.viewMode = message.viewMode;
-                }
-                
-                console.log(`Received input from player ${client.sessionId}:`, 
-                    player.input.keys.w ? "W" : "", 
-                    player.input.keys.a ? "A" : "", 
-                    player.input.keys.s ? "S" : "", 
-                    player.input.keys.d ? "D" : "");
+            if (player) {
+                player.input.keys = { ...input.keys };
+                player.input.mouseDelta = { ...input.mouseDelta };
+        
+                console.log(`[INPUT] ${client.sessionId} keys:`, player.input.keys, "mouse:", player.input.mouseDelta);
             }
         });
+        
+        
+        
         
         // Keep the existing move message handler for backward compatibility
         this.onMessage("move", (client, message) => {
@@ -318,26 +299,11 @@ class NumberblocksRoom extends Room {
     
     // Update player position based on input state
     updatePlayerFromInput(player, deltaTime) {
-        // Skip if no input
         if (!player.input || !player.input.keys) return;
-        
+    
         const input = player.input;
         const speed = 5.0 * deltaTime;
-        
-        // Handle rotation from mouse movement
-        if (input.mouseDelta) {
-            const sensitivity = 0.002;
-            player.rotationY += input.mouseDelta.x * sensitivity;
-            
-            // Only update pitch in first-person mode
-            if (input.viewMode === "first-person") {
-                player.pitch += input.mouseDelta.y * sensitivity;
-                // Clamp pitch to prevent flipping
-                player.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, player.pitch));
-            }
-        }
-        
-        // Handle movement
+    
         let dx = 0, dz = 0;
         if (input.keys.w) {
             dx += Math.sin(player.rotationY) * speed;
@@ -355,34 +321,30 @@ class NumberblocksRoom extends Room {
             dx += Math.sin(player.rotationY + Math.PI/2) * speed;
             dz += Math.cos(player.rotationY + Math.PI/2) * speed;
         }
-        
-        // Apply movement
+    
         player.x += dx;
         player.z += dz;
-        
-        // Handle Q/E rotation
-        if (input.keys.q) {
-            player.rotationY += 2.0 * deltaTime; // Turn left
-        }
-        if (input.keys.e) {
-            player.rotationY -= 2.0 * deltaTime; // Turn right
-        }
-        
-        // Handle jumping
-        if (input.keys.space && player.y === 1) {
-            player.velocityY = 0.2; // Jump velocity
-        }
-        
-        // Apply gravity
-        player.velocityY += -0.01; // Simple gravity
+    
+        // Mouse rotation handled universally, independent of view mode
+        const sensitivity = 0.002;
+        player.rotationY += input.mouseDelta.x * sensitivity;
+        player.pitch += input.mouseDelta.y * sensitivity;
+        player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+    
+        player.input.mouseDelta.x = 0;
+        player.input.mouseDelta.y = 0;
+    
+        player.velocityY -= 0.01; // gravity
         player.y += player.velocityY;
-        
-        // Floor collision
         if (player.y < 1) {
             player.y = 1;
             player.velocityY = 0;
         }
+    
+        console.log(`[SERVER MOVE] ${player.name}: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)}) rotationY=${player.rotationY.toFixed(2)} pitch=${player.pitch.toFixed(2)}`);
     }
+    
+    
     
     // Get a random spawn interval between 5-10 seconds
     getRandomSpawnInterval() {

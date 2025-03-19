@@ -122,6 +122,11 @@ function onKeyDown(event) {
                 window.canJump = false;
             }
             break;
+            // Add explicitly in your controls.js onKeyDown:
+
+        case 'KeyV':
+            toggleCameraView(); 
+            break;
     }
 }
 

@@ -1595,6 +1595,7 @@ class NumberblocksRoom extends Room {
         // Set maximum number of clients
         this.maxClients = 4;
         
+        
         // Set frequency of patches to send
         this.setPatchRate(1000 / 30); // 30 fps
         
@@ -1616,38 +1617,18 @@ class NumberblocksRoom extends Room {
         console.log("Room initialized with GameState:", this.state);
         
         // Listen for input messages from clients
-        this.onMessage("input", (client, message) => {
-            // Check for version 2 (new input-based system)
-            if (!message.version || message.version < 2) {
-                return; // Ignore old messages
-            }
-            
+        this.onMessage("input", (client, input) => {
             const player = this.state.players.get(client.sessionId);
-            if (player && player.input) {
-                // Update the InputState schema with the incoming data
-                player.input.keys.w = message.keys.w || false;
-                player.input.keys.a = message.keys.a || false;
-                player.input.keys.s = message.keys.s || false;
-                player.input.keys.d = message.keys.d || false;
-                player.input.keys.space = message.keys.space || false;
-                
-                if (message.mouseDelta) {
-                    player.input.mouseDelta.x = message.mouseDelta.x || 0;
-                    player.input.mouseDelta.y = message.mouseDelta.y || 0;
-                }
-                
-                // Update view mode if provided
-                if (message.viewMode) {
-                    player.input.viewMode = message.viewMode;
-                }
-                
-                console.log(`Received input from player ${client.sessionId}:`, 
-                    player.input.keys.w ? "W" : "", 
-                    player.input.keys.a ? "A" : "", 
-                    player.input.keys.s ? "S" : "", 
-                    player.input.keys.d ? "D" : "");
+            if (player) {
+                player.input.keys = { ...input.keys };
+                player.input.mouseDelta = { ...input.mouseDelta };
+        
+                console.log(`[INPUT] ${client.sessionId} keys:`, player.input.keys, "mouse:", player.input.mouseDelta);
             }
         });
+        
+        
+        
         
         // Keep the existing move message handler for backward compatibility
         this.onMessage("move", (client, message) => {
@@ -1756,26 +1737,11 @@ class NumberblocksRoom extends Room {
     
     // Update player position based on input state
     updatePlayerFromInput(player, deltaTime) {
-        // Skip if no input
         if (!player.input || !player.input.keys) return;
-        
+    
         const input = player.input;
         const speed = 5.0 * deltaTime;
-        
-        // Handle rotation from mouse movement
-        if (input.mouseDelta) {
-            const sensitivity = 0.002;
-            player.rotationY += input.mouseDelta.x * sensitivity;
-            
-            // Only update pitch in first-person mode
-            if (input.viewMode === "first-person") {
-                player.pitch += input.mouseDelta.y * sensitivity;
-                // Clamp pitch to prevent flipping
-                player.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, player.pitch));
-            }
-        }
-        
-        // Handle movement
+    
         let dx = 0, dz = 0;
         if (input.keys.w) {
             dx += Math.sin(player.rotationY) * speed;
@@ -1793,34 +1759,30 @@ class NumberblocksRoom extends Room {
             dx += Math.sin(player.rotationY + Math.PI/2) * speed;
             dz += Math.cos(player.rotationY + Math.PI/2) * speed;
         }
-        
-        // Apply movement
+    
         player.x += dx;
         player.z += dz;
-        
-        // Handle Q/E rotation
-        if (input.keys.q) {
-            player.rotationY += 2.0 * deltaTime; // Turn left
-        }
-        if (input.keys.e) {
-            player.rotationY -= 2.0 * deltaTime; // Turn right
-        }
-        
-        // Handle jumping
-        if (input.keys.space && player.y === 1) {
-            player.velocityY = 0.2; // Jump velocity
-        }
-        
-        // Apply gravity
-        player.velocityY += -0.01; // Simple gravity
+    
+        // Mouse rotation handled universally, independent of view mode
+        const sensitivity = 0.002;
+        player.rotationY += input.mouseDelta.x * sensitivity;
+        player.pitch += input.mouseDelta.y * sensitivity;
+        player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
+    
+        player.input.mouseDelta.x = 0;
+        player.input.mouseDelta.y = 0;
+    
+        player.velocityY -= 0.01; // gravity
         player.y += player.velocityY;
-        
-        // Floor collision
         if (player.y < 1) {
             player.y = 1;
             player.velocityY = 0;
         }
+    
+        console.log(`[SERVER MOVE] ${player.name}: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)}) rotationY=${player.rotationY.toFixed(2)} pitch=${player.pitch.toFixed(2)}`);
     }
+    
+    
     
     // Get a random spawn interval between 5-10 seconds
     getRandomSpawnInterval() {
@@ -2736,65 +2698,36 @@ function setupRoomListeners() {
     }
 
     window.room.onStateChange.once((state) => {
-        console.log("✅ State synchronized, setting up listeners.");
-    
-        // Players (CORRECTED LOOP)
-        if (state.players) {
-            state.players.forEach((player, sessionId) => {  // <-- CORRECT METHOD
-                setupPlayerListeners(player, sessionId);
-            });
-        } else {
-            console.error("❌ state.players not found");
-        }
-    
-        // Operators (CORRECTED LOOP)
+        console.log("✅ State synchronized, setting up entity listeners.");
+
+        // ✅ REMOVE PLAYER HANDLING FROM HERE! (Now handled in player-sync.js)
+        // ONLY HANDLE OPERATORS AND STATIC NUMBERBLOCKS IN entity-sync.js
+
         if (state.operators) {
-            state.operators.forEach((operator, operatorId) => {  // <-- CORRECT METHOD
+            state.operators.forEach((operator, operatorId) => {
                 createOperatorVisual(operator, operatorId);
             });
         } else {
             console.error("❌ state.operators not found");
         }
-    
-        // Static Numberblocks (CORRECTED LOOP)
+
         if (state.staticNumberblocks) {
-            state.staticNumberblocks.forEach((block, blockId) => {  // <-- CORRECT METHOD
+            state.staticNumberblocks.forEach((block, blockId) => {
                 createStaticNumberblockVisual(block, blockId);
             });
         } else {
             console.error("❌ state.staticNumberblocks not found");
         }
-    
-        console.log("✅ Room listeners fully set up.");
+
+        console.log("✅ Entity listeners fully set up (operators & static numberblocks only).");
     });
-    
-    
 
     // Continuous state updates without schema methods
     window.room.onStateChange((state) => {
-        // Players handled explicitly here because there's no onChange defined for them yet
-        state.players.forEach((playerState, sessionId) => {
-            if (playerState.x !== undefined && playerState.y !== undefined && playerState.z !== undefined) {
-                updatePlayerVisual(playerState, sessionId);
-            } else {
-                console.warn("[DEBUG] playerState has undefined position values:", sessionId, playerState);
-            }
-        });
-    
-        // Operators and staticNumberblocks are handled ALREADY via their onChange listeners
-        // REMOVE THE FOLLOWING LINES ENTIRELY:
-        /*
-        for (const operatorId in state.operators) {
-            updateOperatorVisual(state.operators[operatorId], operatorId);
-        }
-    
-        for (const blockId in state.staticNumberblocks) {
-            updateStaticNumberblockVisual(state.staticNumberblocks[blockId], blockId);
-        }
-        */
+        // Players are handled explicitly in player-sync.js. REMOVE ANY PLAYER HANDLING HERE.
     });
-    
 }
+
 
 // Update functions you need to implement if you haven't yet
 function updatePlayerVisual(playerState, sessionId) {
@@ -3483,7 +3416,7 @@ FILE: client\js\main-fixed.js
 // Numberblocks game - Main game logic
 
 // Debug support
-const DEBUG = false;
+const DEBUG = true;
 
 function debug(message, isError = false) {
     if (!DEBUG) return;
@@ -3632,132 +3565,30 @@ function addViewToggleButton() {
 // Toggle between first and third person views
 function toggleCameraView() {
     window.isFirstPerson = !window.isFirstPerson;
-    
-    const viewToggleBtn = document.getElementById('view-toggle');
-    if (viewToggleBtn) {
-        viewToggleBtn.innerText = window.isFirstPerson ? 'Switch to Third Person' : 'Switch to First Person';
-    }
-    
-    // Store the current position before switching views to ensure consistency
-    const currentPosition = playerNumberblock ? playerNumberblock.mesh.position.clone() : null;
-    const currentRotation = playerNumberblock ? playerNumberblock.mesh.rotation.y : 0;
-    
+
     if (window.isFirstPerson) {
-        debug('Switched to first-person view');
         switchToFirstPersonView();
     } else {
-        debug('Switched to third-person view');
         switchToThirdPersonView();
     }
-    
-    // After switching views, ensure position consistency
-    if (currentPosition && playerNumberblock) {
-        playerNumberblock.mesh.position.copy(currentPosition);
-        playerNumberblock.mesh.rotation.y = currentRotation;
-        
-        // If in first-person mode, also update controls position
-        if (window.isFirstPerson && controls) {
-            controls.getObject().position.set(
-                currentPosition.x,
-                currentPosition.y + 1.0, // Adjust for eye height
-                currentPosition.z
-            );
-        }
-        
-        // Force a position update to the server to ensure sync
-        if (typeof window.room !== 'undefined' && window.room) {
-            window.room.send("move", {
-                x: playerNumberblock.mesh.position.x,
-                y: playerNumberblock.mesh.position.y,
-                z: playerNumberblock.mesh.position.z,
-                rotation: playerNumberblock.mesh.rotation.y
-            });
-        }
-    }
 }
 
-// Switch to first-person view
+// First-person setup
 function switchToFirstPersonView() {
-    try {
-        debug('Switched to first-person view');
-        
-        // Set global flag
-        window.isFirstPerson = true;
-        
-        // Check if camera is already a child of controls
-        // First make sure we're not trying to add camera as a child of itself
-        if (camera.parent !== controls.getObject() && camera !== controls.getObject()) {
-            // Remove camera from any previous parent
-            if (camera.parent) {
-                camera.parent.remove(camera);
-            }
-            
-            // Add camera to controls (only if not already there)
-            controls.getObject().add(camera);
-        }
-        
-        // Reset camera position relative to controls
-        camera.position.set(0, 0, 0);
-        
-        // Update button text
-        if (viewToggleBtn) {
-            viewToggleBtn.textContent = 'Third Person View';
-        }
-    } catch (error) {
-        debug(`Error switching to first-person view: ${error.message}`, true);
-    }
+    camera.position.set(0, window.playerHeight, 0);  // Adjust height appropriately
+    camera.lookAt(new THREE.Vector3(0, window.playerHeight, -1));
+    controls.getObject().position.copy(playerNumberblock.mesh.position);
+    controls.getObject().rotation.set(0, playerNumberblock.mesh.rotation.y, 0);
 }
 
-// Switch to third-person view
+// Third-person setup
 function switchToThirdPersonView() {
-    try {
-        debug('Switched to third-person view');
-        
-        // Set global flag
-        window.isFirstPerson = false;
-        
-        // Remove camera from controls
-        if (camera.parent) {
-            const cameraWorldPosition = new THREE.Vector3();
-            camera.getWorldPosition(cameraWorldPosition);
-            camera.parent.remove(camera);
-            
-            // Add camera directly to scene
-            scene.add(camera);
-            
-            // Maintain world position
-            camera.position.copy(cameraWorldPosition);
-        }
-        
-        // Set up third-person mouse handler if it doesn't exist
-        if (!window.thirdPersonMouseHandler) {
-            window.thirdPersonMouseHandler = function(event) {
-                // Only process if we're in third-person mode and pointer is locked
-                if (!window.isFirstPerson && controls.isLocked) {
-                    // Skip processing extremely small movements to prevent drift
-                    if (Math.abs(event.movementX) > 0.5) {
-                        window.thirdPersonCameraAngle -= event.movementX * 0.002;
-                    }
-                }
-            };
-        }
-        
-        // Add mouse movement handler
-        document.addEventListener('mousemove', window.thirdPersonMouseHandler);
-        
-        // Initialize camera angle if it's not set yet
-        if (typeof window.thirdPersonCameraAngle === 'undefined') {
-            window.thirdPersonCameraAngle = playerNumberblock.mesh.rotation.y + Math.PI;
-        }
-        
-        // Update button text
-        if (viewToggleBtn) {
-            viewToggleBtn.textContent = 'First Person View';
-        }
-    } catch (error) {
-        debug(`Error switching to third-person view: ${error.message}`, true);
-    }
+    const offset = new THREE.Vector3(0, window.playerHeight + 2, window.thirdPersonCameraDistance);
+    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerNumberblock.mesh.rotation.y);
+    camera.position.copy(playerNumberblock.mesh.position).add(offset);
+    camera.lookAt(playerNumberblock.mesh.position);
 }
+
 
 // Main initialization function
 function init() {
@@ -3783,27 +3614,27 @@ function init() {
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.outputEncoding = THREE.sRGBEncoding; // Better color representation
-        renderer.gammaFactor = 2.2; // Standard gamma correction
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.gammaFactor = 2.2;
         
         // Add renderer to document
         document.body.appendChild(renderer.domElement);
-        window.renderer = renderer; // Make globally available
+        window.renderer = renderer;
         
         // Initialize the floor
         initFloor();
-        
+
+        // Explicitly set camera mode before initializing controls
+        window.isFirstPerson = true;  
+
         // Setup controls for player movement
         setupPointerLockControls();
         
         // Initialize the player
         initPlayerNumberblock();
         
-        // Add static numberblocks
+        // Prepare for static numberblocks
         addStaticNumberblocks();
-        
-        // Add decorative objects
-        addDecorativeObjects();
         
         // Initialize networking for multiplayer
         initNetworkingSystem();
@@ -3822,7 +3653,6 @@ function init() {
         window.controls = controls;
         window.playerNumberblock = playerNumberblock;
         window.playerValue = playerValue;
-        window.isFirstPerson = true;
         
         // Start the animation loop
         requestAnimationFrame(animate);
@@ -3833,6 +3663,7 @@ function init() {
         console.error('Full initialization error:', error);
     }
 }
+
 
 // Initialize the scene
 function initScene() {
@@ -3848,8 +3679,8 @@ function initScene() {
         // Set background color
         scene.background = new THREE.Color(0x87CEEB); // Sky blue
         
-        // Add fog for depth perception
-        scene.fog = new THREE.Fog(0x87CEEB, 10, 100);
+        // Add fog for depth perception - COMMENTED OUT client-side terrain setting
+        // scene.fog = new THREE.Fog(0x87CEEB, 10, 100);
         
         // Add proper lighting with reduced intensity
         // Ambient light - provides overall illumination to the scene
@@ -3872,7 +3703,7 @@ function initScene() {
         operatorManager = new OperatorManager(scene);
         window.operatorManager = operatorManager;
         
-        debug('Scene created successfully with softer lighting');
+        debug('Scene created successfully');
     } catch (error) {
         debug(`Error creating scene: ${error.message}`, true);
     }
@@ -4044,121 +3875,108 @@ window.visuals = window.visuals || { players: {}, operators: {}, staticNumberblo
 
 // animate loop (exactly like this)
 function animate() {
-    requestAnimationFrame(animate);  // continuous loop every frame
+    requestAnimationFrame(animate);
 
-    // Safely check if room and state exist
     if (window.room && window.room.state && window.room.state.players) {
-        const playerStates = window.room.state.players;
+        const player = window.room.state.players.get(window.room.sessionId);
 
-        // Safely loop through player states
-        for (const sessionId in playerStates) {
-            const playerState = playerStates[sessionId];
-            if (!playerState) continue; // safety check
+        // SAFETY CHECK: Ensure both player and mesh exist
+        if (player && playerNumberblock && playerNumberblock.mesh) {
+            playerNumberblock.mesh.position.lerp(new THREE.Vector3(player.x, player.y, player.z), 0.2);
+            playerNumberblock.mesh.rotation.y = player.rotationY;
 
-            // retrieve or create the visual representation
-            let playerVisual = window.visuals.players[sessionId];
-            if (!playerVisual) {
-                playerVisual = new Player({
-                    id: sessionId,
-                    name: playerState.name,
-                    color: playerState.color,
-                    value: playerState.value
-                });
-                scene.add(playerVisual.mesh);
-                window.visuals.players[sessionId] = playerVisual;
-            }
-
-            // safely update visual state (position and rotation)
-            playerVisual.mesh.position.set(playerState.x, playerState.y, playerState.z);
-            playerVisual.mesh.rotation.y = playerState.rotationY;
-
-            // safely update visual value
-            if (playerVisual.updateValue && playerState.value !== undefined) {
-                playerVisual.updateValue(playerState.value);
+            if (window.isFirstPerson && controls) {
+                controls.getObject().position.set(player.x, player.y + window.playerHeight, player.z);
+                controls.getObject().rotation.set(0, player.rotationY, 0);
+                camera.rotation.x = player.pitch;
+                playerNumberblock.mesh.visible = false;
+            } else {
+                const offset = new THREE.Vector3(0, window.playerHeight + 2, window.thirdPersonCameraDistance);
+                offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotationY);
+                const desiredPos = new THREE.Vector3(player.x, player.y, player.z).add(offset);
+                camera.position.lerp(desiredPos, 0.1);
+                camera.lookAt(playerNumberblock.mesh.position);
+                playerNumberblock.mesh.visible = true;
             }
         }
     }
 
-    // renderer call must be here (inside animate function)
     renderer.render(scene, camera);
 }
+
+
 
 
 // Send input state to the server
 function sendInputUpdate() {
     try {
-        // Make sure room is available and connected before sending
-        if (!window.room || !window.room.connection || window.room.connection.readyState !== WebSocket.OPEN || !window.inputState) {
-            if (window.debugOverlay && window.debugOverlay.visible) {
-                updateDebugInfo("WebSocket not connected, skipping input update");
-            }
-            return; // Skip update if connection is not available
-        }
-        
-        // Send input state to server
+        if (!window.room || !window.room.connection || window.room.connection.readyState !== WebSocket.OPEN || !window.inputState) return;
+
         window.room.send("input", {
-            version: 2, // Version to distinguish from legacy messages
+            version: 2,
             keys: window.inputState.keys,
-            mouseDelta: window.inputState.mouseDelta,
-            viewMode: window.isFirstPerson ? "first-person" : "third-person"
+            mouseDelta: window.inputState.mouseDelta
+            // NO viewMode sent to server anymore
         });
-        
-        // Reset mouse delta after sending
+
         window.inputState.mouseDelta.x = 0;
         window.inputState.mouseDelta.y = 0;
     } catch (error) {
         console.error("Error sending input update:", error);
     }
 }
+function toggleCameraView() {
+    window.isFirstPerson = !window.isFirstPerson;
+    
+    if (window.isFirstPerson) {
+        switchToFirstPersonView();
+    } else {
+        switchToThirdPersonView();
+    }
+    // No need to notify server about this!
+}
+
 
 // Send regular position updates to the server for multiplayer synchronization
 function sendRegularPositionUpdate() {
     try {
-        // Make sure room is available and connected before sending
-        if (!window.room || !window.room.connection || window.room.connection.readyState !== WebSocket.OPEN || 
-            typeof window.sendPlayerUpdate !== 'function') {
-            if (window.debugOverlay && window.debugOverlay.visible) {
-                updateDebugInfo("WebSocket not connected, skipping position update");
+        // Ensure the WebSocket connection is open before sending
+        if (!window.room || !window.room.connection || window.room.connection.readyState !== WebSocket.OPEN) {
+            if (window.DEBUG) {
+                console.warn("WebSocket not connected, skipping position update");
             }
-            return; // Skip update if connection is not available
+            return;
         }
-        
-        let currentPos, currentRot;
-        
-        // Get current position and rotation based on view mode
+
+        let currentPos, currentRot, currentPitch;
+
         if (window.isFirstPerson && controls) {
             currentPos = controls.getObject().position;
             currentRot = controls.getObject().rotation.y;
+            currentPitch = camera.rotation.x;
         } else if (playerNumberblock && playerNumberblock.mesh) {
             currentPos = playerNumberblock.mesh.position;
             currentRot = playerNumberblock.mesh.rotation.y;
+            currentPitch = 0; // No pitch in third-person
         } else {
-            return; // No valid position
+            if (window.DEBUG) {
+                console.warn("No valid position or controls available, skipping update");
+            }
+            return; // No valid position to send
         }
-        
-        // Always send updates (remove threshold check to ensure frequent updates)
-        // This ensures other players always see your current position
-        
-        // Send update to server
-        window.sendPlayerUpdate(
-            currentPos,
-            currentRot,
-            window.isFirstPerson ? camera.rotation.x : 0,
-            playerValue
-        );
-        
-        // Update last sent values
-        lastSentPosition.copy(currentPos);
-        lastSentRotation = currentRot;
-        
-        // Debug log to confirm sending
-        if (DEBUG) {
-            console.log(`Position update sent: ${currentPos.x.toFixed(2)}, ${currentPos.y.toFixed(2)}, ${currentPos.z.toFixed(2)}`);
+
+        // Send update using the corrected method in network-core.js
+        window.sendPlayerUpdate(currentPos, currentRot, currentPitch, playerValue);
+
+        if (window.DEBUG) {
+            console.log(`Position update sent: X=${currentPos.x.toFixed(2)}, Y=${currentPos.y.toFixed(2)}, Z=${currentPos.z.toFixed(2)}`);
         }
     } catch (error) {
         console.error("Error sending regular position update:", error);
     }
 }
+
+
 
 // Update player position in third-person mode
 function updatePlayerPositionThirdPerson(time, delta) {
@@ -4374,106 +4192,14 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Handle keyboard input
-function onKeyDown(event) {
-    try {
-        if (document.activeElement !== document.body) return; // Skip if focused on input
-        
-        switch (event.code) {
-            case 'ArrowUp':
-            case 'KeyW':
-                window.moveForward = true;
-                break;
-            case 'ArrowLeft':
-            case 'KeyA':
-                window.moveLeft = true;
-                break;
-            case 'ArrowDown':
-            case 'KeyS':
-                window.moveBackward = true;
-                break;
-            case 'ArrowRight':
-            case 'KeyD':
-                window.moveRight = true;
-                break;
-            case 'Space':
-                if (window.canJump) {
-                    window.velocity.y = 5.0;
-                    window.canJump = false;
-                }
-                break;
-            case 'KeyV':
-                // Toggle between first and third person view
-                toggleCameraView();
-                break;
-            case 'KeyQ':
-                // Turn left
-                window.turnLeft = true;
-                if (window.isFirstPerson) {
-                    // Use quaternion rotation around world up axis (y-axis)
-                    rotationAxis.copy(worldUp);
-                    const rotationAngle = 0.05; // Same amount as before
-                    rotationQuaternion.setFromAxisAngle(rotationAxis, rotationAngle);
-                    
-                    // Apply to the camera object - this matches how PointerLockControls works
-                    controls.getObject().quaternion.premultiply(rotationQuaternion);
-                }
-                break;
-            case 'KeyE':
-                // Turn right
-                window.turnRight = true;
-                if (window.isFirstPerson) {
-                    // Use quaternion rotation around world up axis (y-axis)
-                    rotationAxis.copy(worldUp);
-                    const rotationAngle = -0.05; // Negative for right turn
-                    rotationQuaternion.setFromAxisAngle(rotationAxis, rotationAngle);
-                    
-                    // Apply to the camera object - this matches how PointerLockControls works
-                    controls.getObject().quaternion.premultiply(rotationQuaternion);
-                }
-                break;
-        }
-    } catch (error) {
-        debug(`KeyDown error: ${error.message}`, true);
-    }
-}
-
-function onKeyUp(event) {
-    try {
-        switch (event.code) {
-            case 'ArrowUp':
-            case 'KeyW':
-                window.moveForward = false;
-                break;
-            case 'ArrowLeft':
-            case 'KeyA':
-                window.moveLeft = false;
-                break;
-            case 'ArrowDown':
-            case 'KeyS':
-                window.moveBackward = false;
-                break;
-            case 'ArrowRight':
-            case 'KeyD':
-                window.moveRight = false;
-                break;
-            case 'KeyQ':
-                window.turnLeft = false;
-                break;
-            case 'KeyE':
-                window.turnRight = false;
-                break;
-        }
-    } catch (error) {
-        debug(`KeyUp error: ${error.message}`, true);
-    }
-}
 
 // Add static Numberblocks of various values
 function addStaticNumberblocks() {
-    debug('Adding static Numberblocks');
+    debug('Static Numberblocks function - disabled client-side instantiation');
     
     try {
+        // COMMENTED OUT: Client-side static Numberblock creation
+        /*
         // Define positions and values for static Numberblocks
         const numberblockData = [
             { value: 2, x: 8, z: 3 },
@@ -4512,109 +4238,102 @@ function addStaticNumberblocks() {
                 debug(`Error creating static Numberblock: ${error.message}`, true);
             }
         });
+        */
         
-        debug('Static Numberblocks added');
+        debug('Static Numberblocks: Waiting for server-driven creation');
     } catch (error) {
-        debug(`Error adding static Numberblocks: ${error.message}`, true);
+        debug(`Error in static Numberblocks function: ${error.message}`, true);
     }
 }
 
 // Initialize the player's Numberblock
 function initPlayerNumberblock() {
-    debug('Creating player Numberblock');
+    debug('Initializing Player Numberblock (client-side instantiation)');
     
     try {
-        playerNumberblock = new Numberblock(playerValue);
+        playerNumberblock = new Numberblock(playerValue || 1);
+        playerNumberblock.mesh.position.set(0, 1, 0); // Set to initial spawn position
         scene.add(playerNumberblock.mesh);
-        playerNumberblock.mesh.position.set(0, 0, 0);
-        debug('Player Numberblock created');
         
-        // Make player Numberblock globally available for networking
-        window.playerNumberblock = playerNumberblock;
+        window.playerNumberblock = playerNumberblock;  // ensure globally available
+        
+        debug('Player Numberblock successfully initialized client-side');
         
         // Update HUD
         updateHUD();
-        
-        // Make Numberblock class available globally
-        window.Numberblock = Numberblock;
     } catch (error) {
-        debug(`Error creating player Numberblock: ${error.message}`, true);
+        debug(`Error initializing player Numberblock: ${error.message}`, true);
     }
 }
+
 
 // Initialize networking for multiplayer
 function initNetworkingSystem() {
     debug('Initializing networking system');
     
-    try {
-        console.log("Initializing networking system...");
-        
-        // Check if initNetworking is defined in network-core.js
-        if (typeof window.initNetworking === 'function') {
-            debug('Found networking module, attempting to connect...');
-            window.initNetworking()
-                .then((roomInstance) => {
-                    debug('Networking initialized successfully');
-                    window.gameRoom = roomInstance; // Store room instance globally
-                    window.room = roomInstance; // For compatibility
-                    
-                    // Setup room event listeners
-                    setupRoomEventHandlers(roomInstance);
-                    
-                    // Create debug overlay if it doesn't exist
-                    createDebugOverlay();
-                    
-                    // Manually trigger player list update after successful connection
-                    if (typeof window.updatePlayerListUI === 'function') {
-                        setTimeout(window.updatePlayerListUI, 500);
-                        setTimeout(window.updatePlayerListUI, 2000);
-                    }
-                })
-                .catch(error => {
-                    debug(`Networking error: ${error.message}`, true);
-                });
-        } else {
-            debug('Networking module not detected, continuing in local mode');
-        }
-    } catch (error) {
-        debug(`Error initializing networking: ${error.message}`, true);
+    if (typeof window.initNetworking === 'function') {
+        debug('Found networking module, attempting to connect...');
+        window.initNetworking()
+            .then((roomInstance) => {
+                window.gameRoom = roomInstance;
+                window.room = roomInstance;
+
+                setupRoomEventHandlers(roomInstance);
+                createDebugOverlay();
+
+                // Begin sending periodic input updates at 30Hz immediately after connection
+                setInterval(sendInputUpdate, 1000 / 30);
+
+                // Send regular position updates every 100ms for smoother corrections
+                setInterval(sendRegularPositionUpdate, 100);
+
+                debug('Networking initialized successfully and input/position intervals set.');
+            })
+            .catch(error => {
+                debug(`Networking error: ${error.message}`, true);
+            });
+    } else {
+        debug('Networking module not detected, continuing in local mode');
     }
 }
 
+
 // Setup room event handlers
 function setupRoomEventHandlers(room) {
-    if (!room) return;
-    
-    // Register for player join events
-    room.state.players.onAdd = function(player, sessionId) {
+    if (!room || !room.state || !room.state.players) {
+        console.warn("[setupRoomEventHandlers] Room state or players not available yet.");
+        return;
+    }
+
+    // Correct listener setup for 'onAdd'
+    room.state.players.onAdd((player, sessionId) => {
         console.log("Player added to room state:", sessionId);
-        
-        // Call the player join handler if available
         if (typeof window.onPlayerJoin === 'function') {
             window.onPlayerJoin(player);
         }
-    };
-    
-    // Register for player leave events
-    room.state.players.onRemove = function(player, sessionId) {
+    });
+
+    // Correct listener setup for 'onRemove'
+    room.state.players.onRemove((player, sessionId) => {
         console.log("Player removed from room state:", sessionId);
-        
-        // Call the player leave handler if available
         if (typeof window.onPlayerLeave === 'function') {
             window.onPlayerLeave(player);
         }
-    };
-    
-    // Register for player change events
-    room.state.players.onChange = function(player, sessionId) {
-        // This could be used for player property changes if needed
-    };
-    
-    // Register for state change events
-    room.onStateChange(function(state) {
-        // This could be used to handle full state changes if needed
+    });
+
+    // Correct listener setup for 'onChange' (individual player changes)
+    room.state.players.onChange((player, sessionId) => {
+        console.log(`Player ${sessionId} changed.`);
+        // Add specific handling here if needed
+    });
+
+    // General room state change listener
+    room.onStateChange((state) => {
+        console.log("General state change received.");
+        // Handle general state changes here if required
     });
 }
+
 
 // Create debug overlay for development
 function createDebugOverlay() {
@@ -4731,7 +4450,11 @@ function emergencyRender() {
 
 // Add decorative objects to the scene
 function addDecorativeObjects() {
+    debug('Decorative objects function - disabled client-side instantiation');
+    
     try {
+        // COMMENTED OUT: Client-side decorative object creation
+        /*
         debug('Adding decorative objects');
         
         // Add multiple trees scattered around
@@ -4757,15 +4480,19 @@ function addDecorativeObjects() {
             // Create rock
             createRock(x, 0, z);
         }
+        */
         
-        debug('Decorative objects added successfully');
+        debug('Decorative objects: Waiting for server-driven creation');
     } catch (error) {
-        debug(`Error adding decorative objects: ${error.message}`, true);
+        debug(`Error in decorative objects function: ${error.message}`, true);
     }
 }
 
 // Helper function to create a tree
 function createTree(x, y, z) {
+    // Function kept for server-driven object creation
+    // But not called directly from client-side initialization
+    
     // Create tree trunk (cylinder)
     const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
     const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
@@ -4787,6 +4514,8 @@ function createTree(x, y, z) {
 
 // Helper function to create a rock
 function createRock(x, y, z) {
+    // Function kept for server-driven object creation
+    // But not called directly from client-side initialization
     // Randomly scale the rock
     const scale = 0.5 + Math.random() * 1.5;
     
@@ -5133,34 +4862,18 @@ async function initNetworking() {
             // Wait for the initial state before setting up listeners
             room.onStateChange.once((state) => {
                 console.log("Initial state received, setting up room listeners");
-                
-                // Setup room listeners
-                window.roomInitialized = false;
-                setupRoomListeners(room);
-
+            
+                // NOW the state is guaranteed to exist
+                setupRoomListeners(room);          // entity-sync.js listeners (operators, static numberblocks)
+                setupRoomPlayerListeners(room);    // player-sync.js listeners (players only)
+                setupRoomEventHandlers(room);      // main-fixed.js listeners (join/leave logging)
+            
                 animate();
-                
-                // Check if room initialization succeeded
-                const checkRoomInit = () => {
-                    if (window.roomInitialized) {
-                        // Process existing players
-                        processExistingPlayers();
-                        
-                        // Initial player list update
-                        updatePlayerListUI();
-                        
-                        // Notify that avatar is ready
-                        window.dispatchEvent(new CustomEvent('avatarReady'));
-                        console.log("Avatar is ready");
-                    } else {
-                        // Keep checking if not initialized yet
-                        setTimeout(checkRoomInit, 100);
-                    }
-                };
-                
-                // Start initialization check
-                checkRoomInit();
+            
+                window.dispatchEvent(new CustomEvent('avatarReady'));
+                console.log("Avatar is ready");
             });
+            
             
             return room;
         } catch (roomError) {
@@ -5199,37 +4912,31 @@ function setupMessageHandlers() {
 }
 
 // Send player position updates to the server
+// Send player position updates to the server correctly
 function sendPlayerUpdate(position, rotationY, pitch, value) {
     if (!room) return;
-    
+
     try {
         // Validate inputs before sending
         if (!position || position.x === undefined) {
             console.warn("Invalid position for player update");
             return;
         }
-        
-        // Send update to the server
-        room.send("input", {
-            version: 2,
-            keys: {}, // Add appropriate key state here if needed
-            mouseDelta: { x: 0, y: 0 }, // Add mouse delta if needed
-            viewMode: window.isFirstPerson ? "first-person" : "third-person",
-            position: {
-                x: position.x,
-                y: position.y,
-                z: position.z
-            },
-            rotation: {
-                y: rotationY || 0,
-                pitch: pitch || 0
-            },
+
+        // Send exactly what the server expects ('move' event)
+        room.send("move", {
+            x: position.x,
+            y: position.y,
+            z: position.z,
+            rotationY: rotationY || 0,
+            pitch: pitch || 0,
             value: value || 1
         });
     } catch (error) {
         console.error("Error sending player update:", error);
     }
 }
+
 
 // Send operator collection message
 function sendOperatorCollect(operatorId) {
@@ -6458,34 +6165,41 @@ function processExistingPlayers() {
 // Setup specific schema listeners for Players
 // Setup room-level listeners specifically for Players
 function setupRoomPlayerListeners(room) {
-    if (!room || !room.state || !room.state.players) {
-        console.warn('Players state not available.');
+    if (!room || !room.state) {
+        console.warn('[setupRoomPlayerListeners] Room or state not available yet.');
         return;
     }
 
-    // Listen for player added
-    room.state.players.onAdd((player, sessionId) => {
-        console.log(`✅ Player ${sessionId} joined.`, player);
-        setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
-        updatePlayerListUI();  // <-- explicitly update UI on new player joins
-    });
+    room.onStateChange.once((state) => {
+        if (!state.players) {
+            console.error('[setupRoomPlayerListeners] state.players still undefined on first state update!');
+            return;
+        }
 
-    // Listen for player removal
-    room.state.players.onRemove((player, sessionId) => {
-        console.log(`✅ Player ${sessionId} left.`, player);
-        removePlayerVisual(sessionId);
-        updatePlayerListUI();  // <-- explicitly update UI when player leaves
-    });
+        // Attach listeners now that players is definitely initialized
+        state.players.onAdd((player, sessionId) => {
+            console.log(`✅ Player ${sessionId} joined.`, player);
+            setupPlayerListeners(player, sessionId);
+            updatePlayerListUI();
+        });
 
-    // Initial iteration (process existing players)
-    room.state.players.forEach((player, sessionId) => {
-        console.log(`✅ Processing existing player: ${sessionId}`, player);
-        setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
+        state.players.onRemove((player, sessionId) => {
+            console.log(`✅ Player ${sessionId} left.`, player);
+            removePlayerVisual(sessionId);
+            updatePlayerListUI();
+        });
+
+        // Initial iteration of existing players
+        state.players.forEach((player, sessionId) => {
+            console.log(`✅ Processing existing player: ${sessionId}`, player);
+            setupPlayerListeners(player, sessionId);
+        });
+
+        updatePlayerListUI();
+        console.log('[setupRoomPlayerListeners] Room player listeners fully set.');
     });
-    
-    // Explicitly update UI after initial processing
-    updatePlayerListUI();
 }
+
 
 
 // Make this explicitly available globally

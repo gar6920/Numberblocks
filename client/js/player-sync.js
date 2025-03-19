@@ -176,34 +176,43 @@ function processExistingPlayers() {
 // Setup specific schema listeners for Players
 // Setup room-level listeners specifically for Players
 function setupRoomPlayerListeners(room) {
-    if (!room || !room.state || !room.state.players) {
-        console.warn('Players state not available.');
+    if (!room || !room.state) {
+        console.warn('[setupRoomPlayerListeners] Room or state not available yet.');
         return;
     }
 
-    // Listen for player added
-    room.state.players.onAdd((player, sessionId) => {
-        console.log(`✅ Player ${sessionId} joined.`, player);
-        setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
-        updatePlayerListUI();  // <-- explicitly update UI on new player joins
-    });
+    room.onStateChange.once((state) => {
+        if (!state.players) {
+            console.error('[setupRoomPlayerListeners] state.players still undefined on first state update!');
+            return;
+        }
 
-    // Listen for player removal
-    room.state.players.onRemove((player, sessionId) => {
-        console.log(`✅ Player ${sessionId} left.`, player);
-        removePlayerVisual(sessionId);
-        updatePlayerListUI();  // <-- explicitly update UI when player leaves
-    });
+        // Attach listeners now that players is definitely initialized
+        state.players.onAdd = (player, sessionId) => {
+            console.log("Player added:", sessionId);
+            setupPlayerListeners(player, sessionId);
+            updatePlayerListUI();
+        };
+        
 
-    // Initial iteration (process existing players)
-    room.state.players.forEach((player, sessionId) => {
-        console.log(`✅ Processing existing player: ${sessionId}`, player);
-        setupPlayerListeners(player, sessionId); // call INDIVIDUAL PLAYER setup
+        state.players.onRemove = (player, sessionId) => {
+            console.log("Player removed:", sessionId);
+            removePlayerVisual(sessionId);
+            updatePlayerListUI();
+        };
+        
+
+        // Initial iteration of existing players
+        state.players.forEach((player, sessionId) => {
+            console.log(`✅ Processing existing player: ${sessionId}`, player);
+            setupPlayerListeners(player, sessionId);
+        });
+
+        updatePlayerListUI();
+        console.log('[setupRoomPlayerListeners] Room player listeners fully set.');
     });
-    
-    // Explicitly update UI after initial processing
-    updatePlayerListUI();
 }
+
 
 
 // Make this explicitly available globally
