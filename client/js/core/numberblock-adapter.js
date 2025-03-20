@@ -1,5 +1,5 @@
 // 3D AI Game Platform - Numberblock Adapter
-// Ensures the Numberblock class is properly available to main-fixed.js
+// Ensures the Numberblock class is properly available to game-engine.js
 
 (function() {
     // Check if Numberblock is already defined

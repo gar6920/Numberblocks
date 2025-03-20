@@ -6,25 +6,54 @@ const { Schema, type } = require("@colyseus/schema");
 class InputState extends Schema {
     constructor() {
         super();
-        // Default initialization for input state
-        this.keys = { w: false, a: false, s: false, d: false, space: false, q: false, e: false };
-        this.mouseDelta = { x: 0, y: 0 };
+        // Initialize keys as a KeysSchema instance, not a plain object
+        this.keys = new KeysSchema();
+        this.mouseDelta = new MouseDeltaSchema();
         this.viewMode = "third-person"; // Default view mode - "first-person", "third-person", "free-roam"
         this.thirdPersonCameraAngle = 0; // Camera angle for third-person view
     }
 }
 
-// Register schema types
-type("boolean")(InputState.prototype, "keys.w");
-type("boolean")(InputState.prototype, "keys.a");
-type("boolean")(InputState.prototype, "keys.s");
-type("boolean")(InputState.prototype, "keys.d");
-type("boolean")(InputState.prototype, "keys.space");
-type("boolean")(InputState.prototype, "keys.q");
-type("boolean")(InputState.prototype, "keys.e");
-type("number")(InputState.prototype, "mouseDelta.x");
-type("number")(InputState.prototype, "mouseDelta.y");
+// Define nested schemas for proper serialization
+class KeysSchema extends Schema {
+    constructor() {
+        super();
+        this.w = false;
+        this.a = false;
+        this.s = false;
+        this.d = false;
+        this.space = false;
+        this.q = false;
+        this.e = false;
+        this.shift = false;
+    }
+}
+
+class MouseDeltaSchema extends Schema {
+    constructor() {
+        super();
+        this.x = 0;
+        this.y = 0;
+    }
+}
+
+// Register schema types for nested schemas
+type("boolean")(KeysSchema.prototype, "w");
+type("boolean")(KeysSchema.prototype, "a");
+type("boolean")(KeysSchema.prototype, "s");
+type("boolean")(KeysSchema.prototype, "d");
+type("boolean")(KeysSchema.prototype, "space");
+type("boolean")(KeysSchema.prototype, "q");
+type("boolean")(KeysSchema.prototype, "e");
+type("boolean")(KeysSchema.prototype, "shift");
+
+type("number")(MouseDeltaSchema.prototype, "x");
+type("number")(MouseDeltaSchema.prototype, "y");
+
+// Register the schema types for InputState
+type(KeysSchema)(InputState.prototype, "keys");
+type(MouseDeltaSchema)(InputState.prototype, "mouseDelta");
 type("string")(InputState.prototype, "viewMode");
 type("number")(InputState.prototype, "thirdPersonCameraAngle");
 
-module.exports = { InputState }; 
+module.exports = { InputState, KeysSchema, MouseDeltaSchema }; 

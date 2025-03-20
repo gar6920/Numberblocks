@@ -54,9 +54,27 @@ class BaseRoom extends Room {
         const player = this.state.players.get(client.sessionId);
         if (!player) return;
         
-        // Update the input object with the new input
-        player.input.keys = message.keys;
-        player.input.mouseDelta = message.mouseDelta || { x: 0, y: 0 };
+        // Update individual keys instead of replacing the entire keys object
+        if (message.keys) {
+            player.input.keys.w = !!message.keys.w;
+            player.input.keys.a = !!message.keys.a;
+            player.input.keys.s = !!message.keys.s;
+            player.input.keys.d = !!message.keys.d;
+            player.input.keys.space = !!message.keys.space;
+            player.input.keys.q = !!message.keys.q;
+            player.input.keys.e = !!message.keys.e;
+            player.input.keys.shift = !!message.keys.shift;
+        }
+        
+        // Fix mouseDelta assignment - update properties instead of replacing the object
+        if (message.mouseDelta) {
+            player.input.mouseDelta.x = message.mouseDelta.x || 0;
+            player.input.mouseDelta.y = message.mouseDelta.y || 0;
+        } else {
+            player.input.mouseDelta.x = 0;
+            player.input.mouseDelta.y = 0;
+        }
+        
         player.input.viewMode = message.viewMode || "third-person";
         player.input.thirdPersonCameraAngle = message.thirdPersonCameraAngle || 0;
         
@@ -105,7 +123,8 @@ class BaseRoom extends Room {
      * @param {number} delta Time since last update
      */
     updatePlayerFromInput(playerSessionId, player, input, delta) {
-        const speed = 0.05;
+        // Increase speed to make movement more noticeable
+        const speed = 0.2;
         
         // Calculate movement based on the current player rotation or camera angle
         let dx = 0, dz = 0;
@@ -115,57 +134,66 @@ class BaseRoom extends Room {
             ? input.thirdPersonCameraAngle // For third-person, move relative to camera angle
             : player.rotationY;            // For first-person, move relative to player facing
         
-        if (input.keys.w) {
-            // Forward movement: Move in the direction the player/camera is facing
-            dx -= Math.sin(moveAngle) * speed;
-            dz -= Math.cos(moveAngle) * speed;
-        }
+        // Check each movement key and apply appropriate movement
+        if (input.keys && typeof input.keys === 'object') {
+            // Log movement keys for debugging (only when they change)
+            const isMoving = input.keys.w || input.keys.a || input.keys.s || input.keys.d || input.keys.q || input.keys.e;
+            if (isMoving) {
+                console.log(`Player ${playerSessionId} moving with keys:`, input.keys);
+            }
         
-        if (input.keys.s) {
-            // Backward movement: Move in the opposite direction
-            dx += Math.sin(moveAngle) * speed;
-            dz += Math.cos(moveAngle) * speed;
-        }
-        
-        if (input.keys.a) {
-            // Strafe left: Move perpendicular to the facing direction
-            dx += Math.sin(moveAngle + Math.PI/2) * speed;
-            dz += Math.cos(moveAngle + Math.PI/2) * speed;
-        }
-        
-        if (input.keys.d) {
-            // Strafe right: Move perpendicular to the facing direction
-            dx -= Math.sin(moveAngle + Math.PI/2) * speed;
-            dz -= Math.cos(moveAngle + Math.PI/2) * speed;
-        }
-        
-        // Handle Q and E for rotating the player in third-person mode
-        const rotationSpeed = 0.08;  // Rotation speed
-        
-        if (input.keys.q) {
-            // Rotate player left (counter-clockwise)
-            player.rotationY += rotationSpeed;
-            // Normalize rotation
-            player.rotationY = player.rotationY % (Math.PI * 2);
-            if (player.rotationY < 0) player.rotationY += Math.PI * 2;
-        }
-        
-        if (input.keys.e) {
-            // Rotate player right (clockwise)
-            player.rotationY -= rotationSpeed;
-            // Normalize rotation
-            player.rotationY = player.rotationY % (Math.PI * 2);
-            if (player.rotationY < 0) player.rotationY += Math.PI * 2;
-        }
-        
-        // Apply diagonal movement speed correction for all movement
-        if ((input.keys.w || input.keys.s) && 
-            (input.keys.a || input.keys.d)) {
-            // Normalize diagonal movement speed
-            const magnitude = Math.sqrt(dx * dx + dz * dz);
-            if (magnitude > 0) {
-                dx = (dx / magnitude) * speed;
-                dz = (dz / magnitude) * speed;
+            if (input.keys.w) {
+                // Forward movement: Move in the direction the player/camera is facing
+                dx -= Math.sin(moveAngle) * speed;
+                dz -= Math.cos(moveAngle) * speed;
+            }
+            
+            if (input.keys.s) {
+                // Backward movement: Move in the opposite direction
+                dx += Math.sin(moveAngle) * speed;
+                dz += Math.cos(moveAngle) * speed;
+            }
+            
+            if (input.keys.a) {
+                // Strafe left: Move perpendicular to the facing direction
+                dx += Math.sin(moveAngle + Math.PI/2) * speed;
+                dz += Math.cos(moveAngle + Math.PI/2) * speed;
+            }
+            
+            if (input.keys.d) {
+                // Strafe right: Move perpendicular to the facing direction
+                dx -= Math.sin(moveAngle + Math.PI/2) * speed;
+                dz -= Math.cos(moveAngle + Math.PI/2) * speed;
+            }
+            
+            // Handle Q and E for rotating the player in third-person mode
+            const rotationSpeed = 0.1;  // Increased rotation speed
+            
+            if (input.keys.q) {
+                // Rotate player left (counter-clockwise)
+                player.rotationY += rotationSpeed;
+                // Normalize rotation
+                player.rotationY = player.rotationY % (Math.PI * 2);
+                if (player.rotationY < 0) player.rotationY += Math.PI * 2;
+            }
+            
+            if (input.keys.e) {
+                // Rotate player right (clockwise)
+                player.rotationY -= rotationSpeed;
+                // Normalize rotation
+                player.rotationY = player.rotationY % (Math.PI * 2);
+                if (player.rotationY < 0) player.rotationY += Math.PI * 2;
+            }
+            
+            // Apply diagonal movement speed correction for all movement
+            if ((input.keys.w || input.keys.s) && 
+                (input.keys.a || input.keys.d)) {
+                // Normalize diagonal movement speed
+                const magnitude = Math.sqrt(dx * dx + dz * dz);
+                if (magnitude > 0) {
+                    dx = (dx / magnitude) * speed;
+                    dz = (dz / magnitude) * speed;
+                }
             }
         }
         
@@ -179,6 +207,11 @@ class BaseRoom extends Room {
         if (player.y < 1) {
             player.y = 1;
             player.velocityY = 0;
+        }
+        
+        // Handle jumps
+        if (input.keys && input.keys.space && player.y <= 1) {
+            player.velocityY = 0.2; // Jump velocity
         }
         
         // Handle mouse movement (rotation) for players not sending direct rotation

@@ -13,6 +13,21 @@ class Player extends Entity {
         this.isColliding = false;
         this.controls = null;
         
+        // Create the player mesh if not already created
+        if (!this.mesh && window.createPlayerNumberblock && window.scene) {
+            this.value = params.value || 1;
+            this.color = params.color || "#FFFF00";
+            
+            // Use createPlayerNumberblock function if available
+            const numberblock = window.createPlayerNumberblock(window.scene, this.value);
+            this.mesh = numberblock.mesh;
+            
+            // Apply color if specified
+            if (numberblock.updateColor && this.color) {
+                numberblock.updateColor(this.color);
+            }
+        }
+        
         // This will be overridden in implementation-specific player classes
         if (this.isLocalPlayer && this.initLocalPlayer) {
             this.initLocalPlayer();
@@ -23,7 +38,7 @@ class Player extends Entity {
     // For remote players, position is updated via network
     updatePosition(position) {
         // Only update remote players via network updates
-        if (!this.isLocalPlayer) {
+        if (!this.isLocalPlayer && this.mesh) {
             super.updatePosition(position);
         }
     }
@@ -44,12 +59,20 @@ class Player extends Entity {
     
     // Base createMesh method - should be overridden by implementation-specific player classes
     createMesh() {
-        console.warn("createMesh() method not implemented in Player base class");
-        
-        // Create a simple placeholder mesh
+        // Create a simple box player
         const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshStandardMaterial({ color: this.color || 0xFFFFFF });
-        return new THREE.Mesh(geometry, material);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: this.color || 0xFFFF00,
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        
+        const mesh = new THREE.Mesh(geometry, material);
+        // Add shadow casting
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        
+        return mesh;
     }
 
     // Base methods for updating value and color - to be overridden by implementations
@@ -62,11 +85,10 @@ class Player extends Entity {
     }
 }
 
-// Export the Player class
-if (typeof window !== 'undefined') {
-    window.Player = Player;
-}
+// Make available globally
+window.Player = Player;
 
+// Export for use in other modules
 if (typeof module !== 'undefined') {
     module.exports = { Player };
 } 

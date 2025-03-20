@@ -255,7 +255,11 @@ function addReconnectButton() {
 
 // Function to initialize networking for multiplayer
 async function initNetworking() {
-    const endpoint = "ws://localhost:3000";
+    // Get endpoint from gameConfig if available, or use default
+    const endpoint = window.gameConfig?.networkSettings?.serverUrl || "ws://localhost:3000";
+    // Get room name from gameConfig if available, or use default
+    const roomName = window.gameConfig?.networkSettings?.roomName || "default";
+    
     console.log("Initializing networking system...");
     
     try {
@@ -274,12 +278,12 @@ async function initNetworking() {
         
         // Try to join the room
         try {
-            console.log("Attempting to join room...");
-            room = await client.joinOrCreate("numberblocks", {
+            console.log(`Attempting to join room: ${roomName}`);
+            room = await client.joinOrCreate(roomName, {
                 name: `Player_${Math.floor(Math.random() * 1000)}`,
                 color: getRandomColor()
             });
-            console.log("Joined room successfully:", room.name);
+            console.log(`Joined room successfully: ${room.name}`);
             
             // Store room in global scope
             window.room = room;
@@ -401,40 +405,83 @@ function createRemotePlayerObject(player) {
         return;
     }
     
-    // Create a numberblock mesh for the remote player
-    const remotePlayerObject = new Numberblock(player.value || 1);
-    remotePlayerObject.id = player.sessionId;
-    remotePlayerObject.mesh.position.set(player.x || 0, player.y || 1, player.z || 0);
+    console.log("Creating remote player:", player);
     
-    // Add to scene
-    window.scene.add(remotePlayerObject.mesh);
-    
-    // Store in global collection
-    window.remotePlayers = window.remotePlayers || {};
-    window.remotePlayers[player.sessionId] = remotePlayerObject;
-    
-    console.log(`Created remote player object for ${player.sessionId}`);
+    try {
+        // Create a player object for the remote player
+        // Use DefaultPlayer if available, otherwise fallback to base Player
+        const PlayerClass = window.DefaultPlayer || window.Player;
+        const remotePlayer = new PlayerClass({
+            id: player.sessionId,
+            isLocalPlayer: false,
+            color: player.color || 0x3366CC,
+            value: player.value || 1
+        });
+        
+        // Set position and rotation
+        remotePlayer.mesh.position.set(player.x || 0, player.y || 0, player.z || 0);
+        remotePlayer.mesh.rotation.y = player.rotationY || 0;
+        
+        // Add to scene
+        window.scene.add(remotePlayer.mesh);
+        
+        // Store in global collections
+        window.otherPlayers = window.otherPlayers || {};
+        window.otherPlayers[player.sessionId] = remotePlayer;
+        
+        // Also store in visuals collection
+        window.visuals = window.visuals || {};
+        window.visuals.players = window.visuals.players || {};
+        window.visuals.players[player.sessionId] = remotePlayer;
+        
+        console.log(`Created remote player object for ${player.sessionId}`);
+        return remotePlayer;
+    } catch (error) {
+        console.error("Failed to create remote player:", error);
+    }
 }
 
 // Player left callback
 function onPlayerLeave(player) {
     console.log(`Player left: ${player.sessionId}`);
     
-    // Remove player from the scene
-    if (window.remotePlayers && window.remotePlayers[player.sessionId]) {
-        console.log(`Removing remote player object for ${player.sessionId}`);
-        
-        // Remove mesh from scene
-        if (window.scene && window.remotePlayers[player.sessionId].mesh) {
-            window.scene.remove(window.remotePlayers[player.sessionId].mesh);
+    try {
+        // Remove player from the scene - check multiple collections
+        // Check otherPlayers collection
+        if (window.otherPlayers && window.otherPlayers[player.sessionId]) {
+            console.log(`Removing player from otherPlayers: ${player.sessionId}`);
+            
+            // Remove mesh from scene
+            if (window.scene && window.otherPlayers[player.sessionId].mesh) {
+                window.scene.remove(window.otherPlayers[player.sessionId].mesh);
+            }
+            
+            // Delete player object
+            delete window.otherPlayers[player.sessionId];
         }
         
-        // Delete player object
-        delete window.remotePlayers[player.sessionId];
+        // Also check visuals.players collection
+        if (window.visuals && window.visuals.players && window.visuals.players[player.sessionId]) {
+            console.log(`Removing player from visuals: ${player.sessionId}`);
+            
+            // Remove mesh from scene if not already removed
+            if (window.scene && window.visuals.players[player.sessionId].mesh) {
+                window.scene.remove(window.visuals.players[player.sessionId].mesh);
+            }
+            
+            // Delete from visuals
+            delete window.visuals.players[player.sessionId];
+        }
+        
+        // Update the player list in the UI
+        if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
+            window.playerUI.updatePlayerListUI();
+        } else {
+            updatePlayerListUI();
+        }
+    } catch (error) {
+        console.error("Error removing player:", error);
     }
-    
-    // Update the player list in the UI
-    updatePlayerListUI();
 }
 
 // Update player list UI
@@ -534,6 +581,191 @@ window.updateRemotePlayers = function() {
         }
     });
 };
+
+// Setup room-level listeners specifically for Players
+function setupRoomPlayerListeners(room) {
+    if (!room || !room.state) {
+        console.warn('[setupRoomPlayerListeners] Room or state not available yet.');
+        return;
+    }
+
+    console.log('[setupRoomPlayerListeners] Setting up player listeners...');
+    console.log('[setupRoomPlayerListeners] Current state structure:', Object.keys(room.state));
+    console.log('[setupRoomPlayerListeners] Players collection exists:', !!room.state.players);
+    
+    if (room.state.players) {
+        console.log('[setupRoomPlayerListeners] Current player count:', room.state.players.size);
+        
+        // Process existing players
+        console.log('[setupRoomPlayerListeners] Processing existing players');
+        room.state.players.forEach((player, sessionId) => {
+            console.log(`Setting up existing player: ${sessionId}`, player);
+            
+            // Create remote player for other players
+            if (sessionId !== room.sessionId) {
+                createRemotePlayerObject(player);
+            }
+        });
+        
+        // Update UI immediately to show all players
+        if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
+            window.playerUI.updatePlayerListUI();
+        }
+        
+        // Listen for player added events
+        room.state.players.onAdd = (player, sessionId) => {
+            console.log(`Player added: ${sessionId}`, player);
+            
+            // Skip local player
+            if (sessionId === room.sessionId) return;
+            
+            // Create remote player object
+            createRemotePlayerObject(player);
+            
+            // Update UI
+            if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
+                window.playerUI.updatePlayerListUI();
+            }
+        };
+        
+        // Listen for player removed events
+        room.state.players.onRemove = (player, sessionId) => {
+            console.log(`Player removed: ${sessionId}`);
+            
+            // Remove player
+            onPlayerLeave({ sessionId });
+            
+            // Update UI
+            if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
+                window.playerUI.updatePlayerListUI();
+            }
+        };
+        
+        // Listen for player changes
+        room.state.players.onChange = (player, sessionId) => {
+            // Skip local player
+            if (sessionId === room.sessionId) return;
+            
+            // Update remote player
+            if (window.otherPlayers && window.otherPlayers[sessionId]) {
+                // Update position with lerping for smooth movement
+                const remotePlayer = window.otherPlayers[sessionId];
+                const lerpFactor = 0.3; // Adjust for smoother/faster movement
+                
+                if (remotePlayer && remotePlayer.mesh) {
+                    // Update position with lerping
+                    remotePlayer.mesh.position.x = THREE.MathUtils.lerp(
+                        remotePlayer.mesh.position.x,
+                        player.x,
+                        lerpFactor
+                    );
+                    
+                    remotePlayer.mesh.position.y = THREE.MathUtils.lerp(
+                        remotePlayer.mesh.position.y,
+                        player.y,
+                        lerpFactor
+                    );
+                    
+                    remotePlayer.mesh.position.z = THREE.MathUtils.lerp(
+                        remotePlayer.mesh.position.z,
+                        player.z,
+                        lerpFactor
+                    );
+                    
+                    // Update rotation (no lerping for simplicity)
+                    remotePlayer.mesh.rotation.y = player.rotationY;
+                    
+                    // Update player info in UI periodically
+                    if (Math.random() < 0.05) { // Only update UI occasionally to save performance
+                        if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
+                            window.playerUI.updatePlayerListUI();
+                        }
+                    }
+                }
+            }
+        };
+    } else {
+        console.error('[setupRoomPlayerListeners] state.players not found!');
+    }
+    
+    console.log('[setupRoomPlayerListeners] Room player listeners setup complete');
+}
+
+// Setup entity listeners for the room
+function setupRoomListeners(room) {
+    if (!room || !room.state) {
+        console.error('[setupRoomListeners] Room or state not available');
+        return;
+    }
+    
+    console.log('[setupRoomListeners] Setting up entity listeners');
+    
+    // Ensure visuals collections exist
+    window.visuals = window.visuals || {};
+    window.visuals.operators = window.visuals.operators || {};
+    window.visuals.staticNumberblocks = window.visuals.staticNumberblocks || {};
+    
+    // Check for entities collection
+    if (room.state.entities) {
+        console.log('[setupRoomListeners] Processing entities:', room.state.entities.size);
+        
+        // Process existing entities
+        room.state.entities.forEach((entity, entityId) => {
+            console.log(`Processing entity: ${entityId}, type: ${entity.type}`);
+            
+            // Handle different entity types
+            if (entity.type === 'operator') {
+                if (typeof window.createOperatorVisual === 'function') {
+                    window.createOperatorVisual(entity, entityId);
+                }
+            } else if (entity.type === 'staticNumberblock') {
+                if (typeof window.createStaticNumberblockVisual === 'function') {
+                    window.createStaticNumberblockVisual(entity, entityId);
+                }
+            }
+        });
+        
+        // Listen for entity added events
+        if (typeof room.state.entities.onAdd === 'function') {
+            room.state.entities.onAdd = (entity, entityId) => {
+                console.log(`Entity added: ${entityId}, type: ${entity.type}`);
+                
+                // Handle different entity types
+                if (entity.type === 'operator') {
+                    if (typeof window.createOperatorVisual === 'function') {
+                        window.createOperatorVisual(entity, entityId);
+                    }
+                } else if (entity.type === 'staticNumberblock') {
+                    if (typeof window.createStaticNumberblockVisual === 'function') {
+                        window.createStaticNumberblockVisual(entity, entityId);
+                    }
+                }
+            };
+        }
+        
+        // Listen for entity removed events
+        if (typeof room.state.entities.onRemove === 'function') {
+            room.state.entities.onRemove = (entity, entityId) => {
+                console.log(`Entity removed: ${entityId}, type: ${entity.type}`);
+                
+                // Handle different entity types
+                if (entity.type === 'operator') {
+                    if (typeof window.removeOperatorVisual === 'function') {
+                        window.removeOperatorVisual(entityId);
+                    }
+                } else if (entity.type === 'staticNumberblock') {
+                    if (typeof window.removeStaticNumberblockVisual === 'function') {
+                        window.removeStaticNumberblockVisual(entityId);
+                    }
+                }
+            };
+        }
+    } else {
+        console.log('[setupRoomListeners] No entities collection found');
+    }
+    
+    console.log('[setupRoomListeners] Entity listeners setup complete');
+}
 
 // Make functions available globally
 window.initNetworking = initNetworking;

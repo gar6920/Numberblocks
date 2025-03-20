@@ -93,8 +93,5 @@ npm start
 - Document extension points and required methods for new implementations
 
 ## Adding New Game Implementations
-- Create a new implementation directory
-- Extend the core Entity, Player, and NPC classes as needed
-- Register custom entity factories
-- Add implementation-specific assets
-- Update configuration to recognize the new game type
+- Create a new implementation directory as all implementation should be completely independent from the core structure
+

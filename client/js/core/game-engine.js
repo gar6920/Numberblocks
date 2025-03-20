@@ -1,7 +1,8 @@
-// Numberblocks game - Main game logic
+// 3D Game Platform - Game Engine
+// Handles 3D scene, rendering, game loop, and core gameplay
 
 // Debug support
-const DEBUG = true;
+const DEBUG = false; // Set to false to disable debug messages
 
 function debug(message, isError = false) {
     if (!DEBUG) return;
@@ -16,8 +17,7 @@ function debug(message, isError = false) {
 
 // Game variables
 let scene, camera, renderer, controls;
-let playerNumberblock;
-let operatorManager;
+let player;  // Player object
 let playerValue = 1;
 
 // Add operator tracking without redeclaring variables
@@ -118,6 +118,34 @@ window.onload = function() {
     // Add view toggle button
     addViewToggleButton();
     
+    // Create a dummy OperatorManager if not defined (for default implementation)
+    if (typeof OperatorManager === 'undefined') {
+        window.OperatorManager = class OperatorManager {
+            constructor() {
+                this.operators = {};
+            }
+            
+            createOperator() { return null; }
+            updateOperator() {}
+            removeOperator() {}
+            createOperatorFromServer() { return { group: new THREE.Group() }; }
+            updateOperatorFromServer() {}
+            removeOperatorByServerId() {}
+        };
+    }
+    
+    // Initialize with window.viewMode and window.isFirstPerson set to first-person
+    window.viewMode = 'firstPerson';
+    window.isFirstPerson = true;
+    window.isFreeCameraMode = false;
+    
+    // Add keyboard shortcut for camera toggle (V key)
+    document.addEventListener('keydown', function(event) {
+        if (event.code === 'KeyV') {
+            toggleCameraView();
+        }
+    });
+    
     init();
 };
 
@@ -130,13 +158,13 @@ function addViewToggleButton() {
         if (!viewToggleBtn) {
             viewToggleBtn = document.createElement('button');
             viewToggleBtn.id = 'view-toggle';
-            viewToggleBtn.textContent = 'Third Person View';
+            viewToggleBtn.textContent = 'First-Person View';  // Default view mode
             viewToggleBtn.style.position = 'absolute';
             viewToggleBtn.style.bottom = '20px';
-            viewToggleBtn.style.left = '20px';
+            viewToggleBtn.style.right = '20px';
             viewToggleBtn.style.zIndex = '100';
             viewToggleBtn.style.padding = '8px 12px';
-            viewToggleBtn.style.backgroundColor = '#4CAF50';
+            viewToggleBtn.style.backgroundColor = 'rgba(0,0,0,0.6)';
             viewToggleBtn.style.color = 'white';
             viewToggleBtn.style.border = 'none';
             viewToggleBtn.style.borderRadius = '4px';
@@ -155,40 +183,31 @@ function addViewToggleButton() {
 
 // Toggle between first-person and third-person view
 function toggleCameraView() {
-    if (window.isFirstPerson && !window.isFreeCameraMode) {
-        // Switch from first-person to third-person
+    // Toggle between first-person, third-person, and free camera modes
+    if (window.viewMode === 'firstPerson') {
+        window.viewMode = 'thirdPerson';
         window.isFirstPerson = false;
         window.isFreeCameraMode = false;
         switchToThirdPersonView();
-        debug("Switched to third-person view");
-    } else if (!window.isFirstPerson && !window.isFreeCameraMode) {
-        // Switch from third-person to free camera
+    } else if (window.viewMode === 'thirdPerson') {
+        window.viewMode = 'freeCamera';
         window.isFirstPerson = false;
         window.isFreeCameraMode = true;
-        
-        // Store player position for later
-        if (window.room && window.room.state.players) {
-            const playerState = window.room.state.players.get(window.room.sessionId);
-            if (playerState) {
-                window.playerPosition = {
-                    x: playerState.x,
-                    y: playerState.y,
-                    z: playerState.z,
-                    rotationY: playerState.rotationY,
-                    pitch: playerState.pitch
-                };
-            }
-        }
-        
         switchToFreeCameraView();
-        debug("Switched to free camera view");
     } else {
-        // Switch from free camera back to first-person
+        window.viewMode = 'firstPerson';
         window.isFirstPerson = true;
         window.isFreeCameraMode = false;
         switchToFirstPersonView();
-        debug("Switched back to first-person view");
     }
+    
+    // Update UI elements to match the new view mode
+    updateViewModeUI();
+    
+    // Update mouse sensitivity based on new view mode
+    updateMouseSensitivity();
+    
+    console.log(`View mode changed to ${window.viewMode}`);
 }
 
 // First-person setup
@@ -390,26 +409,6 @@ function switchToFreeCameraView() {
     }
 }
 
-function initPlayerNumberblock() {
-    debug('Initializing Player Numberblock (client-side instantiation)');
-    
-    try {
-        playerNumberblock = new Numberblock(window.playerValue || 1);
-        playerNumberblock.mesh.position.set(0, 1, 0); // Adjust initial spawn position explicitly
-        scene.add(playerNumberblock.mesh);
-        
-        window.playerNumberblock = playerNumberblock;  // Explicitly make globally available
-        
-        debug('Player Numberblock successfully initialized client-side');
-        
-        // Update HUD explicitly if needed
-        // updateHUD();
-    } catch (error) {
-        debug(`Error initializing player Numberblock: ${error.message}`, true);
-    }
-}
-
-
 // Main initialization function
 function init() {
     try {
@@ -451,7 +450,10 @@ function init() {
         setupPointerLockControls();
         
         // Initialize the player
-        initPlayerNumberblock();
+        debug('Initializing Player');
+        playerNumberblock = window.createPlayerNumberblock(scene);
+        window.playerNumberblock = playerNumberblock;
+        debug('Player successfully initialized');
        
         // Initialize networking for multiplayer
         window.initNetworking().then((roomInstance) => {
@@ -472,6 +474,32 @@ function init() {
         document.addEventListener('keydown', onKeyDown, false);
         document.addEventListener('keyup', onKeyUp, false);
         
+        // Add mouse event listeners
+        document.addEventListener('mousedown', onMouseDown, false);
+        document.addEventListener('mouseup', onMouseUp, false);
+        document.addEventListener('mousemove', onMouseMove, false);
+        
+        // Handle page visibility changes to reset input state when tab is not active
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // Reset input state when tab loses focus
+                window.moveForward = false;
+                window.moveBackward = false;
+                window.moveLeft = false;
+                window.moveRight = false;
+                window.turnLeft = false;
+                window.turnRight = false;
+                window.inputState.keys = { 
+                    w: false, a: false, s: false, d: false, 
+                    space: false, q: false, e: false, shift: false 
+                };
+                // Force an immediate input update
+                if (window.sendInputUpdate) {
+                    window.sendInputUpdate();
+                }
+            }
+        });
+        
         // Make sure global variables are properly declared
         window.scene = scene;
         window.camera = camera;
@@ -479,6 +507,9 @@ function init() {
         window.controls = controls;
         window.playerNumberblock = playerNumberblock;
         window.playerValue = playerValue;
+        
+        // Expose sendInputUpdate to window for access from other modules
+        window.sendInputUpdate = sendInputUpdate;
         
         // Start the animation loop
         requestAnimationFrame(animate);
@@ -620,7 +651,7 @@ function updatePlayerPhysics(delta) {
         if (player) {
             // Update the player's position based on the server position
             // This ensures server authority while allowing client-side prediction
-            const lerpFactor = 0.2; // Lower value = smoother but more latent transition
+            const lerpFactor = 0.1; // Lower value = smoother but more latent transition
             
             // Smoothly interpolate to the server position
             controlsObject.position.x = THREE.MathUtils.lerp(
@@ -635,17 +666,19 @@ function updatePlayerPhysics(delta) {
                 lerpFactor
             );
             
-            // Only use server Y position if it's significantly different
-            if (Math.abs(controlsObject.position.y - player.y) > 0.5) {
-                controlsObject.position.y = player.y;
-            }
+            // Use server Y position for jumping/falling
+            controlsObject.position.y = THREE.MathUtils.lerp(
+                controlsObject.position.y, 
+                player.y, 
+                lerpFactor * 2  // Faster vertical correction
+            );
             
             // If there's a significant desync, instantly correct position
             const distanceSquared = 
                 Math.pow(controlsObject.position.x - player.x, 2) + 
                 Math.pow(controlsObject.position.z - player.z, 2);
                 
-            if (distanceSquared > 25) { // More than 5 units away
+            if (distanceSquared > 10) { // More than ~3 units away
                 controlsObject.position.x = player.x;
                 controlsObject.position.z = player.z;
                 controlsObject.position.y = player.y;
@@ -657,13 +690,28 @@ function updatePlayerPhysics(delta) {
             
             // Update Numberblock position and scale to match player value
             updatePlayerNumberblock(player.value);
+            
+            // Update player info in UI if available
+            if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
+                window.playerUI.updatePlayerListUI();
+            }
+            
+            playerMoved = true;
         }
     }
     
-    // Also update UI if the player was observed
-    if (playerMoved) {
-        // Update game UI elements
-        updateGameUI();
+    // Use client-side physics for prediction, but will be overridden by server
+    if (!playerMoved) {
+        // Apply gravity
+        velocity.y -= 9.8 * delta;
+        controlsObject.position.y += velocity.y * delta;
+        
+        // Basic ground collision
+        if (controlsObject.position.y < 1) {
+            velocity.y = 0;
+            controlsObject.position.y = 1;
+            window.canJump = true;
+        }
     }
 }
 
@@ -683,13 +731,22 @@ function animate() {
         window.updateControls(controls, delta);
     }
 
+    // Update player physics (server-driven movement)
+    updatePlayerPhysics(delta);
+
     // Check if we have our player state from the server
-    if (window.myPlayer && window.myPlayer.mesh && window.room && window.room.state.players) {
+    if (window.room && window.room.state && window.room.state.players) {
         const playerState = window.room.state.players.get(window.room.sessionId);
         if (playerState) {
             // Always update player mesh position based on server state
-            window.myPlayer.mesh.position.set(playerState.x, playerState.y, playerState.z);
-            window.myPlayer.mesh.rotation.y = playerState.rotationY;
+            if (window.playerNumberblock && window.playerNumberblock.mesh) {
+                // Update the player mesh position
+                window.playerNumberblock.mesh.position.set(playerState.x, playerState.y, playerState.z);
+                window.playerNumberblock.mesh.rotation.y = playerState.rotationY;
+                
+                // Make sure player visibility is properly set based on view mode
+                window.playerNumberblock.mesh.visible = !window.isFirstPerson;
+            }
 
             // Update the camera based on the current view mode
             if (window.isFirstPerson && !window.isFreeCameraMode) {
@@ -702,6 +759,11 @@ function animate() {
                 updateThirdPersonCamera();
             }
         }
+    }
+
+    // Update other players in the scene if available
+    if (typeof window.updateRemotePlayers === 'function') {
+        window.updateRemotePlayers();
     }
 
     renderer.render(scene, camera);
@@ -723,8 +785,25 @@ function sendInputUpdate() {
         const now = performance.now();
         if ((now - window.lastInputTime) > window.inputThrottleMs) {
             window.lastInputTime = now;
+            
+            // Make sure all key states are properly set before sending
+            const keyStates = {
+                w: window.moveForward,
+                a: window.moveLeft, 
+                s: window.moveBackward,
+                d: window.moveRight,
+                space: window.inputState.keys.space || false,
+                q: window.turnLeft || window.inputState.keys.q || false,
+                e: window.turnRight || window.inputState.keys.e || false,
+                shift: window.shiftPressed || false
+            };
+            
+            // Update the global input state to ensure everything is in sync
+            window.inputState.keys = keyStates;
+            
+            // Send the updated input state to server
             window.room.send("updateInput", {
-                keys: window.inputState.keys,
+                keys: keyStates,
                 mouseDelta: {
                     x: window.isFirstPerson ? window.inputState.mouseDelta.x : 0,
                     y: window.isFirstPerson ? window.inputState.mouseDelta.y : 0
@@ -741,6 +820,11 @@ function sendInputUpdate() {
             // Reset mouse delta after sending
             window.inputState.mouseDelta.x = 0;
             window.inputState.mouseDelta.y = 0;
+            
+            // Debug output to confirm inputs are sent
+            if (keyStates.w || keyStates.a || keyStates.s || keyStates.d || keyStates.q || keyStates.e) {
+                console.log("Sending input to server:", keyStates);
+            }
         }
     }
 }
@@ -794,23 +878,42 @@ function updateFirstPersonCamera() {
     const playerState = window.room.state.players.get(window.room.sessionId);
     
     if (playerState) {
-        // Update the camera.position
-        camera.position.set(playerState.x, playerState.y + window.playerHeight, playerState.z);
+        // Update the camera position to match the server player position
+        camera.position.set(
+            playerState.x, 
+            playerState.y + window.playerHeight, 
+            playerState.z
+        );
         
-        // For first-person view, we don't apply server rotationY to camera since it's already handled locally
-        // We only sync these values to the server, not from the server
-        if (window.myPlayer && window.myPlayer.mesh) {
-            // Make sure player mesh rotates with the camera in first-person
-            window.myPlayer.mesh.rotation.y = window.playerRotationY;
+        // Apply rotation from the server OR from local client
+        // We'll use a hybrid approach: server position with client-side rotation for responsiveness
+        // If playerRotationY exists, use that (client-side), otherwise fall back to server
+        const rotationY = (typeof window.playerRotationY !== 'undefined') 
+            ? window.playerRotationY 
+            : playerState.rotationY;
             
-            // Even though the mesh is not visible in first-person, keeping its rotation updated
-            // ensures that when we switch to third-person, the model is facing correctly
-            window.myPlayer.mesh.visible = false;
+        const pitch = (typeof window.firstPersonCameraPitch !== 'undefined')
+            ? window.firstPersonCameraPitch
+            : playerState.pitch;
+            
+        // Apply rotation using quaternion to prevent gimbal lock
+        camera.quaternion.setFromEuler(new THREE.Euler(
+            pitch,
+            rotationY,
+            0,
+            'YXZ'  // Important for proper FPS controls
+        ));
+        
+        // Make sure player mesh is invisible in first-person mode
+        if (window.playerNumberblock && window.playerNumberblock.mesh) {
+            window.playerNumberblock.mesh.visible = false;
+            
+            // Make sure it stays updated with position though
+            window.playerNumberblock.mesh.position.set(playerState.x, playerState.y, playerState.z);
+            window.playerNumberblock.mesh.rotation.y = rotationY;
         }
         
-        // We don't need to apply server-provided rotation to the camera
-        // as we do this locally for better responsiveness
-        // This just updates controls position
+        // Update controls position
         controls.getObject().position.copy(camera.position);
     }
 }
@@ -857,12 +960,15 @@ function updateThirdPersonCamera() {
     // Fix camera orientation
     setThirdPersonCameraOrientation(camera, lookAtPosition, playerState);
     
-    // Show player mesh in third-person
-    if (window.myPlayer && window.myPlayer.mesh) {
-        window.myPlayer.mesh.visible = true;
+    // Show player mesh in third-person and make sure it's updated
+    if (window.playerNumberblock && window.playerNumberblock.mesh) {
+        window.playerNumberblock.mesh.visible = true;
+        
+        // Update position and rotation
+        window.playerNumberblock.mesh.position.set(playerState.x, playerState.y, playerState.z);
         
         // Add subtle rotation smoothing for player mesh
-        const currentRot = window.myPlayer.mesh.rotation.y;
+        const currentRot = window.playerNumberblock.mesh.rotation.y;
         const targetRot = playerState.rotationY;
         
         // Ensure we rotate the shortest way around (handling -π to π transition)
@@ -871,6 +977,40 @@ function updateThirdPersonCamera() {
         if (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
         
         // Apply smooth rotation
-        window.myPlayer.mesh.rotation.y += rotDiff * 0.1;
+        window.playerNumberblock.mesh.rotation.y += rotDiff * 0.1;
+    }
+}
+
+// Create player's block
+debug('Initializing Player');
+player = window.createPlayerNumberblock(scene);
+window.player = player;
+debug('Player successfully initialized');
+
+// Mouse move event handler - capture mouse movement for camera rotation
+function onMouseMove(event) {
+    if (window.controls && window.controls.isLocked) {
+        // Store mouse movement for input state
+        window.inputState.mouseDelta.x += event.movementX;
+        window.inputState.mouseDelta.y += event.movementY;
+    }
+}
+
+// Mouse down event handler
+function onMouseDown(event) {
+    // Left button: 0, Middle: 1, Right: 2
+    if (event.button === 2) {
+        window.rightMouseDown = true;
+    } else if (event.button === 1) {
+        window.middleMouseDown = true;
+    }
+}
+
+// Mouse up event handler
+function onMouseUp(event) {
+    if (event.button === 2) {
+        window.rightMouseDown = false;
+    } else if (event.button === 1) {
+        window.middleMouseDown = false;
     }
 }

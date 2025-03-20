@@ -21,6 +21,7 @@ class PlayerUI {
         const playerList = document.getElementById('player-list');
         if (!playerList) {
             console.warn("Player list element not found");
+            this.createPlayerListUI(); // Create if missing
             return;
         }
         
@@ -28,36 +29,48 @@ class PlayerUI {
             // Clear current list
             playerList.innerHTML = '';
             
-            // Add myself first
+            let playerCount = 0;
+            
+            // Add myself first if available
             if (window.room && window.room.state && window.room.state.players) {
-                const myPlayer = window.room.state.players.get(window.room.sessionId);
-                if (myPlayer) {
-                    this.addPlayerToList(myPlayer, window.room.sessionId, true);
-                }
-            }
-            
-            // Add other players
-            let playerCount = 1; // Start with 1 for myself
-            
-            // Check if other players object exists
-            if (window.otherPlayers) {
-                // Count active players
-                const activePlayers = Object.keys(window.otherPlayers).filter(sessionId => {
-                    const player = window.otherPlayers[sessionId];
-                    return player && (!player.active || player.active);
-                });
-                
-                playerCount += activePlayers.length;
-                
-                // Loop through other players and add to list
-                for (const sessionId in window.otherPlayers) {
-                    const player = window.otherPlayers[sessionId];
+                try {
+                    const mySessionId = window.room.sessionId;
+                    let myPlayer = null;
                     
-                    // Skip inactive players
-                    if (player.active === false) continue;
+                    // Try different methods to get the player data
+                    if (typeof window.room.state.players.get === 'function') {
+                        myPlayer = window.room.state.players.get(mySessionId);
+                    } else if (window.room.state.players[mySessionId]) {
+                        myPlayer = window.room.state.players[mySessionId];
+                    }
                     
-                    // Add to UI
-                    this.addPlayerToList(player, sessionId, false);
+                    if (myPlayer) {
+                        this.addPlayerToList(myPlayer, mySessionId, true);
+                        playerCount++;
+                    } else if (window.playerNumberblock) {
+                        // Fallback to using the player's numberblock object
+                        const fallbackPlayer = {
+                            name: "Me",
+                            value: window.playerNumberblock.value || 1,
+                            color: window.playerNumberblock.color || "#FFFF00"
+                        };
+                        this.addPlayerToList(fallbackPlayer, mySessionId, true);
+                        playerCount++;
+                    }
+                    
+                    // Log for debugging
+                    console.log("Added local player to list. Players map size:", window.room.state.players.size);
+                    
+                    // Add other players - directly iterate over the Schema MapSchema
+                    window.room.state.players.forEach((player, sessionId) => {
+                        if (sessionId !== mySessionId) {
+                            this.addPlayerToList(player, sessionId, false);
+                            playerCount++;
+                            console.log("Added remote player to list:", sessionId, player);
+                        }
+                    });
+                } catch (e) {
+                    console.error("Error iterating through players:", e);
                 }
             }
             
@@ -66,9 +79,6 @@ class PlayerUI {
             if (playerCountElement) {
                 playerCountElement.textContent = `(${playerCount})`;
             }
-            
-            // Set list max height based on number of players
-            playerList.style.maxHeight = `${Math.min(playerCount * 25, 150)}px`;
         } catch (error) {
             console.error("Error updating player list UI:", error);
         }

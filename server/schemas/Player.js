@@ -1,6 +1,7 @@
 const { type } = require("@colyseus/schema");
 const { BaseEntity } = require("./BaseEntity");
 const { InputState } = require("./InputState");
+const { ImplementationDataSchema } = require("./ImplementationDataSchema");
 
 /**
  * Player schema for all player entities
@@ -17,7 +18,7 @@ class Player extends BaseEntity {
         
         // Implementation-specific properties can be added by subclasses
         this.implementationType = ""; // Type of implementation (e.g., "numberblocks")
-        this.implementationData = {}; // Implementation-specific data
+        this.implementationData = new ImplementationDataSchema(); // Implementation-specific data
     }
 }
 
@@ -27,6 +28,6 @@ type("number")(Player.prototype, "pitch");
 type("number")(Player.prototype, "velocityY");
 type(InputState)(Player.prototype, "input");
 type("string")(Player.prototype, "implementationType");
-type("object")(Player.prototype, "implementationData");
+type(ImplementationDataSchema)(Player.prototype, "implementationData");
 
 module.exports = { Player }; 

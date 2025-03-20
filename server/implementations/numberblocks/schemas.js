@@ -1,4 +1,4 @@
-const { Schema, type } = require("@colyseus/schema");
+const { Schema, type, defineTypes } = require("@colyseus/schema");
 const { BaseEntity } = require("../../schemas/BaseEntity");
 const { Player } = require("../../schemas/Player");
 
@@ -40,8 +40,14 @@ class StaticNumberblock extends BaseEntity {
     constructor() {
         super();
         this.type = "staticNumberblock";
+        this.isStatic = true;     // Flag indicating this is a static entity
+        this.isInteractable = true; // Whether this block can be interacted with
     }
 }
+
+// Register only the new properties that aren't already in BaseEntity
+type("boolean")(StaticNumberblock.prototype, "isStatic");
+type("boolean")(StaticNumberblock.prototype, "isInteractable");
 
 module.exports = {
     NumberblockPlayer,

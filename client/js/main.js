@@ -1,28 +1,26 @@
-// 3D AI Game Platform - Main Entry Point
+// 3D Game Platform - Main Entry Point
 
-// Game configuration - can be modified for different implementations
+// Game configuration
 const gameConfig = {
-    implementation: 'numberblocks', // Default implementation
-    debug: false,                  // Debug mode
+    debug: false,                 // Debug mode
     sceneSettings: {
-        groundSize: 100,           // Size of the ground plane
-        skyColor: 0x87CEEB,        // Sky color
-        groundColor: 0x228B22      // Ground color
+        groundSize: 100,          // Size of the ground plane
+        skyColor: 0x87CEEB,       // Sky color
+        groundColor: 0x228B22     // Ground color
     },
     playerSettings: {
-        startValue: 1,             // Starting value for player
         startPosition: {
             x: 0,
             y: 1,
             z: 0
         },
-        viewMode: 'firstPerson'    // 'firstPerson', 'thirdPerson', or 'freeRoam'
+        viewMode: 'firstPerson'   // 'firstPerson', 'thirdPerson', or 'freeRoam'
     },
     networkSettings: {
         serverUrl: window.location.hostname.includes('localhost') 
-            ? `ws://${window.location.hostname}:2567` // Local development
+            ? `ws://${window.location.hostname}:3000` // Local development
             : `wss://${window.location.hostname}`,    // Production
-        roomName: 'game_room'
+        roomName: 'default'       // Default room name
     }
 };
 
@@ -31,28 +29,12 @@ window.gameConfig = gameConfig;
 
 // Main game initialization
 function initGame() {
-    console.log('Initializing 3D AI Game Platform...');
+    console.log('Initializing 3D Game Platform...');
     
-    // Load legacy modules first (these are needed for main-fixed.js)
-    loadLegacyModules()
+    // Load core modules
+    loadCoreModules()
         .then(() => {
-            // Then load the core platform modules
-            return loadCorePlatform();
-        })
-        .then(() => {
-            // Load adapter modules
-            return loadAdapters();
-        })
-        .then(() => {
-            // Set up adapter functions to bridge between new architecture and old code
-            setupAdapterFunctions();
-            // Then load the selected implementation
-            return loadImplementation(gameConfig.implementation);
-        })
-        .then(() => {
-            // Ensure backwards compatibility
-            ensureBackwardsCompatibility();
-            // Initialize the game engine with the loaded implementation
+            // Initialize the game engine
             initGameEngine();
         })
         .catch(error => {
@@ -60,46 +42,11 @@ function initGame() {
         });
 }
 
-// Load legacy modules needed for main-fixed.js
-function loadLegacyModules() {
-    return new Promise((resolve, reject) => {
-        try {
-            console.log('Loading legacy modules...');
-            
-            // These are modules that main-fixed.js directly depends on
-            const legacyModules = [
-                'js/controls.js',
-                'js/network-core.js',
-                'js/numberblock.js', // Used directly by main-fixed.js
-            ];
-            
-            // Load each module in sequence
-            let loadPromise = Promise.resolve();
-            
-            legacyModules.forEach(module => {
-                loadPromise = loadPromise.then(() => {
-                    return loadScript(module);
-                });
-            });
-            
-            // Resolve when all legacy modules are loaded
-            loadPromise.then(() => {
-                console.log('Legacy modules loaded successfully');
-                resolve();
-            }).catch(error => {
-                reject(error);
-            });
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
-
 // Load core platform modules
-function loadCorePlatform() {
+function loadCoreModules() {
     return new Promise((resolve, reject) => {
         try {
-            console.log('Loading core platform...');
+            console.log('Loading core modules...');
             
             // Create core module paths
             const corePath = 'js/core/';
@@ -110,6 +57,8 @@ function loadCorePlatform() {
                 'EntityFactory.js',
                 'collision.js',
                 'player-ui.js',
+                'network-core.js',
+                'controls.js'
             ];
             
             // Load each module in sequence
@@ -123,7 +72,7 @@ function loadCorePlatform() {
             
             // Resolve when all core modules are loaded
             loadPromise.then(() => {
-                console.log('Core platform loaded successfully');
+                console.log('Core modules loaded successfully');
                 resolve();
             }).catch(error => {
                 reject(error);
@@ -131,104 +80,6 @@ function loadCorePlatform() {
         } catch (error) {
             reject(error);
         }
-    });
-}
-
-// Load adapter modules
-function loadAdapters() {
-    return new Promise((resolve, reject) => {
-        try {
-            console.log('Loading adapter modules...');
-            
-            // Adapter modules to bridge between old and new architecture
-            const adapterPath = 'js/core/';
-            const adapterModules = [
-                'network-adapter.js',
-                'controls-adapter.js',
-                'numberblock-adapter.js',
-            ];
-            
-            // Load each module in sequence
-            let loadPromise = Promise.resolve();
-            
-            adapterModules.forEach(module => {
-                loadPromise = loadPromise.then(() => {
-                    return loadScript(adapterPath + module);
-                });
-            });
-            
-            // Resolve when all adapter modules are loaded
-            loadPromise.then(() => {
-                console.log('Adapter modules loaded successfully');
-                resolve();
-            }).catch(error => {
-                reject(error);
-            });
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
-
-// Set up adapter functions to bridge between new modules and old code
-function setupAdapterFunctions() {
-    console.log('Setting up adapter functions...');
-    
-    // These should now be handled by the adapter modules
-}
-
-// Load implementation-specific modules
-function loadImplementation(implementation) {
-    return new Promise((resolve, reject) => {
-        try {
-            console.log(`Loading ${implementation} implementation...`);
-            
-            // For Numberblocks, we've already loaded the primary implementation file
-            // Just load any additional files and register it
-            if (implementation === 'numberblocks') {
-                // Skip loading NumberBlock.js since it's causing conflicts
-                loadScript(`js/implementations/${implementation}/operator.js`)
-                    .then(() => {
-                        console.log(`${implementation} implementation loaded successfully`);
-                        resolve();
-                    })
-                    .catch(error => {
-                        console.warn(`Error loading operator.js: ${error}, continuing anyway`);
-                        resolve(); // Continue anyway
-                    });
-            } else {
-                // For other implementations, load all files
-                const implPath = `js/implementations/${implementation}/`;
-                
-                loadScript(implPath + 'index.js')
-                    .then(() => {
-                        console.log(`${implementation} implementation loaded successfully`);
-                        resolve();
-                    })
-                    .catch(error => {
-                        reject(error);
-                    });
-            }
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
-
-// Ensure backwards compatibility with main-fixed.js
-function ensureBackwardsCompatibility() {
-    console.log('Ensuring backwards compatibility...');
-    
-    // These should now be handled by the adapter modules
-    
-    // Set up isFirstPerson for view mode
-    window.isFirstPerson = gameConfig.playerSettings.viewMode === 'firstPerson';
-    
-    // Set up event to notify when the game is fully loaded
-    window.addEventListener('load', function() {
-        // Create and dispatch a custom event
-        const gameLoadedEvent = new Event('gameLoaded');
-        window.dispatchEvent(gameLoadedEvent);
     });
 }
 
@@ -236,11 +87,39 @@ function ensureBackwardsCompatibility() {
 function initGameEngine() {
     console.log('Initializing game engine...');
     
-    // Now load the main game engine script
-    // This script will use the loaded modules and create the actual game
-    loadScript('js/main-fixed.js')
+    // Initialize default player factory first
+    window.createPlayerNumberblock = function(scene, value = 1) {
+        // Create a simple player with a box
+        const player = new window.Player({
+            id: 'player',
+            isLocalPlayer: true,
+            color: 0xFFFF00
+        });
+        
+        if (scene && player.mesh) {
+            scene.add(player.mesh);
+        }
+        
+        return player;
+    };
+    
+    // Load default implementation
+    loadScript('js/implementations/default/DefaultPlayer.js')
+        .then(() => {
+            // Load the game engine
+            return loadScript('js/core/game-engine.js');
+        })
         .then(() => {
             console.log('Game engine loaded');
+            // Remove the loading screen once everything is loaded
+            const loadingScreen = document.getElementById('loading-screen');
+            if (loadingScreen) {
+                loadingScreen.style.display = 'none';
+            }
+            
+            // Set isFirstPerson based on viewMode
+            window.isFirstPerson = gameConfig.playerSettings.viewMode === 'firstPerson';
+            window.viewMode = gameConfig.playerSettings.viewMode;
         })
         .catch(error => {
             console.error('Error loading game engine:', error);

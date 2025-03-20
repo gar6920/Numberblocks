@@ -85,7 +85,7 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Each implementation will be contained in its own directory
 - Will register custom entity factories and behaviors
 
-### 4. Main Engine (main-fixed.js)
+### 4. Main Engine (game-engine.js)
 - Initializes the Three.js scene, renderer, and camera
 - Sets up player controls and world objects
 - Loads the appropriate game implementation based on configuration
@@ -122,23 +122,45 @@ Each game implementation extends the core platform with specific gameplay mechan
 │   ├── index.html          # Main HTML file
 │   ├── css/                # Stylesheets
 │   └── js/                 # JavaScript files
-│       ├── main-fixed.js   # Main initialization and game loop
+│       ├── main.js         # Entry point and module loader
 │       ├── core/           # Core platform code
+│       │   ├── game-engine.js # Main game engine and rendering
 │       │   ├── Entity.js   # Base entity class
 │       │   ├── Player.js   # Base player class
 │       │   ├── NPC.js      # Base NPC class
 │       │   ├── controls.js # Camera and movement controls
 │       │   ├── network-core.js # Networking functionality
+│       │   ├── numberblock-adapter.js # Adapter for Numberblocks
 │       │   ├── collision.js    # Collision detection
 │       │   ├── EntityFactory.js # Entity creation factory
 │       │   └── player-ui.js    # UI components
 │       ├── implementations/ # Game-specific implementations
+│       │   ├── default/     # Default box implementation
+│       │   │   └── DefaultPlayer.js # Simple box player
 │       │   ├── numberblocks/  # Numberblocks implementation
-│       │   │   ├── numberblock.js # Numberblock entity
+│       │   │   ├── NumberBlock.js # Numberblock entity
+│       │   │   ├── entity-sync.js # Entity synchronization
 │       │   │   ├── operator.js    # Mathematical operators
-│       │   │   └── assets/        # Numberblocks assets
+│       │   │   └── index.js       # Implementation entry point
 │       │   └── [future implementations]
 │       └── lib/            # Third-party libraries
+├── server/                 # Server-side code
+│   ├── index.js            # Server entry point
+│   ├── core/               # Core server functionality
+│   │   └── BaseRoom.js     # Base room implementation
+│   ├── schemas/            # Colyseus schema definitions
+│   │   ├── BaseEntity.js   # Base entity schema
+│   │   ├── DefaultRoom.js  # Default room implementation
+│   │   ├── GameState.js    # Game state schema
+│   │   ├── Player.js       # Player schema
+│   │   └── InputState.js   # Input state schema
+│   └── implementations/    # Server-side implementations
+│       ├── default/        # Default implementation
+│       │   └── index.js    # Default implementation entry point
+│       └── numberblocks/   # Numberblocks implementation
+│           ├── index.js    # Implementation entry point
+│           ├── schemas.js  # Numberblocks-specific schemas
+│           └── NumberblocksRoom.js # Numberblocks room implementation
 ├── public/                 # Static assets
 └── node_modules/           # Node.js modules
 ```

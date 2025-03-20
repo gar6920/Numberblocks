@@ -9,10 +9,12 @@ const { Server } = require('colyseus');
 const path = require('path');
 
 // Import implementations
+const DefaultImpl = require('./implementations/default');
 const NumberblocksImpl = require('./implementations/numberblocks');
 
 // Available implementations
 const implementations = {
+    "default": DefaultImpl,
     "numberblocks": NumberblocksImpl
 };
 
@@ -58,12 +60,12 @@ class GameServer {
         // Register each implementation's room
         for (const [implName, impl] of Object.entries(implementations)) {
             console.log(`Registering implementation: ${implName}`);
-            this.gameServer.define(impl.implementation.roomType, impl.NumberblocksRoom);
-            
-            // Also define the room with the old name for backwards compatibility
-            if (implName === 'numberblocks') {
-                this.gameServer.define('numberblocks', impl.NumberblocksRoom);
-            }
+            this.gameServer.define(impl.implementation.roomType, impl.DefaultRoom || impl.NumberblocksRoom);
+        }
+        
+        // Set default room as the fallback
+        if (implementations.default) {
+            this.gameServer.define('default', implementations.default.DefaultRoom);
         }
     }
     
@@ -73,7 +75,7 @@ class GameServer {
      */
     start(port = 3000) {
         this.server.listen(port, () => {
-            console.log(`3D AI Game Platform server running on http://localhost:${port}`);
+            console.log(`3D Game Platform server running on http://localhost:${port}`);
             console.log(`Available implementations: ${Object.keys(implementations).join(', ')}`);
         });
     }

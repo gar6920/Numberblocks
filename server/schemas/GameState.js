@@ -1,5 +1,6 @@
 const { Schema, MapSchema, type } = require("@colyseus/schema");
 const { Player } = require("./Player");
+const { GameConfigSchema } = require("./GameConfigSchema");
 
 /**
  * Game state schema for the entire game
@@ -14,19 +15,14 @@ class GameState extends Schema {
         // All entities in the game - can be implementation-specific
         this.entities = new MapSchema();
         
-        // Game configuration and state
-        this.gameConfig = {
-            implementation: "numberblocks", // Default implementation
-            mode: "standard",               // Game mode
-            maxPlayers: 10,                 // Maximum number of players
-            mapSize: 40                     // Size of the map
-        };
+        // Game configuration and state - using schema instead of plain object
+        this.gameConfig = new GameConfigSchema();
     }
 }
 
 // Register schema types
 type({ map: Player })(GameState.prototype, "players");
 type({ map: Schema })(GameState.prototype, "entities");
-type("object")(GameState.prototype, "gameConfig");
+type(GameConfigSchema)(GameState.prototype, "gameConfig");
 
 module.exports = { GameState }; 

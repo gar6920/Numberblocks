@@ -8,7 +8,7 @@ window.moveRight = false;
 window.turnLeft = false;    // For diagonal movement forward-left
 window.turnRight = false;   // For diagonal movement forward-right
 window.canJump = false;
-// isFirstPerson is a global variable attached to the window object in main-fixed.js
+// isFirstPerson is a global variable attached to the window object in game-engine.js
 window.prevTime = performance.now();
 window.velocity = new THREE.Vector3();
 window.direction = new THREE.Vector3();
@@ -55,13 +55,16 @@ window.mouseSensitivity = {
   current: 1.0         // Current sensitivity based on view mode
 };
 
+// Add a global viewMode state variable
+window.viewMode = 'firstPerson'; // Values: 'firstPerson', 'thirdPerson', 'freeCamera'
+
 // Initialize controls for the camera
 window.initControls = function(camera, domElement) {
     console.log("Initializing PointerLockControls properly...");
 
     const controls = new THREE.PointerLockControls(camera, domElement);
     
-    // We don't need a click listener here anymore - it's handled in main-fixed.js
+    // We don't need a click listener here anymore - it's handled in game-engine.js
 
     controls.addEventListener('lock', () => {
         const instructions = document.getElementById('lock-instructions');
@@ -221,10 +224,15 @@ window.initControls = function(camera, domElement) {
 
 // Update mouse sensitivity based on current view mode
 function updateMouseSensitivity() {
-    window.mouseSensitivity.current = window.isFirstPerson 
-        ? window.mouseSensitivity.firstPerson 
-        : window.mouseSensitivity.thirdPerson;
-    console.log(`Updated mouse sensitivity to ${window.mouseSensitivity.current} (${window.isFirstPerson ? 'first-person' : 'third-person'} mode)`);
+    if (window.viewMode === 'firstPerson') {
+        window.mouseSensitivity.current = window.mouseSensitivity.firstPerson;
+    } else if (window.viewMode === 'thirdPerson') {
+        window.mouseSensitivity.current = window.mouseSensitivity.thirdPerson;
+    } else {
+        // Free camera uses first-person sensitivity
+        window.mouseSensitivity.current = window.mouseSensitivity.firstPerson;
+    }
+    console.log(`Updated mouse sensitivity to ${window.mouseSensitivity.current} (${window.viewMode} mode)`);
 }
 
 // Function to get the forward direction based on camera orientation in third-person mode
@@ -277,11 +285,11 @@ function onKeyDown(event) {
             break;
             
         case 'Space':
+            window.canJump = false; // Reset jump ability until ground collision
             window.inputState.keys.space = true;
-            if (window.canJump) {
-                // Apply a physically accurate jump velocity
+            // Client-side jump for prediction - server will override with authority
+            if (window.velocity) {
                 window.velocity.y = Math.sqrt(window.jumpHeight * 2 * 9.8);
-                window.canJump = false;
             }
             break;
 
@@ -291,7 +299,17 @@ function onKeyDown(event) {
         case 'ShiftLeft':
         case 'ShiftRight':
             window.shiftPressed = true;
+            window.inputState.keys.shift = true;
             break;
+    }
+    
+    // Force an immediate input update to minimize latency
+    if (window.sendInputUpdate && 
+        (event.code === 'KeyW' || event.code === 'KeyA' || 
+         event.code === 'KeyS' || event.code === 'KeyD' || 
+         event.code === 'KeyQ' || event.code === 'KeyE' || 
+         event.code === 'Space')) {
+        window.sendInputUpdate();
     }
 }
 
@@ -338,7 +356,17 @@ function onKeyUp(event) {
         case 'ShiftLeft':
         case 'ShiftRight':
             window.shiftPressed = false;
+            window.inputState.keys.shift = false;
             break;
+    }
+    
+    // Force an immediate input update to minimize latency
+    if (window.sendInputUpdate && 
+        (event.code === 'KeyW' || event.code === 'KeyA' || 
+         event.code === 'KeyS' || event.code === 'KeyD' || 
+         event.code === 'KeyQ' || event.code === 'KeyE' || 
+         event.code === 'Space')) {
+        window.sendInputUpdate();
     }
 }
 
@@ -424,5 +452,61 @@ function updateFreeCameraMovement(delta) {
     }
     if (window.shiftPressed) { 
         window.camera.position.addScaledVector(up, -moveSpeed);
+    }
+}
+
+// Function to toggle between camera views
+window.toggleCameraView = function() {
+    if (window.viewMode === 'firstPerson') {
+        window.viewMode = 'thirdPerson';
+        window.isFirstPerson = false;
+        window.isFreeCameraMode = false;
+        console.log("[DEBUG] Switched to third-person view");
+    } else if (window.viewMode === 'thirdPerson') {
+        window.viewMode = 'freeCamera';
+        window.isFirstPerson = false;
+        window.isFreeCameraMode = true;
+        // Save player position for free camera starting point
+        if (window.playerNumberblock && window.playerNumberblock.mesh) {
+            const pos = window.playerNumberblock.mesh.position.clone();
+            pos.y += 3; // Start slightly above the player
+            window.camera.position.copy(pos);
+        }
+        console.log("[DEBUG] Switched to free camera view");
+    } else {
+        window.viewMode = 'firstPerson';
+        window.isFirstPerson = true;
+        window.isFreeCameraMode = false;
+        console.log("[DEBUG] Switched back to first-person view");
+    }
+    
+    // Update mouse sensitivity for the new view mode
+    updateMouseSensitivity();
+    
+    // Update UI for new view mode
+    updateViewModeUI();
+    
+    // Update view toggle button with current mode
+    const viewToggleBtn = document.getElementById('view-toggle');
+    if (viewToggleBtn) {
+        if (window.viewMode === 'firstPerson') {
+            viewToggleBtn.textContent = 'First-Person View';
+        } else if (window.viewMode === 'thirdPerson') {
+            viewToggleBtn.textContent = 'Third-Person View';
+        } else {
+            viewToggleBtn.textContent = 'Free Camera View';
+        }
+    }
+    
+    // Return to prevent recursion
+    return window.viewMode;
+};
+
+// Function to update the UI based on view mode
+function updateViewModeUI() {
+    // Do NOT show click instructions/overlay when switching views
+    const instructions = document.getElementById('lock-instructions');
+    if (instructions) {
+        instructions.style.display = 'none';
     }
 }
