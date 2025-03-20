@@ -362,3 +362,4 @@ window.updatePlayerListUI = updatePlayerListUI;
 window.processExistingPlayers = processExistingPlayers;
 window.checkAndUpdatePlayers = checkAndUpdatePlayers;
 window.setupPlayerPolling = setupPlayerPolling;
+

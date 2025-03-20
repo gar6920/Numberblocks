@@ -48,6 +48,10 @@ let lastPositionUpdate = 0;
 let inputUpdateInterval = 1000 / 30; // 30Hz input updates
 let lastInputUpdate = 0;
 
+// Add variables for input throttling
+window.inputThrottleMs = 16; // Send inputs roughly every frame (60fps = 16.67ms)
+window.lastInputTime = 0;
+
 // Initialize physics variables and flags
 function initPhysics() {
     try {
@@ -687,79 +691,15 @@ function animate() {
             window.myPlayer.mesh.position.set(playerState.x, playerState.y, playerState.z);
             window.myPlayer.mesh.rotation.y = playerState.rotationY;
 
-            // Handle view-specific camera updates
+            // Update the camera based on the current view mode
             if (window.isFirstPerson && !window.isFreeCameraMode) {
-                // First-person: Directly update camera with player state
-                const playerState = window.room.state.players.get(window.room.sessionId);
-                
-                if (playerState) {
-                    // Position the camera at the player's head height
-                    camera.position.set(
-                        playerState.x,
-                        playerState.y + window.playerHeight,
-                        playerState.z
-                    );
-                    
-                    // Use quaternion to set camera rotation (prevents gimbal lock)
-                    camera.quaternion.setFromEuler(new THREE.Euler(
-                        playerState.pitch,
-                        playerState.rotationY + Math.PI,
-                        0,
-                        'YXZ' // Important for proper FPS controls
-                    ));
-                    
-                    // Hide player mesh in first-person
-                    window.myPlayer.mesh.visible = false;
-                }
+                // First-person camera updates
+                updateFirstPersonCamera();
             } else if (window.isFreeCameraMode) {
-                // Free camera: Do nothing, camera is controlled independently
+                // Free camera mode - no update needed, handled by controls
             } else {
-                // Third-person: Position camera behind player with smooth follow
-                
-                // Calculate ideal camera position based on orbit angles
-                const theta = window.thirdPersonCameraOrbitX;
-                const phi = window.thirdPersonCameraOrbitY;
-                
-                // Calculate camera position based on spherical coordinates
-                const distance = window.thirdPersonCameraDistance;
-                const offsetX = distance * Math.sin(theta) * Math.cos(phi);
-                const offsetY = distance * Math.sin(phi);
-                const offsetZ = distance * Math.cos(theta) * Math.cos(phi);
-                
-                // Target position (slightly above player's head)
-                const lookAtPosition = new THREE.Vector3(
-                    playerState.x,
-                    playerState.y + window.playerHeight * 0.7, // Look at player's upper body
-                    playerState.z
-                );
-                
-                // Set camera position
-                const targetCameraPos = new THREE.Vector3(
-                    playerState.x + offsetX,
-                    playerState.y + offsetY + window.playerHeight * 0.5,
-                    playerState.z + offsetZ
-                );
-                
-                // Smooth camera movement
-                camera.position.lerp(targetCameraPos, 0.2);
-                
-                // Fix camera orientation
-                setThirdPersonCameraOrientation(camera, lookAtPosition, playerState);
-                
-                // Show player mesh in third-person
-                window.myPlayer.mesh.visible = true;
-                
-                // Add subtle rotation smoothing for player mesh
-                const currentRot = window.myPlayer.mesh.rotation.y;
-                const targetRot = playerState.rotationY;
-                
-                // Ensure we rotate the shortest way around (handling -π to π transition)
-                let rotDiff = targetRot - currentRot;
-                if (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
-                if (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
-                
-                // Apply smooth rotation
-                window.myPlayer.mesh.rotation.y += rotDiff * 0.1;
+                // Third-person camera updates
+                updateThirdPersonCamera();
             }
         }
     }
@@ -780,19 +720,28 @@ function sendInputUpdate() {
     }
 
     if (window.room) {
-        window.room.send("input", {
-            keys: window.inputState.keys,
-            mouseDelta: {
-                x: window.isFirstPerson ? window.inputState.mouseDelta.x : 0,
-                y: window.isFirstPerson ? window.inputState.mouseDelta.y : 0
-            },
-            viewMode: window.isFirstPerson ? "first-person" : "third-person",
-            thirdPersonCameraAngle: window.thirdPersonCameraOrbitX
-        });
-        
-        // Reset accumulated mouse movement after sending to server
-        window.inputState.mouseDelta.x = 0;
-        window.inputState.mouseDelta.y = 0;
+        const now = performance.now();
+        if ((now - window.lastInputTime) > window.inputThrottleMs) {
+            window.lastInputTime = now;
+            window.room.send("updateInput", {
+                keys: window.inputState.keys,
+                mouseDelta: {
+                    x: window.isFirstPerson ? window.inputState.mouseDelta.x : 0,
+                    y: window.isFirstPerson ? window.inputState.mouseDelta.y : 0
+                },
+                viewMode: window.isFirstPerson ? "first-person" : "third-person",
+                thirdPersonCameraAngle: window.thirdPersonCameraOrbitX,
+                // Send direct rotation values for immediate application on server
+                clientRotation: {
+                    rotationY: window.playerRotationY || 0,
+                    pitch: window.firstPersonCameraPitch || 0
+                }
+            });
+            
+            // Reset mouse delta after sending
+            window.inputState.mouseDelta.x = 0;
+            window.inputState.mouseDelta.y = 0;
+        }
     }
 }
 
@@ -837,4 +786,91 @@ function updateThirdPersonCameraPosition() {
         cameraPosition,
         new THREE.Vector3(playerState.x, playerState.y, playerState.z)
     );
+}
+
+// Handle view-specific camera updates
+function updateFirstPersonCamera() {
+    // First-person: Directly update camera with player state
+    const playerState = window.room.state.players.get(window.room.sessionId);
+    
+    if (playerState) {
+        // Update the camera.position
+        camera.position.set(playerState.x, playerState.y + window.playerHeight, playerState.z);
+        
+        // For first-person view, we don't apply server rotationY to camera since it's already handled locally
+        // We only sync these values to the server, not from the server
+        if (window.myPlayer && window.myPlayer.mesh) {
+            // Make sure player mesh rotates with the camera in first-person
+            window.myPlayer.mesh.rotation.y = window.playerRotationY;
+            
+            // Even though the mesh is not visible in first-person, keeping its rotation updated
+            // ensures that when we switch to third-person, the model is facing correctly
+            window.myPlayer.mesh.visible = false;
+        }
+        
+        // We don't need to apply server-provided rotation to the camera
+        // as we do this locally for better responsiveness
+        // This just updates controls position
+        controls.getObject().position.copy(camera.position);
+    }
+}
+
+// Handle view-specific camera updates
+function updateThirdPersonCamera() {
+    // Get player state
+    const playerState = window.room.state.players.get(window.room.sessionId);
+    if (!playerState) return;
+    
+    // Third-person: Position camera behind player with smooth follow
+    
+    // First, update the camera orbit angle to match the player's rotation
+    // This makes the camera follow behind the player when they rotate with Q and E
+    window.thirdPersonCameraOrbitX = playerState.rotationY;
+    
+    // Calculate ideal camera position based on orbit angles
+    const theta = window.thirdPersonCameraOrbitX;
+    const phi = window.thirdPersonCameraOrbitY;
+    
+    // Calculate camera position based on spherical coordinates
+    const distance = window.thirdPersonCameraDistance;
+    const offsetX = distance * Math.sin(theta) * Math.cos(phi);
+    const offsetY = distance * Math.sin(phi);
+    const offsetZ = distance * Math.cos(theta) * Math.cos(phi);
+    
+    // Target position (slightly above player's head)
+    const lookAtPosition = new THREE.Vector3(
+        playerState.x,
+        playerState.y + window.playerHeight * 0.7, // Look at player's upper body
+        playerState.z
+    );
+    
+    // Set camera position
+    const targetCameraPos = new THREE.Vector3(
+        playerState.x + offsetX,
+        playerState.y + offsetY + window.playerHeight * 0.5,
+        playerState.z + offsetZ
+    );
+    
+    // Smooth camera movement
+    camera.position.lerp(targetCameraPos, 0.2);
+    
+    // Fix camera orientation
+    setThirdPersonCameraOrientation(camera, lookAtPosition, playerState);
+    
+    // Show player mesh in third-person
+    if (window.myPlayer && window.myPlayer.mesh) {
+        window.myPlayer.mesh.visible = true;
+        
+        // Add subtle rotation smoothing for player mesh
+        const currentRot = window.myPlayer.mesh.rotation.y;
+        const targetRot = playerState.rotationY;
+        
+        // Ensure we rotate the shortest way around (handling -π to π transition)
+        let rotDiff = targetRot - currentRot;
+        if (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+        if (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+        
+        // Apply smooth rotation
+        window.myPlayer.mesh.rotation.y += rotDiff * 0.1;
+    }
 }

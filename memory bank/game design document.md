@@ -1,58 +1,26 @@
-Numberblocks FPS Game Design Document
-Introduction
-This document outlines the design for a multiplayer, browser-based, first-person perspective game inspired by the Numberblocks TV show. Players take on the role of Numberblocks, collect mathematical operators, and interact with other players to change their numerical values, aiming to achieve specific objectives in a fun and engaging way.
-Overview
+# Game Design Document
+## Introduction
+The Numberblocks game is a 3D web-based game built with Three.js and Colyseus, utilizing a client-server architecture for multiplayer functionality. Players control customizable  characters and interact with a colorful 3D environment.  One application is numberblocks but it can be extended to other applications.
+
+## Overview
 In this game, players navigate a colorful 3D world as Numberblocks, each representing a number. By collecting floating plus (+) and minus (-) operators and bumping into other players, they can add or subtract the other player's number from their own, altering their value. The game offers various modes, such as reaching a target number or eliminating opponents by reducing them to zero.
-Core Mechanics
+
+## Core Mechanics
 Player Movement
-Players move in a first-person perspective with standard FPS controls:
-WASD or arrow keys: Move forward, backward, left, and right.
-
-Mouse: Look around.
-
-Spacebar: Jump 
-
-Operator Collection
-Plus (+) and minus (-) operators spawn randomly across the game world.
-
-Players collect an operator by running into it and can hold only one at a time.
-
-Operators are visually distinct (e.g., a glowing "+" or "−") and float slightly above the ground.
-
-Bumping Interaction
-When a player with an operator bumps into another player, the operator is applied:
-Plus Operator (+): The initiating player's number becomes their current number plus the other player's number (e.g., 3 + 2 = 5).
-
-Minus Operator (-): The initiating player's number becomes their current number minus the other player's number (e.g., 3 - 2 = 1).
-
-The other player's number remains unchanged.
-
-The operator is consumed after use, requiring the player to collect a new one.
-
-Number Changes
-As a player's number changes, their character model updates:
-Larger numbers grow in size (e.g., a Numberblock of 10 is bigger than one of 1).  The player's avatar is blocks that amount to their number.
-
-Optional balancing: Larger numbers move slower but resist displacement, while smaller numbers are faster but more vulnerable.
+Players move in a first-person, third person, or free roam camera only perspective with standard gaming controls.
 
 Game World
 Visual Style
-The environment is bright, blocky, and inspired by the Numberblocks aesthetic.
+The environment is bright, colorful, with typical outdoor landscape.  
 
 Features include platforms, ramps, hiding spots, and open areas for player interaction.
-
-Maps
-Multiple themed maps:
-Number Forest: Trees and terrain shaped like numbers.
-
-Block City: A city of colorful block buildings.
-
-Mathematical Playground: A playful area with slides and obstacles.
 
 Maps encourage exploration and strategic positioning.
 
 Interactive Elements
-Some areas may require a specific number to access (e.g., a gate that opens only for players ≥ 10).
+Some areas may require a specific criteria to access.
+
+Can interact in objects in various ways determined by the game.
 
 Player Characters
 Appearance

@@ -1,7 +1,7 @@
 # Numberblocks Game - Architecture
 
 ## Overview
-The Numberblocks game is a 3D web-based educational game built with Three.js and Colyseus, utilizing a client-server architecture for multiplayer functionality. Players control customizable Numberblock characters that can interact with mathematical operators and other Numberblocks in a colorful 3D environment.
+The Numberblocks game is a 3D web-based game built with Three.js and Colyseus, utilizing a client-server architecture for multiplayer functionality. Players control customizable  characters and interact with a colorful 3D environment.  One application is numberblocks but it can be extended to other applications.
 
 ## Core Components
 
@@ -10,16 +10,16 @@ The Numberblocks game is a 3D web-based educational game built with Three.js and
 
 **Responsibilities:**
 - Manages game rooms and player connections/disconnections
-- Maintains the authoritative game state, including player positions, Numberblock values, and static Numberblocks
-- Processes player inputs (e.g., movement, operator collection, Numberblock collisions)
+- Maintains the authoritative game state
+- Processes player inputs (e.g., movement, collisions)
 - Broadcasts state updates to all connected clients
-- Handles operator spawning and lifecycle management
+- Handles entity spawning and lifecycle management
 
 **Key Features:**
 - Room-based multiplayer with session persistence
 - State synchronization using Colyseus schema
 - Server-authoritative position tracking
-- Dynamic operator spawning system
+- Dynamic entity spawning system
 
 ### 2. Client (/client)
 The client is responsible for rendering the game, handling user inputs, and communicating with the server.
@@ -28,41 +28,29 @@ The client is responsible for rendering the game, handling user inputs, and comm
 - **main-fixed.js:**
   - Initializes the Three.js scene, renderer, and camera
   - Sets up player controls and world objects
-  - Manages view modes (first-person and third-person)
+  - Manages view modes (first-person, third person, free roam)
   - Updates visual components based on server state
 
 - **network-core.js:**
   - Establishes and maintains WebSocket connection to the server via Colyseus
-  - Sends player actions to the server (movement, operator collection, collisions)
+  - Sends player actions to the server
   - Processes state updates from the server
   - Handles player joining/leaving events
 
 - **numberblock.js:**
-  - Defines the Numberblock class for rendering player characters
+  - Defines all classes specific to the numberblock implementation of the gamethe Numberblock class for rendering player characters
   - Creates dynamic block stacks based on numeric value
   - Manages visual elements (face, arms, feet, colors)
-  - Handles value-based visual updates
-
-- **operator.js:**
-  - Manages mathematical operators (addition, subtraction)
-  - Handles visual representation and animation
-  - Provides collision detection support
+  
 
 - **controls.js:**
   - Handles player movement and camera controls
-  - Supports both first-person and third-person view modes
+  - Supports first-person, third person, and free roam view modes
   - Manages input handling for keyboard and mouse
   - Implements quaternion-based rotation for smooth camera movement
 
-- **collision.js:**
-  - Implements collision detection between game entities
-  - Supports player-operator and player-numberblock interactions
-
 - **Entity.js, Player.js, NPC.js, EntityFactory.js:**
-  - Implements entity component system architecture
-  - Provides base classes for all game entities
-  - Manages entity tracking, creation, and removal
-  - Handles entity refreshing when browser tabs regain focus
+  - UNCLEAR TO ME THE SEPARATION OF RESPONSIBILITY HERE
 
 ### 3. Networking Architecture
 **Technology:** Colyseus for WebSocket-based real-time multiplayer.
@@ -79,40 +67,15 @@ The client is responsible for rendering the game, handling user inputs, and comm
 - Message-based communication for game events
 - Schema-based state synchronization with type annotations
 - Player list UI showing all connected players
-- Visibility change detection for inactive browser tabs
-- Comprehensive entity refresh system for reactivated tabs
 
 **Schema Implementation:**
 - Proper MapSchema collections for players, operators, and static objects
 - Type annotations for all schema properties
 - Structured synchronization patterns for consistent state updates
-- Multiple client-side approaches to handle schema data access
-- Robust fallback methods for handling different Colyseus schema implementations
+
 
 ## File Structure
-```
-/
-├── client/                  # Client-side code and assets
-│   ├── index.html           # Main HTML entry point
-│   ├── css/
-│   │   └── styles.css       # Game styling
-│   └── js/
-│       ├── main-fixed.js    # Core game logic and rendering
-│       ├── network-core.js  # Networking and state synchronization
-│       ├── numberblock.js   # Numberblock entity implementation
-│       ├── operator.js      # Mathematical operator implementation
-│       ├── controls.js      # Player movement and camera controls
-│       ├── collision.js     # Collision detection system
-│       ├── Entity.js        # Base entity class
-│       ├── Player.js        # Player entity implementation
-│       ├── NPC.js           # Non-player character implementation
-│       └── EntityFactory.js # Entity management system
-├── server.js                # Server implementation with Colyseus
-├── package.json             # Project dependencies
-└── memory bank/             # Project documentation
-    ├── architecture.md      # This file
-    └── progress.md          # Development progress
-```
+
 
 ## Communication Flow
 1. **Initialization:**
@@ -121,27 +84,24 @@ The client is responsible for rendering the game, handling user inputs, and comm
    - Server assigns a session ID and initializes player state
 
 2. **Gameplay Loop:**
-   - Client captures user inputs (movement, view changes)
-   - Client sends inputs to server at regular intervals
-   - Server validates and processes inputs
-   - Server updates game state (player positions, operator spawning, etc.)
+   - Client captures user inputs and sends movements that affect player character to server (movements, actions, etc.)   - Server validates and processes inputs
+   - Server updates game state
    - Server broadcasts updated state to all clients
    - Each client renders the updated game state
 
 3. **Interactions:**
-   - Client detects local collisions (player-operator, player-numberblock)
-   - Client sends interaction events to server
+   - Client detects local collisions (player-operator, player-numberblock) and sends interaction events to server
    - Server validates interaction and updates game state accordingly
    - Server broadcasts the updated state to all clients
 
 ## Key Features
-- **Dual View Modes:** First-person and third-person camera options
-- **Dynamic Numberblocks:** Visual representation changes based on numeric value
-- **Mathematical Interactions:** Addition and subtraction operators affect Numberblock values
+- **Triple View Modes:** First-person, third-person, and free roam
 - **Multiplayer Support:** Multiple players can join the same game world
 - **Persistence:** Session reconnection support
 - **Browser Tab Synchronization:** Automatically updates game state when inactive tabs become active
 - **Entity Component System:** Flexible architecture for game entity management
+- **Dynamic Numberblocks:** Visual representation changes based on numeric value
+- **Mathematical Interactions:** Addition and subtraction operators affect Numberblock values
 
 ## Future Enhancements
 - Advanced operator types (multiplication, division)
