@@ -11,9 +11,10 @@ class InputState extends Schema {
     constructor() {
         super();
         // Default initialization for input state
-        this.keys = { w: false, a: false, s: false, d: false, space: false };
+        this.keys = { w: false, a: false, s: false, d: false, space: false, q: false, e: false };
         this.mouseDelta = { x: 0, y: 0 };
         this.viewMode = "third-person"; // Default view mode
+        this.thirdPersonCameraAngle = 0; // Added thirdPersonCameraAngle
     }
 }
 
@@ -96,9 +97,12 @@ type("boolean")(InputState.prototype, "keys.a");
 type("boolean")(InputState.prototype, "keys.s");
 type("boolean")(InputState.prototype, "keys.d");
 type("boolean")(InputState.prototype, "keys.space");
+type("boolean")(InputState.prototype, "keys.q");
+type("boolean")(InputState.prototype, "keys.e");
 type("number")(InputState.prototype, "mouseDelta.x");
 type("number")(InputState.prototype, "mouseDelta.y");
 type("string")(InputState.prototype, "viewMode");
+type("number")(InputState.prototype, "thirdPersonCameraAngle"); // Added thirdPersonCameraAngle
 
 // Register schema types for Player
 type("number")(Player.prototype, "x");
@@ -184,7 +188,8 @@ class NumberblocksRoom extends Room {
             if (player) {
                 player.input.keys = { ...input.keys };
                 player.input.mouseDelta = { ...input.mouseDelta };
-        
+                player.input.thirdPersonCameraAngle = input.thirdPersonCameraAngle; // Added thirdPersonCameraAngle
+                
                 console.log(`[INPUT] ${client.sessionId} keys:`, player.input.keys, "mouse:", player.input.mouseDelta);
             }
         });
@@ -249,7 +254,7 @@ class NumberblocksRoom extends Room {
             if (!player.input) return;
             
             // Handle player movement based on input state
-            this.updatePlayerFromInput(player, deltaTime);
+            this.updatePlayerFromInput(player, player.input, deltaTime);
         });
         
         // Spawn operators periodically
@@ -262,60 +267,118 @@ class NumberblocksRoom extends Room {
     }
     
     // Update player position based on input state
-    updatePlayerFromInput(player, deltaTime) {
-        if (!player.input || !player.input.keys) return;
-    
-        const input = player.input;
-        const speed = 5.0 * deltaTime;
-    
-        let dx = 0, dz = 0;
-        if (input.keys.w) {
-            dx += Math.sin(player.rotationY) * speed;
-            dz += Math.cos(player.rotationY) * speed;
-            console.log("W pressed - moving forward");
+    updatePlayerFromInput(player, input, delta) {
+        // If no player or input data, exit
+        if (!player || !input) return;
+        
+        // Movement speed constants
+        const speed = 0.1;
+        const diagonalSpeed = speed * 0.7; // Reduce speed for diagonal movement
+        
+        // Prepare position change values
+        let dx = 0;
+        let dz = 0;
+        
+        // Get player's current position
+        let x = player.x;
+        let y = player.y;
+        let z = player.z;
+        
+        // Handle first-person vs third-person movement
+        if (input.viewMode === "first-person") {
+            // First-person movement is relative to player's rotation
+            if (input.keys.w) {
+                dx += Math.sin(player.rotationY) * speed;
+                dz += Math.cos(player.rotationY) * speed;
+            }
+            if (input.keys.s) {
+                dx -= Math.sin(player.rotationY) * speed;
+                dz -= Math.cos(player.rotationY) * speed;
+            }
+            if (input.keys.a) {
+                dx += Math.sin(player.rotationY - Math.PI/2) * speed;
+                dz += Math.cos(player.rotationY - Math.PI/2) * speed;
+            }
+            if (input.keys.d) {
+                dx += Math.sin(player.rotationY + Math.PI/2) * speed;
+                dz += Math.cos(player.rotationY + Math.PI/2) * speed;
+            }
+            if (input.keys.q) {
+                dx += Math.sin(player.rotationY - Math.PI/4) * diagonalSpeed;
+                dz += Math.cos(player.rotationY - Math.PI/4) * diagonalSpeed;
+            }
+            if (input.keys.e) {
+                dx += Math.sin(player.rotationY + Math.PI/4) * diagonalSpeed;
+                dz += Math.cos(player.rotationY + Math.PI/4) * diagonalSpeed;
+            }
+        } else {
+            // Third-person movement is relative to camera angle
+            const cameraAngle = input.thirdPersonCameraAngle || 0;
+            
+            if (input.keys.w) {
+                dx += Math.sin(cameraAngle) * speed;
+                dz += Math.cos(cameraAngle) * speed;
+            }
+            if (input.keys.s) {
+                dx -= Math.sin(cameraAngle) * speed;
+                dz -= Math.cos(cameraAngle) * speed;
+            }
+            if (input.keys.a) {
+                dx += Math.sin(cameraAngle - Math.PI/2) * speed;
+                dz += Math.cos(cameraAngle - Math.PI/2) * speed;
+            }
+            if (input.keys.d) {
+                dx += Math.sin(cameraAngle + Math.PI/2) * speed;
+                dz += Math.cos(cameraAngle + Math.PI/2) * speed;
+            }
+            if (input.keys.q) {
+                dx += Math.sin(cameraAngle - Math.PI/4) * diagonalSpeed;
+                dz += Math.cos(cameraAngle - Math.PI/4) * diagonalSpeed;
+            }
+            if (input.keys.e) {
+                dx += Math.sin(cameraAngle + Math.PI/4) * diagonalSpeed;
+                dz += Math.cos(cameraAngle + Math.PI/4) * diagonalSpeed;
+            }
+            
+            // In third-person mode, only update player rotation when moving forward
+            if (dx !== 0 || dz !== 0) {
+                // Only update rotation when the player is moving forward (W, Q, or E keys)
+                // This keeps the player facing their current direction when backing up or strafing
+                const isMovingForward = input.keys.w || input.keys.q || input.keys.e;
+                
+                if (isMovingForward) {
+                    // Calculate movement direction angle when moving forward
+                    player.rotationY = Math.atan2(dx, dz);
+                }
+            }
         }
-        if (input.keys.s) {
-            dx -= Math.sin(player.rotationY) * speed;
-            dz -= Math.cos(player.rotationY) * speed;
-            console.log("S pressed - moving backward");
-        }
-        if (input.keys.a) {
-            dx += Math.sin(player.rotationY - Math.PI / 2) * speed;
-            dz += Math.cos(player.rotationY - Math.PI / 2) * speed;
-            console.log("A pressed - moving left");
-        }
-        if (input.keys.d) {
-            dx += Math.sin(player.rotationY + Math.PI / 2) * speed;
-            dz += Math.cos(player.rotationY + Math.PI / 2) * speed;
-            console.log("D pressed - moving right");
-        }
-    
+        
         player.x += dx;
         player.z += dz;
-    
+        
         console.log(`[SERVER] New player position: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)})`);
-    
+        
         // Mouse rotation handled universally, independent of view mode
         const sensitivity = 0.002;
         player.rotationY += input.mouseDelta.x * sensitivity;
         player.pitch += input.mouseDelta.y * sensitivity;
-        player.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.pitch));
-    
+        
+        // Limit pitch to +/- 85 degrees (1.48 radians) instead of 90 degrees
+        const maxPitch = Math.PI * 0.47; // ~85 degrees
+        player.pitch = Math.max(-maxPitch, Math.min(maxPitch, player.pitch));
+        
         player.input.mouseDelta.x = 0;
         player.input.mouseDelta.y = 0;
-    
+        
         player.velocityY -= 0.01; // gravity
         player.y += player.velocityY;
         if (player.y < 1) {
             player.y = 1;
             player.velocityY = 0;
         }
-    
+        
         console.log(`[SERVER MOVE] ${player.name}: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)}) rotationY=${player.rotationY.toFixed(2)} pitch=${player.pitch.toFixed(2)}`);
     }
-    
-    
-    
     
     // Get a random spawn interval between 5-10 seconds
     getRandomSpawnInterval() {

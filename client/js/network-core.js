@@ -302,6 +302,11 @@ async function initNetworking() {
                 setupRoomListeners(room);
                 setupRoomPlayerListeners(room);
                 
+                // Set up fallback polling for players without onChange
+                if (typeof window.setupPlayerPolling === 'function') {
+                    window.setupPlayerPolling();
+                }
+                
                 // Explicitly create local player object
                 window.myPlayer = new Player({ 
                     id: window.room.sessionId, 

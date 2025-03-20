@@ -5,8 +5,8 @@ window.moveForward = false;
 window.moveBackward = false;
 window.moveLeft = false;
 window.moveRight = false;
-window.turnLeft = false;    // New variable for Q key turning
-window.turnRight = false;   // New variable for E key turning
+window.turnLeft = false;    // For diagonal movement forward-left
+window.turnRight = false;   // For diagonal movement forward-right
 window.canJump = false;
 // isFirstPerson is a global variable attached to the window object in main-fixed.js
 window.prevTime = performance.now();
@@ -19,6 +19,9 @@ window.inputState = {
   mouseDelta: { x: 0, y: 0 }
 };
 
+// Add variable for right mouse button state tracking
+window.rightMouseDown = false;
+
 // Player settings
 window.playerHeight = 2.0;             // Height of camera from ground
 window.moveSpeed = 50.0;                // Units per second
@@ -26,9 +29,30 @@ window.turnSpeed = 2.0;                // Rotation speed for Q/E turning
 window.jumpHeight = 2.0;               // Jump height in units
 window.jumpPressed = false;            // Track jump button press
 
-// Add variable for third person camera
-window.thirdPersonCameraAngle = 0;  // Angle for the third person camera (in radians)
+// Third-person camera settings
 window.thirdPersonCameraDistance = 5;  // Distance for the third person camera
+window.thirdPersonCameraMinDistance = 2; // Minimum zoom distance
+window.thirdPersonCameraMaxDistance = 10; // Maximum zoom distance
+window.thirdPersonCameraZoomSpeed = 0.5; // Zoom speed multiplier
+window.thirdPersonCameraOrbitSpeed = 0.003; // Orbit speed multiplier
+window.thirdPersonCameraHeight = 1.5; // Height of camera above player
+window.thirdPersonCameraOrbitX = 0; // Horizontal orbit angle (left/right)
+window.thirdPersonCameraOrbitY = 0.3; // Vertical orbit angle (up/down)
+window.thirdPersonCameraMinY = -0.3; // Minimum vertical orbit angle
+window.thirdPersonCameraMaxY = 1.0; // Maximum vertical orbit angle
+
+// Add variables for free camera mode
+window.freeCameraSpeed = 0.3;         // Speed for free camera movement
+window.freeCameraRotationSpeed = 0.003; // Rotation speed for free camera
+window.freeCameraPitch = 0;          // Vertical rotation of free camera
+window.freeCameraYaw = 0;            // Horizontal rotation of free camera
+
+// Mouse sensitivity settings
+window.mouseSensitivity = {
+  firstPerson: 1.0,    // Sensitivity multiplier in first-person
+  thirdPerson: 0.7,    // Sensitivity multiplier in third-person (slightly lower for smoother movement)
+  current: 1.0         // Current sensitivity based on view mode
+};
 
 // Initialize controls for the camera
 window.initControls = function(camera, domElement) {
@@ -43,6 +67,9 @@ window.initControls = function(camera, domElement) {
         if (instructions) {
             instructions.style.display = 'none';
         }
+        
+        // Update mouse sensitivity based on current view mode
+        updateMouseSensitivity();
     });
     
     controls.addEventListener('unlock', () => {
@@ -65,15 +92,104 @@ window.initControls = function(camera, domElement) {
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
     
-    // Add mouse movement tracking for input state
+    // Mouse button handlers for classic third-person orbital controls
+    document.addEventListener('mousedown', (event) => {
+        if (event.button === 2) { // Right mouse button
+            window.rightMouseDown = true;
+        }
+    });
+    
+    document.addEventListener('mouseup', (event) => {
+        if (event.button === 2) { // Right mouse button
+            window.rightMouseDown = false;
+        }
+    });
+    
+    // Prevent context menu from appearing on right-click
+    document.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+    });
+
+    // Add mouse movement tracking with sensitivity adjustment and fix inversion
     document.addEventListener('mousemove', (event) => {
         if (document.pointerLockElement) {
-            window.inputState.mouseDelta.x += event.movementX;
-            window.inputState.mouseDelta.y += event.movementY;
+            // Apply sensitivity adjustment to mouse movements
+            const sensitivity = window.mouseSensitivity.current;
+            
+            if (window.isFirstPerson && !window.isFreeCameraMode) {
+                // First-person: Standard FPS mouse look - rotate with mouse movement
+                window.inputState.mouseDelta.x += event.movementX * sensitivity;
+                window.inputState.mouseDelta.y -= event.movementY * sensitivity;
+            } else if (!window.isFirstPerson && !window.isFreeCameraMode) {
+                // Third-person: Only rotate camera when right mouse button is held (classic behavior)
+                if (window.rightMouseDown) {
+                    // X movement orbits camera horizontally around player
+                    window.thirdPersonCameraOrbitX += event.movementX * window.thirdPersonCameraOrbitSpeed;
+                    
+                    // Y movement changes camera height/angle (with limits to prevent flipping)
+                    window.thirdPersonCameraOrbitY -= event.movementY * window.thirdPersonCameraOrbitSpeed;
+                    window.thirdPersonCameraOrbitY = THREE.MathUtils.clamp(
+                        window.thirdPersonCameraOrbitY,
+                        window.thirdPersonCameraMinY,
+                        window.thirdPersonCameraMaxY
+                    );
+                }
+            } else if (window.isFreeCameraMode) {
+                // Free camera mode: Standard FPS-style look with mouse
+                window.freeCameraYaw -= event.movementX * window.freeCameraRotationSpeed;
+                window.freeCameraPitch -= event.movementY * window.freeCameraRotationSpeed;
+                
+                // Limit pitch to avoid flipping
+                window.freeCameraPitch = THREE.MathUtils.clamp(
+                    window.freeCameraPitch,
+                    -Math.PI / 2 + 0.1,  // Avoid looking straight down
+                    Math.PI / 2 - 0.1    // Avoid looking straight up
+                );
+                
+                // Apply rotation to camera using quaternions for proper rotation
+                camera.quaternion.setFromEuler(new THREE.Euler(
+                    window.freeCameraPitch,
+                    window.freeCameraYaw,
+                    0,
+                    'YXZ'  // Important for proper FPS controls
+                ));
+            }
+        }
+    });
+    
+    // Add mouse wheel zoom for third-person view
+    document.addEventListener('wheel', (event) => {
+        // Only handle zoom in third-person mode and not affect the server state
+        if (!window.isFirstPerson) {
+            // Normalize wheel delta across browsers (positive = zoom in, negative = zoom out)
+            const zoomAmount = -Math.sign(event.deltaY) * window.thirdPersonCameraZoomSpeed;
+            
+            // Apply zoom to the camera distance
+            window.thirdPersonCameraDistance = THREE.MathUtils.clamp(
+                window.thirdPersonCameraDistance - zoomAmount,
+                window.thirdPersonCameraMinDistance,
+                window.thirdPersonCameraMaxDistance
+            );
+            
+            console.log(`Third-person camera zoom: ${window.thirdPersonCameraDistance.toFixed(1)}`);
         }
     });
 
     return controls;
+}
+
+// Update mouse sensitivity based on current view mode
+function updateMouseSensitivity() {
+    window.mouseSensitivity.current = window.isFirstPerson 
+        ? window.mouseSensitivity.firstPerson 
+        : window.mouseSensitivity.thirdPerson;
+    console.log(`Updated mouse sensitivity to ${window.mouseSensitivity.current} (${window.isFirstPerson ? 'first-person' : 'third-person'} mode)`);
+}
+
+// Function to get the forward direction based on camera orientation in third-person mode
+window.getThirdPersonForwardDirection = function() {
+    const angle = window.thirdPersonCameraOrbitX;
+    return new THREE.Vector3(-Math.sin(angle), 0, -Math.cos(angle));
 }
 
 // Key down event handler
@@ -127,10 +243,13 @@ function onKeyDown(event) {
                 window.canJump = false;
             }
             break;
-            // Add explicitly in your controls.js onKeyDown:
 
         case 'KeyV':
             toggleCameraView(); 
+            break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+            window.shiftPressed = true;
             break;
     }
 }
@@ -175,6 +294,10 @@ function onKeyUp(event) {
         case 'Space':
             window.inputState.keys.space = false;
             break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+            window.shiftPressed = false;
+            break;
     }
 }
 
@@ -182,26 +305,33 @@ function onKeyUp(event) {
 window.updateControls = function(controls, delta) {
     if (!controls.isLocked) return;
 
-    // Update controls is still needed for local movement
-    // But actual position updates will now be driven by the server
+    // If we're in free camera mode, handle movement without updating the server
+    if (window.isFreeCameraMode) {
+        updateFreeCameraMovement(delta);
+        return;
+    }
+
+    // Only perform client-side movement prediction 
+    // Actual position updates will be driven by the server
     
-    // Handle directional movement
+    // Handle directional movement - scaled by delta for consistent speed
     if (window.moveForward) controls.moveForward(window.moveSpeed * delta);
     if (window.moveBackward) controls.moveForward(-window.moveSpeed * delta);
     if (window.moveLeft) controls.moveRight(-window.moveSpeed * delta);
     if (window.moveRight) controls.moveRight(window.moveSpeed * delta);
     
-    // Handle turning with Q/E keys
-    if (window.turnLeft || window.turnRight) {
-        // Create rotation quaternion for Q/E rotation around Y axis
-        const rotationAngle = (window.turnLeft ? 1 : -1) * window.turnSpeed * delta;
-        const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(0, 1, 0), // Rotate around y-axis only
-            rotationAngle
-        );
-        
-        // Apply rotation to the camera's quaternion directly
-        controls.getObject().quaternion.multiply(rotationQuaternion);
+    // Handle Q/E keys for diagonal movement (forward + turning)
+    if (window.turnLeft) {
+        // Move diagonally forward-left
+        const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
+        controls.moveForward(diagonalSpeed);
+        controls.moveRight(-diagonalSpeed);
+    }
+    if (window.turnRight) {
+        // Move diagonally forward-right
+        const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
+        controls.moveForward(diagonalSpeed);
+        controls.moveRight(diagonalSpeed);
     }
 
     // Apply gravity
@@ -213,5 +343,45 @@ window.updateControls = function(controls, delta) {
         window.velocity.y = 0;
         controls.getObject().position.y = window.playerHeight;
         window.canJump = true;
+    }
+}
+
+// Handle free camera movement independent of player
+function updateFreeCameraMovement(delta) {
+    // Calculate movement speed with delta time for consistent speed
+    const moveSpeed = window.freeCameraSpeed * delta * 60; // Base speed adjusted for frame rate
+    
+    // Create movement vectors using quaternion-based direction
+    // This ensures movement always follows the camera's view direction
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    
+    // Remove any Y component to keep movement horizontal (along XZ plane) for WASD
+    forward.y = 0;
+    forward.normalize();
+    right.y = 0;
+    right.normalize();
+    
+    // Apply movement based on keys
+    if (window.moveForward) {
+        camera.position.addScaledVector(forward, moveSpeed);
+    }
+    if (window.moveBackward) {
+        camera.position.addScaledVector(forward, -moveSpeed);
+    }
+    if (window.moveLeft) {
+        camera.position.addScaledVector(right, -moveSpeed);
+    }
+    if (window.moveRight) {
+        camera.position.addScaledVector(right, moveSpeed);
+    }
+    
+    // Handle vertical movement (space and shift)
+    const up = new THREE.Vector3(0, 1, 0);
+    if (window.inputState.keys.space) {
+        camera.position.addScaledVector(up, moveSpeed);
+    }
+    if (window.shiftPressed) { 
+        camera.position.addScaledVector(up, -moveSpeed);
     }
 }

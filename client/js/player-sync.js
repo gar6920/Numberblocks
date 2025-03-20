@@ -4,6 +4,9 @@
 // Helper functions for visual management
 function setupPlayerListeners(player, sessionId) {
     try {
+        // Add logging to help diagnose issues
+        console.log(`[setupPlayerListeners] Setting up player ${sessionId}, local session: ${window.room.sessionId}`, player);
+
         // Explicitly skip listener setup for own local player
         if (sessionId === window.room.sessionId) {
             console.log("✅ This is my player, explicitly not setting listeners");
@@ -11,8 +14,17 @@ function setupPlayerListeners(player, sessionId) {
             return;
         }
 
+        // Check if we already have a visual for this player to avoid duplicates
+        if (visuals.players && visuals.players[sessionId]) {
+            console.log(`Player ${sessionId} already has a visual, updating it`);
+            visuals.players[sessionId].update(player);
+            updatePlayerListUI();
+            return;
+        }
+
         // Ensure 'player.onChange' explicitly exists for remote players
         if (typeof player.onChange === "function") {
+            console.log(`Setting up onChange listener for player ${sessionId}`);
             player.onChange(() => {
                 if (visuals.players[sessionId]) {
                     visuals.players[sessionId].update(player);
@@ -20,12 +32,26 @@ function setupPlayerListeners(player, sessionId) {
                 updatePlayerListUI();
             });
         } else {
-            // Clearly log critical error if remote player lacks onChange
-            console.error("🚨 CRITICAL: Remote player without onChange detected:", sessionId, player);
+            // If onChange isn't available, we'll need to use fallback polling
+            console.warn(`Player ${sessionId} missing onChange method, setting up fallback polling`);
+            // Store the original state data to check for changes
+            window.playersLastState = window.playersLastState || {};
+            window.playersLastState[sessionId] = {...player};
         }
 
         // Create visual explicitly for remote player
-        const visual = new PlayersVisual(player);
+        console.log(`Creating new visual for player ${sessionId}`);
+        const visual = new PlayersVisual({
+            sessionId,
+            name: player.name || `Player_${sessionId.substring(0, 5)}`,
+            value: player.value || 1,
+            color: player.color || '#FFFF00',
+            x: player.x || 0,
+            y: player.y || 0,
+            z: player.z || 0,
+            rotationY: player.rotationY || 0
+        });
+        
         if (!visuals.players) visuals.players = {};
         visuals.players[sessionId] = visual;
 
@@ -33,6 +59,9 @@ function setupPlayerListeners(player, sessionId) {
         window.otherPlayers[sessionId] = player;
         if (window.scene) {
             window.scene.add(visual.group || visual.mesh);
+            console.log(`Added player ${sessionId} visual to scene`);
+        } else {
+            console.warn(`Scene not available, couldn't add player ${sessionId} visual`);
         }
 
         // Immediately update UI clearly
@@ -42,7 +71,43 @@ function setupPlayerListeners(player, sessionId) {
     }
 }
 
-
+// Fallback update function for players without onChange listeners
+function checkAndUpdatePlayers() {
+    if (!window.room || !window.room.state || !window.room.state.players) return;
+    
+    window.playersLastState = window.playersLastState || {};
+    
+    // Check all players in the room state
+    window.room.state.players.forEach((player, sessionId) => {
+        // Skip our own player
+        if (sessionId === window.room.sessionId) return;
+        
+        const lastState = window.playersLastState[sessionId] || {};
+        const needsUpdate = (
+            player.x !== lastState.x || 
+            player.y !== lastState.y || 
+            player.z !== lastState.z ||
+            player.rotationY !== lastState.rotationY ||
+            player.value !== lastState.value
+        );
+        
+        if (needsUpdate) {
+            console.log(`Detected change for player ${sessionId} via polling`);
+            if (visuals.players[sessionId]) {
+                visuals.players[sessionId].update(player);
+            }
+            
+            // Update stored state
+            window.playersLastState[sessionId] = {...player};
+        }
+        
+        // Create visual if it doesn't exist
+        if (!visuals.players[sessionId]) {
+            console.log(`Creating missing visual for player ${sessionId}`);
+            setupPlayerListeners(player, sessionId);
+        }
+    });
+}
 
 function removePlayerVisual(sessionId) {
     try {
@@ -57,6 +122,9 @@ function removePlayerVisual(sessionId) {
 
         // Remove from tracking
         delete window.otherPlayers[sessionId];
+        if (window.playersLastState) {
+            delete window.playersLastState[sessionId];
+        }
 
         // Update UI
         updatePlayerListUI();
@@ -94,56 +162,78 @@ function updatePlayerListUI() {
 // Define visual class for Players
 window.PlayersVisual = class PlayersVisual {
     constructor(playerData) {
+        console.log("Creating PlayersVisual with data:", playerData);
         this.group = new THREE.Group();
         this.numberblockMesh = null;
         this.nameLabel = null;
+        this.playerData = playerData; // Store the original data
         this.update(playerData);
     }
 
     createNumberblockMesh(value, color) {
+        // Ensure valid value
+        const blockValue = Math.max(1, value || 1);
+        
+        // Convert color from string to hex if needed
+        let colorHex = color;
+        if (typeof color === 'string' && color.startsWith('#')) {
+            colorHex = parseInt(color.replace('#', '0x'), 16);
+        } else if (!color) {
+            // Default to yellow for missing color
+            colorHex = 0xffff00;
+        }
+        
+        console.log(`Creating numberblock with value: ${blockValue}, color: ${colorHex}`);
+        
         // Create numberblock mesh based on value
         const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshPhongMaterial({ color: color || 0xff0000 });
+        const material = new THREE.MeshPhongMaterial({ color: colorHex });
         const mesh = new THREE.Mesh(geometry, material);
         
         // Scale based on value (stack of cubes)
-        mesh.scale.y = value || 1;
-        mesh.position.y = (value || 1) / 2;
+        mesh.scale.y = blockValue;
+        mesh.position.y = blockValue / 2;
         
         return mesh;
     }
 
     update(playerData) {
         try {
+            // Merge with existing data to handle partial updates
+            this.playerData = {...this.playerData, ...playerData};
+            
+            // Log the update
+            console.log(`Updating player visual with data:`, this.playerData);
+            
             // Update numberblock
             if (this.numberblockMesh) {
                 this.group.remove(this.numberblockMesh);
             }
-            this.numberblockMesh = this.createNumberblockMesh(playerData.value, playerData.color);
+            this.numberblockMesh = this.createNumberblockMesh(this.playerData.value, this.playerData.color);
             this.group.add(this.numberblockMesh);
 
             // Update position and rotation
-            if (playerData.x !== undefined && playerData.y !== undefined && playerData.z !== undefined) {
-                this.group.position.set(playerData.x, playerData.y, playerData.z);
+            if (this.playerData.x !== undefined && this.playerData.y !== undefined && this.playerData.z !== undefined) {
+                this.group.position.set(this.playerData.x, this.playerData.y, this.playerData.z);
             }
-            if (playerData.rotationY !== undefined) {
-                this.group.rotation.y = playerData.rotationY;
+            if (this.playerData.rotationY !== undefined) {
+                this.group.rotation.y = this.playerData.rotationY;
             }
 
             // Update name label
-            if (!this.nameLabel && playerData.name) {
+            if (!this.nameLabel && this.playerData.name) {
                 const labelDiv = document.createElement('div');
                 labelDiv.className = 'player-label';
-                labelDiv.textContent = playerData.name;
+                labelDiv.textContent = this.playerData.name;
                 this.nameLabel = new CSS2DObject(labelDiv);
-                this.nameLabel.position.set(0, (playerData.value || 1) + 0.5, 0);
+                this.nameLabel.position.set(0, (this.playerData.value || 1) + 0.5, 0);
                 this.group.add(this.nameLabel);
-            } else if (this.nameLabel && playerData.name) {
-                this.nameLabel.element.textContent = playerData.name;
-                this.nameLabel.position.y = (playerData.value || 1) + 0.5;
+            } else if (this.nameLabel && this.playerData.name) {
+                this.nameLabel.element.textContent = this.playerData.name;
+                this.nameLabel.position.y = (this.playerData.value || 1) + 0.5;
             }
         } catch (error) {
-            console.error("Error updating player visual:", error);
+            console.error("Error updating player visual:", error, playerData);
         }
     }
 };
@@ -185,46 +275,90 @@ function setupRoomPlayerListeners(room) {
         return;
     }
 
+    // Debug the state first to help understand what's happening
+    console.log('[setupRoomPlayerListeners] Current state structure:', Object.keys(room.state));
+    console.log('[setupRoomPlayerListeners] Players collection exists:', !!room.state.players);
+    if (room.state.players) {
+        console.log('[setupRoomPlayerListeners] Players collection type:', Object.getPrototypeOf(room.state.players));
+        console.log('[setupRoomPlayerListeners] Current player count:', room.state.players.size);
+    }
+
+    // Always process existing players first when this function is called
+    if (room.state.players) {
+        console.log('[setupRoomPlayerListeners] Processing existing players on setup');
+        room.state.players.forEach((player, sessionId) => {
+            console.log(`✅ Setting up existing player: ${sessionId}`, player);
+            setupPlayerListeners(player, sessionId);
+        });
+        updatePlayerListUI();
+    }
+
+    // Set up a continuous state change listener to always process players
+    room.onStateChange((state) => {
+        // Always check for new players on every state change
+        if (state.players && typeof state.players.forEach === 'function') {
+            state.players.forEach((player, sessionId) => {
+                // If this player doesn't have a visual and isn't our local player, create one
+                if (!visuals.players[sessionId] && sessionId !== room.sessionId) {
+                    console.log(`🆕 Discovered new player on state change: ${sessionId}`);
+                    setupPlayerListeners(player, sessionId);
+                    updatePlayerListUI();
+                }
+            });
+        }
+    });
+
+    // Set up schema listeners once with proper error handling
     room.onStateChange.once((state) => {
         if (!state.players) {
             console.error('[setupRoomPlayerListeners] state.players still undefined on first state update!');
             return;
         }
 
-        // Attach listeners now that players is definitely initialized
-        state.players.onAdd = (player, sessionId) => {
-            console.log("Player added:", sessionId);
-            setupPlayerListeners(player, sessionId);
-            updatePlayerListUI();
-        };
-        
+        // Try to attach the schema methods if they're available
+        try {
+            // Attach listeners now that players is definitely initialized
+            if (typeof state.players.onAdd === 'function') {
+                state.players.onAdd = (player, sessionId) => {
+                    console.log("⭐ Schema onAdd triggered for player:", sessionId);
+                    setupPlayerListeners(player, sessionId);
+                    updatePlayerListUI();
+                };
+            } else {
+                console.warn("⚠️ state.players.onAdd is not a function, schema listener not attached");
+            }
+            
+            if (typeof state.players.onRemove === 'function') {
+                state.players.onRemove = (player, sessionId) => {
+                    console.log("❌ Player removed:", sessionId);
+                    removePlayerVisual(sessionId);
+                    updatePlayerListUI();
+                };
+            } else {
+                console.warn("⚠️ state.players.onRemove is not a function, schema listener not attached");
+            }
+        } catch (error) {
+            console.error("Error setting up schema listeners:", error);
+        }
 
-        state.players.onRemove = (player, sessionId) => {
-            console.log("Player removed:", sessionId);
-            removePlayerVisual(sessionId);
-            updatePlayerListUI();
-        };
-        
-
-        // Initial iteration of existing players
-        state.players.forEach((player, sessionId) => {
-            console.log(`✅ Processing existing player: ${sessionId}`, player);
-            setupPlayerListeners(player, sessionId);
-        });
-
-        updatePlayerListUI();
         console.log('[setupRoomPlayerListeners] Room player listeners fully set.');
     });
 }
 
-
-
 // Make this explicitly available globally
 window.setupRoomPlayerListeners = setupRoomPlayerListeners;
 
+// Setup polling for players without onChange
+function setupPlayerPolling() {
+    console.log("Setting up player polling fallback");
+    // Poll every 100ms for player updates
+    window.playerPollingInterval = setInterval(checkAndUpdatePlayers, 100);
+}
 
 // Make functions available globally
 window.setupPlayerListeners = setupPlayerListeners;
 window.removePlayerVisual = removePlayerVisual;
 window.updatePlayerListUI = updatePlayerListUI;
 window.processExistingPlayers = processExistingPlayers;
+window.checkAndUpdatePlayers = checkAndUpdatePlayers;
+window.setupPlayerPolling = setupPlayerPolling;
