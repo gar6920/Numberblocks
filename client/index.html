@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Numberblocks Game</title>
+    <title>3D AI Game Platform</title>
     <link rel="stylesheet" href="css/styles.css">
     <style>
         body { margin: 0; padding: 0; overflow: hidden; }
@@ -93,6 +93,47 @@
         #collapse-icon {
             transition: transform 0.3s ease;
         }
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            font-family: Arial, sans-serif;
+        }
+        #loading-status {
+            margin-top: 20px;
+            font-size: 16px;
+        }
+        .spinner {
+            border: 5px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 5px solid white;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #implementation-selector {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
@@ -117,6 +158,23 @@
     <!-- Game HUD -->
     <div id="game-hud"></div>
     
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <h2>3D AI Game Platform</h2>
+        <div class="spinner"></div>
+        <div id="loading-status">Loading core modules...</div>
+    </div>
+    
+    <!-- Implementation selector (for development) -->
+    <div id="implementation-selector">
+        <label for="implementation">Implementation:</label>
+        <select id="implementation" disabled>
+            <option value="numberblocks" selected>Numberblocks</option>
+            <!-- Add more implementations here as they become available -->
+        </select>
+        <button id="reload-implementation" disabled>Reload</button>
+    </div>
+    
     <!-- Three.js library via CDN -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
@@ -125,24 +183,39 @@
     <!-- Colyseus client library -->
     <script src="https://unpkg.com/colyseus.js@^0.16.3/dist/colyseus.js"></script>
     
-    <!-- Numberblocks game scripts -->
-    <script src="js/collision.js"></script>
-    <script src="js/numberblock.js"></script>
-    <script src="js/operator.js"></script>
+    <!-- Main loader script -->
+    <script src="js/main.js"></script>
     
-    <!-- Entity System -->
-    <script src="js/Entity.js"></script>
-    <script src="js/Player.js"></script>
-    <script src="js/NPC.js"></script>
-    <script src="js/EntityFactory.js"></script>
-    
-    <!-- Network System (Modular) -->
-    <script src="js/network-core.js"></script>
-    <script src="js/player-sync.js"></script>
-    <script src="js/entity-sync.js"></script>
-    <script src="js/player-ui.js"></script>
-    
-    <script src="js/controls.js"></script>
-    <script src="js/main-fixed.js"></script>
+    <!-- Implementation selector functionality -->
+    <script>
+        // Enable implementation selector for development
+        document.addEventListener('DOMContentLoaded', () => {
+            const selector = document.getElementById('implementation');
+            const reloadBtn = document.getElementById('reload-implementation');
+            
+            // Wait for game to fully load
+            window.addEventListener('gameLoaded', () => {
+                selector.disabled = false;
+                reloadBtn.disabled = false;
+                
+                // Set current implementation
+                selector.value = window.gameConfig.implementation;
+                
+                // Add reload functionality
+                reloadBtn.addEventListener('click', () => {
+                    window.gameConfig.implementation = selector.value;
+                    localStorage.setItem('gameImplementation', selector.value);
+                    location.reload();
+                });
+            });
+            
+            // Check if there's a saved implementation preference
+            const savedImplementation = localStorage.getItem('gameImplementation');
+            if (savedImplementation) {
+                window.gameConfig.implementation = savedImplementation;
+                selector.value = savedImplementation;
+            }
+        });
+    </script>
 </body>
 </html>
