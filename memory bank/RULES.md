@@ -2,7 +2,7 @@
 
 ## Server Management
 
-### Restarting the Numberblocks Server
+### Restarting the Game Server
 When testing changes, you'll need to properly stop and restart the Node.js server:
 
 # STEP 1: Kill all Node.js processes (safer and more reliable method)
@@ -31,8 +31,15 @@ npm start
 
 - PowerShell's `mkdir` doesn't support multiple directory arguments like in Linux/macOS. Create directories one by one or use a loop.
 
+## Implementation Guidelines
 
-## Three.js Implementation Notes
+### Modular Design Principles
+- Keep core platform code separate from specific game implementations
+- Use interfaces and base classes for common functionality
+- Create extension points for game-specific features
+- Implement factory patterns for creating game-specific entities
+
+### Three.js Implementation Notes
 
 - Always include the Three.js library before your own JavaScript files in the HTML
 - When testing, make sure to run a local HTTP server rather than opening the HTML file directly due to CORS restrictions with resource loading
@@ -40,7 +47,7 @@ npm start
 - Always implement window resize handling for responsive design (update camera aspect ratio and renderer size)
 - For better performance, set renderer.setPixelRatio to match the device's pixel ratio
 
-## Browser API Considerations
+### Browser API Considerations
 
 - The Pointer Lock API (used by PointerLockControls) may not work in some environments, especially in embedded preview browsers or when served through certain proxies
 - Always implement a fallback mechanism for critical browser APIs in case they fail
@@ -51,7 +58,7 @@ npm start
   - Always provide visual feedback when controls are locked/unlocked
   - Ensure complete disengagement of controls when user presses ESC
 
-## JavaScript Considerations
+### JavaScript Best Practices
 
 - When using event handlers, store references to them for proper removal later to prevent memory leaks
 - For event-based systems (like controls), implement a proper event dispatcher mechanism
@@ -60,16 +67,34 @@ npm start
   - Separate axes of rotation (yaw, pitch, roll) to prevent gimbal lock issues
   - Always clamp vertical rotation (pitch) to prevent camera flipping
 
+### Game Implementation Guidelines
+- Each game implementation should be contained in its own directory
+- Game-specific logic should extend the core platform classes
+- Assets specific to a game implementation should be in their own directory
+- Implement the required interfaces for entity creation and behavior
+
 ## Git Workflow
 
-- Always update the progress.md file after completing each implementation step
-- Keep commit messages descriptive and related to the implementation plan steps
+- Always update documentation when making significant changes
+- Keep commit messages descriptive and related to implementation changes
+- Use feature branches for new game implementations or major features
 
 ## Project Structure
 
-- Follow the architecture document precisely to ensure consistency
-- New JavaScript files should be placed in the js/ directory and then linked in index.html as needed
+- Follow the modular architecture document precisely to ensure consistency
+- Core platform code should be in designated directories
+- Implementation-specific code should be clearly separated
+- New JavaScript files should be properly categorized in the appropriate directories
 
-## class structure
-- keep classes modular - each class should have a single responsibility
-- use classes to group related functionality
+## Class Structure
+- Keep classes modular - each class should have a single responsibility
+- Use inheritance for extending core platform functionality
+- Create interfaces for required implementation behaviors
+- Document extension points and required methods for new implementations
+
+## Adding New Game Implementations
+- Create a new implementation directory
+- Extend the core Entity, Player, and NPC classes as needed
+- Register custom entity factories
+- Add implementation-specific assets
+- Update configuration to recognize the new game type
