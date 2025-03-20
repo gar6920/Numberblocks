@@ -33,19 +33,66 @@ window.gameConfig = gameConfig;
 function initGame() {
     console.log('Initializing 3D AI Game Platform...');
     
-    // Load the core platform modules first
-    loadCorePlatform()
+    // Load legacy modules first (these are needed for main-fixed.js)
+    loadLegacyModules()
         .then(() => {
+            // Then load the core platform modules
+            return loadCorePlatform();
+        })
+        .then(() => {
+            // Load adapter modules
+            return loadAdapters();
+        })
+        .then(() => {
+            // Set up adapter functions to bridge between new architecture and old code
+            setupAdapterFunctions();
             // Then load the selected implementation
             return loadImplementation(gameConfig.implementation);
         })
         .then(() => {
+            // Ensure backwards compatibility
+            ensureBackwardsCompatibility();
             // Initialize the game engine with the loaded implementation
             initGameEngine();
         })
         .catch(error => {
             console.error('Error initializing game:', error);
         });
+}
+
+// Load legacy modules needed for main-fixed.js
+function loadLegacyModules() {
+    return new Promise((resolve, reject) => {
+        try {
+            console.log('Loading legacy modules...');
+            
+            // These are modules that main-fixed.js directly depends on
+            const legacyModules = [
+                'js/controls.js',
+                'js/network-core.js',
+                'js/numberblock.js', // Used directly by main-fixed.js
+            ];
+            
+            // Load each module in sequence
+            let loadPromise = Promise.resolve();
+            
+            legacyModules.forEach(module => {
+                loadPromise = loadPromise.then(() => {
+                    return loadScript(module);
+                });
+            });
+            
+            // Resolve when all legacy modules are loaded
+            loadPromise.then(() => {
+                console.log('Legacy modules loaded successfully');
+                resolve();
+            }).catch(error => {
+                reject(error);
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
 }
 
 // Load core platform modules
@@ -63,7 +110,6 @@ function loadCorePlatform() {
                 'EntityFactory.js',
                 'collision.js',
                 'player-ui.js',
-                // Add any other core modules here
             ];
             
             // Load each module in sequence
@@ -88,36 +134,101 @@ function loadCorePlatform() {
     });
 }
 
+// Load adapter modules
+function loadAdapters() {
+    return new Promise((resolve, reject) => {
+        try {
+            console.log('Loading adapter modules...');
+            
+            // Adapter modules to bridge between old and new architecture
+            const adapterPath = 'js/core/';
+            const adapterModules = [
+                'network-adapter.js',
+                'controls-adapter.js',
+                'numberblock-adapter.js',
+            ];
+            
+            // Load each module in sequence
+            let loadPromise = Promise.resolve();
+            
+            adapterModules.forEach(module => {
+                loadPromise = loadPromise.then(() => {
+                    return loadScript(adapterPath + module);
+                });
+            });
+            
+            // Resolve when all adapter modules are loaded
+            loadPromise.then(() => {
+                console.log('Adapter modules loaded successfully');
+                resolve();
+            }).catch(error => {
+                reject(error);
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// Set up adapter functions to bridge between new modules and old code
+function setupAdapterFunctions() {
+    console.log('Setting up adapter functions...');
+    
+    // These should now be handled by the adapter modules
+}
+
 // Load implementation-specific modules
 function loadImplementation(implementation) {
     return new Promise((resolve, reject) => {
         try {
             console.log(`Loading ${implementation} implementation...`);
             
-            // Create implementation module path
-            const implPath = `js/implementations/${implementation}/`;
-            
-            // First load the visual component classes
-            loadScript(implPath + 'numberblock.js')
-                .then(() => loadScript(implPath + 'operator.js'))
-                .then(() => loadScript(implPath + 'NumberBlock.js'))
-                .then(() => loadScript(implPath + 'index.js'))
-                .then(() => {
-                    console.log(`${implementation} implementation loaded successfully`);
-                    
-                    // Register the implementation
-                    if (window.registerNumberblocksImplementation) {
-                        window.registerNumberblocksImplementation();
-                    }
-                    
-                    resolve();
-                })
-                .catch(error => {
-                    reject(error);
-                });
+            // For Numberblocks, we've already loaded the primary implementation file
+            // Just load any additional files and register it
+            if (implementation === 'numberblocks') {
+                // Skip loading NumberBlock.js since it's causing conflicts
+                loadScript(`js/implementations/${implementation}/operator.js`)
+                    .then(() => {
+                        console.log(`${implementation} implementation loaded successfully`);
+                        resolve();
+                    })
+                    .catch(error => {
+                        console.warn(`Error loading operator.js: ${error}, continuing anyway`);
+                        resolve(); // Continue anyway
+                    });
+            } else {
+                // For other implementations, load all files
+                const implPath = `js/implementations/${implementation}/`;
+                
+                loadScript(implPath + 'index.js')
+                    .then(() => {
+                        console.log(`${implementation} implementation loaded successfully`);
+                        resolve();
+                    })
+                    .catch(error => {
+                        reject(error);
+                    });
+            }
         } catch (error) {
             reject(error);
         }
+    });
+}
+
+// Ensure backwards compatibility with main-fixed.js
+function ensureBackwardsCompatibility() {
+    console.log('Ensuring backwards compatibility...');
+    
+    // These should now be handled by the adapter modules
+    
+    // Set up isFirstPerson for view mode
+    window.isFirstPerson = gameConfig.playerSettings.viewMode === 'firstPerson';
+    
+    // Set up event to notify when the game is fully loaded
+    window.addEventListener('load', function() {
+        // Create and dispatch a custom event
+        const gameLoadedEvent = new Event('gameLoaded');
+        window.dispatchEvent(gameLoadedEvent);
     });
 }
 
@@ -139,6 +250,13 @@ function initGameEngine() {
 // Helper function to load a script asynchronously
 function loadScript(src) {
     return new Promise((resolve, reject) => {
+        // Check if this script has already been loaded
+        if (document.querySelector(`script[src="${src}"]`)) {
+            console.log(`Script already loaded: ${src}`);
+            resolve();
+            return;
+        }
+        
         const script = document.createElement('script');
         script.src = src;
         script.onload = () => resolve();

@@ -59,6 +59,11 @@ class GameServer {
         for (const [implName, impl] of Object.entries(implementations)) {
             console.log(`Registering implementation: ${implName}`);
             this.gameServer.define(impl.implementation.roomType, impl.NumberblocksRoom);
+            
+            // Also define the room with the old name for backwards compatibility
+            if (implName === 'numberblocks') {
+                this.gameServer.define('numberblocks', impl.NumberblocksRoom);
+            }
         }
     }
     
