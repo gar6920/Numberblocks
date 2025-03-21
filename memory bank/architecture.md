@@ -1,11 +1,11 @@
 # 3D AI Game Platform - Architecture
 
 ## Overview
-3D AI Game is a modular 3D web-based game platform built with Three.js and Colyseus, utilizing a client-server architecture for multiplayer functionality. Players control customizable characters and interact with a colorful 3D environment. The platform is designed to support various game implementations, with Numberblocks being the first example.
+3D AI Game is a modular 3D web-based game platform built with Three.js and Colyseus, utilizing a client-server architecture for multiplayer functionality. Players control customizable characters and interact with a colorful 3D environment. The platform is designed to support various game implementations.
 
 ## Core Components
 
-### 1. Server (server.js)
+### 1. Server (server/core/server.js)
 **Technology:** Built with Node.js and Colyseus.
 
 **Responsibilities:**
@@ -25,6 +25,11 @@
 The core platform provides foundational functionality that all game implementations can leverage.
 
 **Key components:**
+- **main.js:**
+  - Entry point for client-side code
+  - Loads core modules and initializes the game engine
+  - Sets up default player factory
+
 - **controls.js:**
   - Handles player movement and camera controls
   - Supports first-person, third person, and free roam view modes
@@ -77,19 +82,13 @@ The core platform provides foundational functionality that all game implementati
   - Manages common UI elements for player information
   - Provides hooks for implementation-specific UI components
 
-### 3. Game Implementations (/client/js/implementations)
+### 3. Game Implementations (/client/js/implementations and /server/implementations)
 Each game implementation extends the core platform with specific gameplay mechanics and visuals.
 
-**Numberblocks Implementation:**
-- **numberblock.js:**
-  - Extends Player and Entity for Numberblocks-specific functionality
-  - Creates dynamic block stacks based on numeric value
-  - Manages visual elements (face, arms, feet, colors)
-
-- **operator.js:**
-  - Implements mathematical operators that spawn in the game world
-  - Handles collection and activation logic
-  - Processes mathematical operations between players
+**Implementation Structure:**
+- Client-side implementation code in /client/js/implementations/
+- Server-side implementation code in /server/implementations/
+- Each implementation folder contains its own set of entities, rooms, and behaviors
 
 **Future Implementations:**
 - Will follow similar patterns, extending the core components
@@ -137,7 +136,7 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Automatic creation of remote player instances with proper sessionId tracking
 - Smooth position interpolation using Three.js lerping
 - Proper cleanup of disconnected player instances
-- Value-based mesh updates for Numberblock changes
+- Value-based mesh updates
 - Efficient player collection management using Set data structure
 - Proper separation of local and remote player handling
 - Resilient error handling for edge cases
@@ -145,53 +144,49 @@ Each game implementation extends the core platform with specific gameplay mechan
 ## File Structure
 ```
 /
-├── server.js               # Main server file
 ├── package.json            # Node.js dependencies
 ├── client/                 # Client-side code
 │   ├── index.html          # Main HTML file
 │   ├── css/                # Stylesheets
 │   └── js/                 # JavaScript files
-│       ├── main.js         # Entry point and module loader
 │       ├── core/           # Core platform code
+│       │   ├── main.js     # Entry point and module loader
 │       │   ├── game-engine.js # Main game engine and rendering
 │       │   ├── Entity.js   # Base entity class
 │       │   ├── Player.js   # Base player class
 │       │   ├── NPC.js      # Base NPC class
 │       │   ├── controls.js # Camera and movement controls
 │       │   ├── network-core.js # Networking functionality
-│       │   ├── numberblock-adapter.js # Adapter for Numberblocks
 │       │   ├── collision.js    # Collision detection
 │       │   ├── EntityFactory.js # Entity creation factory
 │       │   └── player-ui.js    # UI components
-│       ├── implementations/ # Game-specific implementations
-│       │   ├── default/     # Default box implementation
-│       │   │   └── DefaultPlayer.js # Simple box player
-│       │   ├── numberblocks/  # Numberblocks implementation
-│       │   │   ├── NumberBlock.js # Numberblock entity
-│       │   │   ├── entity-sync.js # Entity synchronization
-│       │   │   ├── operator.js    # Mathematical operators
-│       │   │   └── index.js       # Implementation entry point
-│       │   └── [future implementations]
-│       └── lib/            # Third-party libraries
+│       └── implementations/ # Game-specific client implementations
+│           ├── default/     # Default box implementation
+│           │   └── DefaultPlayer.js # Simple box player
+│           └── numberblocks/  # Example implementation
+│               ├── entity-sync.js # Entity synchronization
+│               ├── operator.js    # Mathematical operators
+│               └── index.js       # Implementation entry point
 ├── server/                 # Server-side code
-│   ├── index.js            # Server entry point
-│   ├── core/               # Core server functionality
-│   │   └── BaseRoom.js     # Base room implementation
-│   ├── schemas/            # Colyseus schema definitions
-│   │   ├── BaseEntity.js   # Base entity schema
-│       │   ├── DefaultRoom.js  # Default room implementation
-│   │   ├── GameState.js    # Game state schema
-│   │   ├── Player.js       # Player schema
-│   │   └── InputState.js   # Input state schema
+│   ├── core/               # Core server components
+│   │   ├── server.js       # Server entry point
+│   │   ├── index.js        # Core server initialization
+│   │   ├── BaseRoom.js     # Base room implementation
+│   │   └── schemas/        # Core schema definitions
+│   │       ├── BaseEntity.js # Base entity schema
+│   │       ├── DefaultRoom.js # Default room implementation
+│   │       ├── GameState.js  # Game state schema
+│   │       ├── Player.js     # Player schema
+│   │       ├── InputState.js # Input state schema
+│   │       └── GameConfigSchema.js # Game configuration schema
 │   └── implementations/    # Server-side implementations
 │       ├── default/        # Default implementation
 │       │   └── index.js    # Default implementation entry point
-│       └── numberblocks/   # Numberblocks implementation
+│       └── numberblocks/   # Example implementation
 │           ├── index.js    # Implementation entry point
-│           ├── schemas.js  # Numberblocks-specific schemas
-│           └── NumberblocksRoom.js # Numberblocks room implementation
-├── public/                 # Static assets
-└── node_modules/           # Node.js modules
+│           ├── schemas.js  # Implementation-specific schemas
+│           └── NumberblocksRoom.js # Implementation room
+└── memory bank/            # Documentation and reference materials
 ```
 
 ## Communication Flow
@@ -248,20 +243,3 @@ The platform is designed with modularity in mind, allowing for different game im
 - **Browser Tab Synchronization:** Automatically updates game state when inactive tabs become active
 - **Entity Component System:** Flexible architecture for game entity management
 - **Modular Implementation System:** Support for various game types and mechanics
-- **Consistent Core Platform:** Shared functionality for all implementations
-
-## Implementing New Games
-To create a new game implementation:
-
-1. Create a new directory under /client/js/implementations/
-2. Extend the core Entity, Player, and NPC classes as needed
-3. Create implementation-specific assets and behaviors
-4. Register custom entity factories with the EntityFactory
-5. Update the configuration to recognize the new game type
-
-## Future Enhancements
-- Plugin system for even more modular development
-- Asset management system for efficient resource loading
-- Enhanced visual effects and animations
-- Mobile device support
-- User accounts and progression tracking

@@ -206,12 +206,8 @@ function addViewToggleButton() {
 // First-person setup
 window.switchToFirstPersonView = function() {
     // Hide player's mesh in first-person
-    if (window.myPlayer && window.myPlayer.mesh) {
-        window.myPlayer.mesh.visible = false;
-    }
-    
-    if (window.playerNumberblock && window.playerNumberblock.mesh) {
-        window.playerNumberblock.mesh.visible = false;
+    if (window.playerEntity && window.playerEntity.mesh) {
+        window.playerEntity.mesh.visible = false;
     }
     
     // Reset free camera variables
@@ -234,11 +230,11 @@ window.switchToFirstPersonView = function() {
         }
     }
     // Fallback to local player object if server state not available
-    else if (window.playerNumberblock && window.playerNumberblock.mesh) {
-        playerX = window.playerNumberblock.mesh.position.x;
-        playerY = window.playerNumberblock.mesh.position.y;
-        playerZ = window.playerNumberblock.mesh.position.z;
-        rotationY = window.playerNumberblock.mesh.rotation.y || 0;
+    else if (window.playerEntity && window.playerEntity.mesh) {
+        playerX = window.playerEntity.mesh.position.x;
+        playerY = window.playerEntity.mesh.position.y;
+        playerZ = window.playerEntity.mesh.position.z;
+        rotationY = window.playerEntity.mesh.rotation.y || 0;
     }
     
     // Position camera at player's head
@@ -282,12 +278,8 @@ window.switchToFirstPersonView = function() {
 // Third-person setup
 window.switchToThirdPersonView = function() {
     // Show player's mesh in third-person
-    if (window.myPlayer && window.myPlayer.mesh) {
-        window.myPlayer.mesh.visible = true;
-    }
-    
-    if (window.playerNumberblock && window.playerNumberblock.mesh) {
-        window.playerNumberblock.mesh.visible = true;
+    if (window.playerEntity && window.playerEntity.mesh) {
+        window.playerEntity.mesh.visible = true;
     }
     
     // Reset orbit angles if they don't exist
@@ -344,8 +336,8 @@ window.switchToFreeCameraView = function() {
     window.isFreeCameraMode = true;
     
     // Show player mesh since we're viewing from outside
-    if (window.playerNumberblock && window.playerNumberblock.mesh) {
-        window.playerNumberblock.mesh.visible = true;
+    if (window.playerEntity && window.playerEntity.mesh) {
+        window.playerEntity.mesh.visible = true;
     }
     
     // Keep pointer lock active but disable normal controls
@@ -473,8 +465,8 @@ window.updateThirdPersonCamera = function() {
     window.camera.quaternion.copy(quaternion);
     
     // Ensure player mesh is visible in third-person view
-    if (window.playerNumberblock && window.playerNumberblock.mesh) {
-        window.playerNumberblock.mesh.visible = true;
+    if (window.playerEntity && window.playerEntity.mesh) {
+        window.playerEntity.mesh.visible = true;
     }
 };
 
@@ -666,17 +658,17 @@ function setupPointerLockControls() {
                 window.canJump = true;
                 window.isControlsEnabled = true;
                 
-                // Create the player's block if not already created
+                // Create the player's entity if not already created
                 if (!window.playerLoaded) {
-                    debug('Creating player block after click to play');
+                    debug('Creating player entity after click to play');
                     // Initialize the player
-                    window.playerNumberblock = window.createPlayerNumberblock(scene);
-                    window.player = window.playerNumberblock;
+                    window.playerEntity = window.createPlayerEntity(scene);
+                    window.player = window.playerEntity;
                     window.playerLoaded = true;
                     
                     // Make sure player mesh is invisible in first-person view
-                    if (window.playerNumberblock && window.playerNumberblock.mesh) {
-                        window.playerNumberblock.mesh.visible = false;
+                    if (window.playerEntity && window.playerEntity.mesh) {
+                        window.playerEntity.mesh.visible = false;
                     }
                     
                     // Initialize networking if not already done
@@ -781,9 +773,9 @@ function updatePlayerPhysics(delta) {
             // Update the player's velocity
             window.velocity.y = player.velocityY;
             
-            // Update Numberblock position and scale to match player value
-            if (typeof updatePlayerNumberblock === 'function') {
-                updatePlayerNumberblock(player.value);
+            // Update player entity position and scale to match player value
+            if (typeof updatePlayerEntity === 'function') {
+                updatePlayerEntity(player.value);
             }
             
             // Update player info in UI if available
@@ -814,7 +806,7 @@ function updatePlayerPhysics(delta) {
 }
 
 // initialize your global visuals safely if not done already
-window.visuals = window.visuals || { players: {}, operators: {}, staticNumberblocks: {} };
+window.visuals = window.visuals || { players: {}, operators: {}, staticEntities: {} };
 
 // Animation loop
 function animate(currentTime) {
@@ -841,10 +833,10 @@ function animate(currentTime) {
         const playerState = window.room.state.players.get(window.room.sessionId);
         if (playerState) {
             // Update player mesh
-            if (window.playerNumberblock && window.playerNumberblock.mesh) {
-                window.playerNumberblock.mesh.position.set(playerState.x, playerState.y, playerState.z);
-                window.playerNumberblock.mesh.rotation.y = playerState.rotationY;
-                window.playerNumberblock.mesh.visible = window.isFreeCameraMode || !window.isFirstPerson;
+            if (window.playerEntity && window.playerEntity.mesh) {
+                window.playerEntity.mesh.position.set(playerState.x, playerState.y, playerState.z);
+                window.playerEntity.mesh.rotation.y = playerState.rotationY;
+                window.playerEntity.mesh.visible = window.isFreeCameraMode || !window.isFirstPerson;
             }
             
             // Only update camera for first/third person modes
@@ -1019,8 +1011,8 @@ window.updateFirstPersonCamera = function() {
         }
         
         // Make sure the player mesh is invisible in first-person
-        if (window.playerNumberblock && window.playerNumberblock.mesh) {
-            window.playerNumberblock.mesh.visible = false;
+        if (window.playerEntity && window.playerEntity.mesh) {
+            window.playerEntity.mesh.visible = false;
         }
     }
 };
@@ -1068,23 +1060,23 @@ function updateThirdPersonCamera() {
     setThirdPersonCameraOrientation(camera, lookAtPosition, playerState);
     
     // Show player mesh in third-person and make sure it's updated
-    if (window.playerNumberblock && window.playerNumberblock.mesh) {
-        window.playerNumberblock.mesh.visible = true;
+    if (window.playerEntity && window.playerEntity.mesh) {
+        window.playerEntity.mesh.visible = true;
         
-        // Update position and rotation
-        window.playerNumberblock.mesh.position.set(playerState.x, playerState.y, playerState.z);
+        // Update position
+        window.playerEntity.mesh.position.set(playerState.x, playerState.y, playerState.z);
         
-        // Add subtle rotation smoothing for player mesh
-        const currentRot = window.playerNumberblock.mesh.rotation.y;
+        // Smooth rotation
+        const currentRot = window.playerEntity.mesh.rotation.y;
         const targetRot = playerState.rotationY;
         
-        // Ensure we rotate the shortest way around (handling -π to π transition)
+        // Find the shortest rotation path
         let rotDiff = targetRot - currentRot;
         if (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
         if (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
         
         // Apply smooth rotation
-        window.playerNumberblock.mesh.rotation.y += rotDiff * 0.1;
+        window.playerEntity.mesh.rotation.y += rotDiff * 0.1;
     }
 }
 

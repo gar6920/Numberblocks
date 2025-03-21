@@ -1,4 +1,4 @@
-// Numberblocks game - Core networking module
+
 // Handles connection to the server and basic network setup
 
 // Network configuration
@@ -62,14 +62,21 @@ try {
 const visuals = {
     players: {},
     operators: {},
-    staticNumberblocks: {},
+    staticEntities: {},
     trees: {},
     rocks: {}
 };
 
-// Function to get color based on Numberblock value
+// Visual tracking containers
+const visualTracking = {
+    players: {},
+    operators: {},
+    staticEntities: {},
+};
+
+// Function to get color based on entity value
 function getColorForValue(value) {
-    // Default colors for Numberblocks 1-10
+    // Default colors for values 1-10
     const colors = [
         '#FF0000', // 1 - Red
         '#FF7F00', // 2 - Orange
@@ -291,7 +298,7 @@ async function initNetworking() {
             // Initialize object collections - use a single source of truth
             window.otherPlayers = {};
             window.operators = {};
-            window.staticNumberblocks = {};
+            window.staticEntities = {};
             window.trees = {};
             window.rocks = {};
             
@@ -324,7 +331,7 @@ async function initNetworking() {
                     value: 1, 
                     color: "#FFFF00"
                 });
-                console.log("Local player created and linked to existing Numberblock mesh:", window.myPlayer);
+                console.log("Local player created and linked to existing entity mesh:", window.myPlayer);
                 
                 if (typeof animate === 'function') {
                     animate();
@@ -348,7 +355,7 @@ function setupMessageHandlers() {
     if (!room) return;
     
     // Listen for custom messages from the server
-    room.onMessage("numberblock-collision", (message) => {
+    room.onMessage("player-collision", (message) => {
         console.log("Collision message received:", message);
         
         // Update player value if needed
@@ -368,11 +375,11 @@ function setupMessageHandlers() {
     });
 }
 
-// Send numberblock collision message
-function sendNumberblockCollision(targetId) {
+// Send player collision message
+function sendPlayerCollision(targetId) {
     if (!room) return;
     
-    room.send("numberblock-collision", { targetId: targetId });
+    room.send("player-collision", { targetId: targetId });
 }
 
 // Player joined callback
@@ -392,7 +399,7 @@ function onPlayerJoin(player) {
     } else {
         console.log(`Other player joined: ${player.name || "Unnamed player"}`);
         
-        // Create a new numberblock for this player
+        // Create a new entity for this player
         createRemotePlayerObject(player);
     }
     
@@ -604,20 +611,20 @@ window.updateRemotePlayers = function() {
                         remotePlayer.mesh.parent.remove(remotePlayer.mesh);
                     }
                     
-                    // Create new numberblock with updated value
-                    const newNumberblock = new Numberblock(player.value);
-                    newNumberblock.id = sessionId;
-                    newNumberblock.mesh.position.copy(remotePlayer.mesh.position);
-                    newNumberblock.mesh.rotation.y = remotePlayer.mesh.rotation.y;
+                    // Create new entity with updated value
+                    const newPlayerEntity = new PlayerEntity(player.value);
+                    newPlayerEntity.id = sessionId;
+                    newPlayerEntity.mesh.position.copy(remotePlayer.mesh.position);
+                    newPlayerEntity.mesh.rotation.y = remotePlayer.mesh.rotation.y;
                     
                     // Add to scene
-                    window.scene.add(newNumberblock.mesh);
+                    window.scene.add(newPlayerEntity.mesh);
                     
                     // Update reference in otherPlayers collection
-                    window.otherPlayers[sessionId] = newNumberblock;
+                    window.otherPlayers[sessionId] = newPlayerEntity;
                     // Also update in visuals collection
                     if (window.visuals && window.visuals.players) {
-                        window.visuals.players[sessionId] = newNumberblock;
+                        window.visuals.players[sessionId] = newPlayerEntity;
                     }
                 } catch (error) {
                     console.error("Error updating player value:", error);
@@ -790,7 +797,7 @@ function setupRoomListeners(room) {
     // Ensure visuals collections exist
     window.visuals = window.visuals || {};
     window.visuals.operators = window.visuals.operators || {};
-    window.visuals.staticNumberblocks = window.visuals.staticNumberblocks || {};
+    window.visuals.staticEntities = window.visuals.staticEntities || {};
     
     // Check for entities collection
     if (room.state.entities) {
@@ -805,9 +812,9 @@ function setupRoomListeners(room) {
                 if (typeof window.createOperatorVisual === 'function') {
                     window.createOperatorVisual(entity, entityId);
                 }
-            } else if (entity.type === 'staticNumberblock') {
-                if (typeof window.createStaticNumberblockVisual === 'function') {
-                    window.createStaticNumberblockVisual(entity, entityId);
+            } else if (entity.type === 'staticValueEntity') {
+                if (typeof window.createStaticEntityVisual === 'function') {
+                    window.createStaticEntityVisual(entity, entityId);
                 }
             }
         });
@@ -822,9 +829,9 @@ function setupRoomListeners(room) {
                     if (typeof window.createOperatorVisual === 'function') {
                         window.createOperatorVisual(entity, entityId);
                     }
-                } else if (entity.type === 'staticNumberblock') {
-                    if (typeof window.createStaticNumberblockVisual === 'function') {
-                        window.createStaticNumberblockVisual(entity, entityId);
+                } else if (entity.type === 'staticValueEntity') {
+                    if (typeof window.createStaticEntityVisual === 'function') {
+                        window.createStaticEntityVisual(entity, entityId);
                     }
                 }
             };
@@ -840,9 +847,9 @@ function setupRoomListeners(room) {
                     if (typeof window.removeOperatorVisual === 'function') {
                         window.removeOperatorVisual(entityId);
                     }
-                } else if (entity.type === 'staticNumberblock') {
-                    if (typeof window.removeStaticNumberblockVisual === 'function') {
-                        window.removeStaticNumberblockVisual(entityId);
+                } else if (entity.type === 'staticValueEntity') {
+                    if (typeof window.removeStaticEntityVisual === 'function') {
+                        window.removeStaticEntityVisual(entityId);
                     }
                 }
             };
@@ -911,7 +918,7 @@ window.cleanupNetworking = function() {
 // Make functions available globally
 window.initNetworking = initNetworking;
 window.setupMessageHandlers = setupMessageHandlers;
-window.sendNumberblockCollision = sendNumberblockCollision;
+window.sendPlayerCollision = sendPlayerCollision;
 window.getRandomColor = getRandomColor;
 window.getColorForValue = getColorForValue;
 window.CSS2DObject = CSS2DObject;

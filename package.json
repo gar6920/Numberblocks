@@ -2,10 +2,10 @@
   "name": "3d-ai-game-platform",
   "version": "1.0.0",
   "description": "A modular 3D multiplayer browser-based game platform with support for various game implementations. The first implementation is Numberblocks, a mathematical building blocks game.",
-  "main": "server.js",
+  "main": "server/core/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node server/core/server.js",
+    "dev": "nodemon server/core/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

@@ -31,6 +31,22 @@ npm start
 
 - PowerShell's `mkdir` doesn't support multiple directory arguments like in Linux/macOS. Create directories one by one or use a loop.
 
+## Project Structure
+
+### Core vs. Implementation
+- All core components must be kept in their respective core directories:
+  - Server core: `/server/core/`
+  - Client core: `/client/js/core/`
+- Implementation-specific code must be in the implementations directories:
+  - Server implementations: `/server/implementations/`
+  - Client implementations: `/client/js/implementations/`
+
+### Core Components Location
+- The main server entry point must be in `/server/core/server.js`
+- The main client entry point must be in `/client/js/core/main.js`
+- All schema definitions must be in `/server/core/schemas/`
+- Core room implementations must be in `/server/core/` (e.g., BaseRoom.js)
+
 ## Implementation Guidelines
 
 ### Modular Design Principles
@@ -38,6 +54,13 @@ npm start
 - Use interfaces and base classes for common functionality
 - Create extension points for game-specific features
 - Implement factory patterns for creating game-specific entities
+- Core code must remain implementation-agnostic
+
+### Implementation-Agnostic Code
+- Core code must never refer to specific implementations by name
+- Use generic terms in core code (e.g., "player" instead of specific implementation names)
+- Always provide generic interfaces that implementations can extend
+- Implementations should identify themselves via their "implementationType" property
 
 ### Three.js Implementation Notes
 
@@ -79,20 +102,16 @@ npm start
 - Keep commit messages descriptive and related to implementation changes
 - Use feature branches for new game implementations or major features
 
-## Project Structure
-
-- Follow the modular architecture document precisely to ensure consistency
-- Core platform code should be in designated directories
-- Implementation-specific code should be clearly separated
-- New JavaScript files should be properly categorized in the appropriate directories
-
-## Class Structure
-- Keep classes modular - each class should have a single responsibility
-- Use inheritance for extending core platform functionality
-- Create interfaces for required implementation behaviors
-- Document extension points and required methods for new implementations
-
 ## Adding New Game Implementations
-- Create a new implementation directory as all implementation should be completely independent from the core structure
+- Create both client-side and server-side implementation directories
+- Extend core classes for your implementation needs
+- Register your implementation components with the appropriate factories
+- Follow the structure established by existing implementations
+- Ensure full implementation-agnostic separation between core and implementation code
 
-## always follow the architecture.md - if their is any descrepency then stop and bring it to my attention
+## Modules Loading
+- Client modules must follow the pattern established in main.js for proper loading order
+- Core modules must be loaded before implementation-specific modules
+- Use proper dependency management to avoid circular references
+
+## Always follow the architecture.md - if there is any discrepancy then stop and bring it to my attention

@@ -1,5 +1,3 @@
-// Numberblocks game - First-person controls implementation
-
 // Global variables
 window.moveForward = false;
 window.moveBackward = false;
@@ -160,8 +158,8 @@ window.initControls = function(camera, domElement) {
                     ));
                     
                     // Also update player mesh rotation immediately for seamless transition to third-person
-                    if (window.myPlayer && window.myPlayer.mesh) {
-                        window.myPlayer.mesh.rotation.y = window.playerRotationY;
+                    if (window.playerEntity && window.playerEntity.mesh) {
+                        window.playerEntity.mesh.rotation.y = window.playerRotationY;
                     }
                 }
             } else if (!window.isFirstPerson && !window.isFreeCameraMode) {
@@ -470,8 +468,8 @@ window.toggleCameraView = function() {
         window.isFirstPerson = false;
         window.isFreeCameraMode = true;
         // Save player position for free camera starting point
-        if (window.playerNumberblock && window.playerNumberblock.mesh) {
-            const pos = window.playerNumberblock.mesh.position.clone();
+        if (window.playerEntity && window.playerEntity.mesh) {
+            const pos = window.playerEntity.mesh.position.clone();
             pos.y += 3; // Start slightly above the player
             window.camera.position.copy(pos);
         }

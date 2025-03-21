@@ -1,6 +1,7 @@
 const { Room } = require("colyseus");
-const { GameState } = require("../schemas/GameState");
-const { Player } = require("../schemas/Player");
+const { GameState } = require("./schemas/GameState");
+const { Player } = require("./schemas/Player");
+const { BaseEntity } = require("./schemas/BaseEntity");
 
 /**
  * Base room class for all game implementations
@@ -26,6 +27,9 @@ class BaseRoom extends Room {
         // Set simulation interval for server-side logic
         this.setSimulationInterval(() => this.update());
         
+        // Initialize spawn system
+        this.initializeSpawnSystem();
+        
         // Initialize implementation - to be implemented by subclasses
         this.initializeImplementation(options);
         
@@ -33,6 +37,23 @@ class BaseRoom extends Room {
         this.onMessage("updateInput", (client, message) => {
             this.handleInputUpdate(client, message);
         });
+        
+        // Listen for entity interaction messages
+        this.onMessage("entityInteraction", (client, message) => {
+            this.handleEntityInteraction(client, message);
+        });
+    }
+    
+    /**
+     * Initialize entity spawn system
+     * Provides base functionality for spawning entities periodically
+     */
+    initializeSpawnSystem() {
+        // Base spawn system properties
+        this.spawnTimer = 0;
+        this.spawnInterval = 10; // Default 10 seconds
+        this.maxEntities = 20;   // Default maximum entities
+        this.spawnEnabled = false; // Disabled by default
     }
     
     /**
@@ -86,6 +107,34 @@ class BaseRoom extends Room {
     }
     
     /**
+     * Handle entity interaction message from client
+     * Base implementation for entity interactions like collecting or triggering entities
+     * @param {Client} client The client that sent the message
+     * @param {Object} message The message containing entityId and interaction type
+     */
+    handleEntityInteraction(client, message) {
+        const player = this.state.players.get(client.sessionId);
+        const entity = this.state.entities.get(message.entityId);
+        
+        if (!player || !entity) return;
+        
+        // Call implementation-specific entity interaction handler
+        this.onEntityInteraction(player, entity, message.interactionType);
+    }
+    
+    /**
+     * Implementation-specific entity interaction handler
+     * To be overridden by subclasses
+     * @param {Player} player The player that interacted
+     * @param {BaseEntity} entity The entity that was interacted with
+     * @param {string} interactionType The type of interaction
+     */
+    onEntityInteraction(player, entity, interactionType) {
+        // Base implementation does nothing
+        console.log(`Player ${player.id} interacted with entity ${entity.id} (${interactionType})`);
+    }
+    
+    /**
      * Update game state - called once per simulation interval
      * Base implementation handles player movement and physics
      */
@@ -102,8 +151,101 @@ class BaseRoom extends Room {
             this.updatePlayerFromInput(sessionId, player, player.input, deltaTime);
         });
         
+        // Handle entity spawning if enabled
+        if (this.spawnEnabled) {
+            this.updateEntitySpawning(deltaTime);
+        }
+        
         // Call implementation-specific update
         this.implementationUpdate(deltaTime);
+    }
+    
+    /**
+     * Update entity spawning system
+     * @param {number} deltaTime Time since last update
+     */
+    updateEntitySpawning(deltaTime) {
+        this.spawnTimer += deltaTime;
+        if (this.spawnTimer >= this.spawnInterval) {
+            // Count current spawned entities
+            let entityCount = 0;
+            this.state.entities.forEach(entity => {
+                if (entity.isSpawned) {
+                    entityCount++;
+                }
+            });
+            
+            // Spawn entity if below maximum
+            if (entityCount < this.maxEntities) {
+                this.spawnEntity();
+            }
+            
+            this.spawnTimer = 0;
+            this.spawnInterval = this.getSpawnInterval();
+        }
+    }
+    
+    /**
+     * Get spawn interval - can be overridden for random intervals
+     * @returns {number} Spawn interval in seconds
+     */
+    getSpawnInterval() {
+        return this.spawnInterval; // Default implementation returns fixed interval
+    }
+    
+    /**
+     * Spawn a new entity - to be implemented by subclasses
+     */
+    spawnEntity() {
+        // Base implementation does nothing - to be overridden
+        console.log("spawnEntity called but not implemented");
+    }
+    
+    /**
+     * Create and add entity to the game state
+     * @param {string} id Entity ID
+     * @param {BaseEntity} entity Entity instance
+     * @param {Object} position Position {x, y, z}
+     * @param {Object} rotation Rotation {x, y, z}
+     * @returns {BaseEntity} The created entity
+     */
+    createEntity(id, entity, position, rotation) {
+        // Set entity properties
+        entity.id = id;
+        
+        // Set position
+        if (position) {
+            entity.x = position.x || 0;
+            entity.y = position.y || 0;
+            entity.z = position.z || 0;
+        }
+        
+        // Set rotation if provided
+        if (rotation) {
+            entity.rotationX = rotation.x || 0;
+            entity.rotationY = rotation.y || 0; 
+            entity.rotationZ = rotation.z || 0;
+        }
+        
+        // Add to state
+        this.state.entities.set(id, entity);
+        console.log(`Created entity ${id} at (${entity.x}, ${entity.y}, ${entity.z})`);
+        
+        return entity;
+    }
+    
+    /**
+     * Delete an entity from the game state
+     * @param {string} id Entity ID
+     * @returns {boolean} Whether entity was found and deleted
+     */
+    deleteEntity(id) {
+        if (this.state.entities.has(id)) {
+            this.state.entities.delete(id);
+            console.log(`Deleted entity ${id}`);
+            return true;
+        }
+        return false;
     }
     
     /**
@@ -136,12 +278,8 @@ class BaseRoom extends Room {
         
         // Check each movement key and apply appropriate movement
         if (input.keys && typeof input.keys === 'object') {
-            // Log movement keys for debugging (only when they change)
-            const isMoving = input.keys.w || input.keys.a || input.keys.s || input.keys.d || input.keys.q || input.keys.e;
-            if (isMoving) {
-                console.log(`Player ${playerSessionId} moving with keys:`, input.keys);
-            }
-        
+            // Remove verbose key logging
+            
             if (input.keys.w) {
                 // Forward movement: Move in the direction the player/camera is facing
                 dx -= Math.sin(moveAngle) * speed;
@@ -249,30 +387,28 @@ class BaseRoom extends Room {
         // Set initial player position
         player.x = 0;
         player.y = 1;
-        player.z = 5;
+        player.z = 0;
         
-        // Set player name and color
-        player.name = options.name || client.sessionId;
-        player.color = this.getColorForPlayer(Object.keys(this.state.players).length);
+        // Set session ID as player ID
+        player.id = client.sessionId;
         
-        // Call implementation-specific player setup
+        // Allow subclasses to modify player setup
         this.setupPlayer(player, client, options);
         
-        // Add player to game state
+        // Add player to the game state
         this.state.players.set(client.sessionId, player);
-        
-        console.log(`Player ${player.name} (${client.sessionId}) joined with color ${player.color}`);
     }
     
     /**
-     * Implementation-specific player setup
-     * To be overridden by subclasses
+     * Player setup - to be implemented by subclasses
      * @param {Player} player The player object
      * @param {Client} client The client that joined
      * @param {Object} options Join options
+     * @returns {Player} The modified player object
      */
     setupPlayer(player, client, options) {
-        // Base implementation does nothing
+        // Base implementation just returns the player
+        return player;
     }
     
     /**
@@ -281,31 +417,24 @@ class BaseRoom extends Room {
      * @param {boolean} consented Whether the client consented to leaving
      */
     onLeave(client, consented) {
-        console.log(`${client.sessionId} left the game`);
+        console.log(`Client left: ${client.sessionId}`);
         
-        // Remove player from room state
+        // Remove player from the game state
         this.state.players.delete(client.sessionId);
-        
-        console.log(`Player ${client.sessionId} removed. Remaining players: ${this.state.players.size}`);
     }
     
     /**
-     * Get a distinct color for each player
-     * @param {number} index Player index
-     * @returns {string} Color in hex format
+     * Generate a random position within the map
+     * @param {number} minHeight Minimum height (y-coordinate)
+     * @returns {Object} Position object {x, y, z}
      */
-    getColorForPlayer(index) {
-        const colors = [
-            "#FF0000", // Red
-            "#00FF00", // Green
-            "#0000FF", // Blue
-            "#FFFF00", // Yellow
-            "#FF00FF", // Magenta
-            "#00FFFF", // Cyan
-            "#FFA500", // Orange
-            "#800080"  // Purple
-        ];
-        return colors[index % colors.length];
+    generateRandomPosition(minHeight = 0) {
+        const mapSize = this.state.gameConfig.mapSize;
+        return {
+            x: (Math.random() * mapSize) - (mapSize / 2),
+            y: minHeight,
+            z: (Math.random() * mapSize) - (mapSize / 2)
+        };
     }
 }
 

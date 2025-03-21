@@ -14,17 +14,20 @@ class Player extends Entity {
         this.controls = null;
         
         // Create the player mesh if not already created
-        if (!this.mesh && window.createPlayerNumberblock && window.scene) {
+        if (!this.mesh && window.createPlayerEntity && window.scene) {
             this.value = params.value || 1;
             this.color = params.color || "#FFFF00";
             
-            // Use createPlayerNumberblock function if available
-            const numberblock = window.createPlayerNumberblock(window.scene, this.value);
-            this.mesh = numberblock.mesh;
+            // Use createPlayerEntity function if available
+            const playerEntity = window.createPlayerEntity(window.scene, this.value);
+            if (playerEntity) {
+                this.mesh = playerEntity.mesh;
+                this.group = playerEntity.group;
+            }
             
             // Apply color if specified
-            if (numberblock.updateColor && this.color) {
-                numberblock.updateColor(this.color);
+            if (playerEntity && playerEntity.updateColor && this.color) {
+                playerEntity.updateColor(this.color);
             }
         }
         

@@ -3,7 +3,7 @@
  * A simple implementation with basic box players
  */
 
-const { DefaultRoom } = require("../../schemas/DefaultRoom");
+const { DefaultRoom } = require("../../core/schemas/DefaultRoom");
 
 // Default implementation information
 const implementation = {

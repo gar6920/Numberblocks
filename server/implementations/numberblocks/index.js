@@ -3,14 +3,14 @@
  * Exports all components of the Numberblocks implementation
  */
 
-const { NumberblockPlayer, Operator, StaticNumberblock } = require('./schemas');
+const { ImplementationPlayer, Operator, StaticValueEntity } = require('./schemas');
 const { NumberblocksRoom } = require('./NumberblocksRoom');
 
 module.exports = {
     // Schemas
-    NumberblockPlayer,
+    ImplementationPlayer,
     Operator,
-    StaticNumberblock,
+    StaticValueEntity,
     
     // Room
     NumberblocksRoom,

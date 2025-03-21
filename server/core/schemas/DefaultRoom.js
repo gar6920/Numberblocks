@@ -1,4 +1,4 @@
-const { BaseRoom } = require("../core/BaseRoom");
+const { BaseRoom } = require("../BaseRoom");
 
 /**
  * Default Room

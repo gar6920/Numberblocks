@@ -1,5 +1,5 @@
 const { BaseRoom } = require("../../core/BaseRoom");
-const { NumberblockPlayer, Operator, StaticNumberblock } = require("./schemas");
+const { ImplementationPlayer, Operator, StaticValueEntity } = require("./schemas");
 
 /**
  * Numberblocks implementation of the game room
@@ -17,61 +17,52 @@ class NumberblocksRoom extends BaseRoom {
         this.state.gameConfig.implementation = "numberblocks";
         
         // Setup operator spawning system
-        this.spawnTimer = 0;
+        this.spawnEnabled = true;
         this.spawnInterval = this.getRandomSpawnInterval();
-        this.maxOperators = 10;
+        this.maxEntities = 10; // Maximum operators in the world
         
-        // Setup static numberblocks
-        this.createStaticNumberblock("static1", 2, 2, 0, -5);
-        this.createStaticNumberblock("static2", 3, 5, 0, -5);
-        this.createStaticNumberblock("static3", 4, -5, 0, -5);
-        this.createStaticNumberblock("static4", 5, 0, 0, -10);
-        this.createStaticNumberblock("static5", 1, 5, 0, -10);
+        // Setup static value entities
+        this.createStaticValueEntity("static1", 2, 2, 0, -5);
+        this.createStaticValueEntity("static2", 3, 5, 0, -5);
+        this.createStaticValueEntity("static3", 4, -5, 0, -5);
+        this.createStaticValueEntity("static4", 5, 0, 0, -10);
+        this.createStaticValueEntity("static5", 1, 5, 0, -10);
         
-        // Listen for Numberblocks-specific messages
-        this.onMessage("collectOperator", (client, message) => {
-            this.handleCollectOperator(client, message);
-        });
-        
-        this.onMessage("numberblockCollision", (client, message) => {
-            this.handleNumberblockCollision(client, message);
+        // Listen for implementation-specific messages
+        this.onMessage("playerCollision", (client, message) => {
+            this.handlePlayerCollision(client, message);
         });
     }
     
     /**
-     * Handle collect operator message from client
-     * @param {Client} client The client that sent the message
-     * @param {Object} message The message sent by the client
+     * Override the base entity interaction handler
      */
-    handleCollectOperator(client, message) {
-        const player = this.state.players.get(client.sessionId);
-        const operator = this.state.entities.get(message.id);
-        
-        if (player && operator && operator.type === "operator") {
+    onEntityInteraction(player, entity, interactionType) {
+        if (interactionType === "collect" && entity.type === "operator") {
             // Set the player's operator
-            player.operator = operator.operatorType;
+            player.operator = entity.operatorType;
             
             // Remove operator from state
-            this.state.entities.delete(operator.id);
-            console.log(`Player ${client.sessionId} collected ${operator.operatorType} operator`);
+            this.deleteEntity(entity.id);
+            console.log(`Player ${player.id} collected ${entity.operatorType} operator`);
         }
     }
     
     /**
-     * Handle numberblock collision message from client
+     * Handle player collision message from client
      * @param {Client} client The client that sent the message
      * @param {Object} message The message sent by the client
      */
-    handleNumberblockCollision(client, message) {
+    handlePlayerCollision(client, message) {
         const player = this.state.players.get(client.sessionId);
         const targetId = message.targetId;
         let target;
         
-        // Check if target is another player or a static numberblock
+        // Check if target is another player or a static value entity
         if (this.state.players.has(targetId)) {
             target = this.state.players.get(targetId);
         } else if (this.state.entities.has(targetId) && 
-                   this.state.entities.get(targetId).type === "staticNumberblock") {
+                   this.state.entities.get(targetId).type === "staticValueEntity") {
             target = this.state.entities.get(targetId);
         }
         
@@ -88,140 +79,106 @@ class NumberblocksRoom extends BaseRoom {
     }
     
     /**
-     * Numberblocks-specific update logic
-     * @param {number} deltaTime Time since last update
+     * Override the base spawn interval method
+     * @returns {number} Random spawn interval between 5-10 seconds
      */
-    implementationUpdate(deltaTime) {
-        // Spawn operators periodically
-        this.spawnTimer += deltaTime;
-        if (this.spawnTimer >= this.spawnInterval) {
-            // Count current operators
-            let operatorCount = 0;
-            this.state.entities.forEach(entity => {
-                if (entity.type === "operator") {
-                    operatorCount++;
-                }
-            });
-            
-            // Spawn operator if below maximum
-            if (operatorCount < this.maxOperators) {
-                this.spawnOperator();
-            }
-            
-            this.spawnTimer = 0;
-            this.spawnInterval = this.getRandomSpawnInterval();
-        }
-    }
-    
-    /**
-     * Get a random spawn interval between 5-10 seconds
-     * @returns {number} Spawn interval in seconds
-     */
-    getRandomSpawnInterval() {
+    getSpawnInterval() {
         return 5 + Math.random() * 5; // 5-10 seconds
     }
     
     /**
-     * Spawn a new operator
+     * Override the base spawn entity method
+     * Spawns a new operator entity
      */
-    spawnOperator() {
+    spawnEntity() {
         const id = `op_${Math.floor(Math.random() * 10000)}`;
         const operatorType = Math.random() > 0.5 ? "plus" : "minus";
         
-        // Create operator with random position
+        // Create operator
         const operator = new Operator();
-        operator.id = id;
         operator.operatorType = operatorType;
+        operator.isSpawned = true;
         
-        // Set random position
-        const mapSize = this.state.gameConfig.mapSize;
-        operator.x = (Math.random() * mapSize) - (mapSize / 2);
-        operator.y = 0.6; // Slightly above ground
-        operator.z = (Math.random() * mapSize) - (mapSize / 2);
+        // Set position slightly above ground
+        const position = this.generateRandomPosition(0.6);
         
-        // Add to state
-        this.state.entities.set(id, operator);
-        console.log(`Spawned ${operatorType} operator at (${operator.x.toFixed(2)}, ${operator.y}, ${operator.z.toFixed(2)})`);
+        // Use base createEntity method
+        this.createEntity(id, operator, position);
+        
+        console.log(`Spawned ${operatorType} operator at (${position.x.toFixed(2)}, ${position.y}, ${position.z.toFixed(2)})`);
     }
     
     /**
-     * Create a static numberblock
+     * Create a static value entity
      * @param {string} id Unique identifier
-     * @param {number} value Numberblock value
-     * @param {number} x X position
-     * @param {number} y Y position
-     * @param {number} z Z position
+     * @param {number} value Entity value
+     * @param {number} x X-coordinate
+     * @param {number} y Y-coordinate
+     * @param {number} z Z-coordinate
      */
-    createStaticNumberblock(id, value, x, y, z) {
-        const staticBlock = new StaticNumberblock();
-        staticBlock.id = id;
-        staticBlock.value = value;
-        staticBlock.x = x;
-        staticBlock.y = y || 0; // Default to ground level
-        staticBlock.z = z;
+    createStaticValueEntity(id, value, x, y, z) {
+        // Create static value entity
+        const staticEntity = new StaticValueEntity();
+        staticEntity.value = value;
         
-        // Get a color based on the value
-        staticBlock.color = this.getColorForNumber(value);
+        // Create using the base createEntity method
+        this.createEntity(id, staticEntity, { x, y, z });
         
-        // Add to state
-        this.state.entities.set(id, staticBlock);
-        console.log(`Created static numberblock with ID ${id}, value ${value} at (${x}, ${staticBlock.y}, ${z})`);
+        console.log(`Created static value entity ${id} with value ${value} at (${x}, ${y}, ${z})`);
     }
     
     /**
-     * Setup player with Numberblocks-specific properties
+     * Setup player for implementation
      * @param {Player} player The player object
      * @param {Client} client The client that joined
      * @param {Object} options Join options
+     * @returns {ImplementationPlayer} The implementation player
      */
     setupPlayer(player, client, options) {
-        // For Numberblocks implementation, set value to 1 and operator to empty
-        player.value = 1;
-        player.operator = "";
+        // Create an implementation player
+        const implementationPlayer = new ImplementationPlayer();
         
-        // Convert to NumberblockPlayer if not already
-        if (player.implementationType !== "numberblocks") {
-            const nbPlayer = new NumberblockPlayer();
-            
-            // Copy properties
-            nbPlayer.id = player.id;
-            nbPlayer.name = player.name;
-            nbPlayer.x = player.x;
-            nbPlayer.y = player.y;
-            nbPlayer.z = player.z;
-            nbPlayer.rotationY = player.rotationY;
-            nbPlayer.pitch = player.pitch;
-            nbPlayer.velocityY = player.velocityY;
-            nbPlayer.color = player.color;
-            nbPlayer.input = player.input;
-            
-            // Return the new player
-            return nbPlayer;
-        }
+        // Copy base player properties to the implementation player
+        implementationPlayer.id = player.id;
+        implementationPlayer.x = player.x;
+        implementationPlayer.y = player.y;
+        implementationPlayer.z = player.z;
+        implementationPlayer.rotationY = player.rotationY || 0;
         
-        return player;
+        // Set name and color
+        implementationPlayer.name = options.name || client.sessionId;
+        implementationPlayer.color = this.getColorForNumber(1);
+        
+        // Set initial value
+        implementationPlayer.value = 1;
+        
+        console.log(`Created player ${implementationPlayer.name} with value ${implementationPlayer.value}`);
+        
+        return implementationPlayer;
     }
     
     /**
-     * Get color for a number value (Numberblocks specific)
-     * @param {number} number The number value
+     * Get color for a value
+     * @param {number} number The number to get color for
      * @returns {string} Color in hex format
      */
     getColorForNumber(number) {
-        const colors = {
-            1: "#FF0000", // Red (One)
-            2: "#FFA500", // Orange (Two)
-            3: "#FFFF00", // Yellow (Three)
-            4: "#00FF00", // Green (Four)
-            5: "#0000FF", // Blue (Five)
-            6: "#800080", // Purple (Six)
-            7: "#FFC0CB", // Pink (Seven)
-            8: "#A52A2A", // Brown (Eight)
-            9: "#808080"  // Grey (Nine)
-        };
+        const colors = [
+            "#FFFFFF", // White (placeholder, not used)
+            "#FF0000", // 1: Red
+            "#FFA500", // 2: Orange
+            "#FFFF00", // 3: Yellow
+            "#00FF00", // 4: Green
+            "#0000FF", // 5: Blue
+            "#800080", // 6: Purple
+            "#FFC0CB", // 7: Pink
+            "#A52A2A", // 8: Brown
+            "#00FFFF", // 9: Cyan
+            "#FF00FF"  // 10: Magenta
+        ];
         
-        // For numbers greater than 9, cycle through the colors or use white
-        return colors[number % 9] || "#FFFFFF";
+        // Use modulo for numbers greater than our color array
+        return colors[number % colors.length] || "#FFFFFF";
     }
 }
 

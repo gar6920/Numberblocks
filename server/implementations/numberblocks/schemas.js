@@ -1,21 +1,21 @@
 const { Schema, type, defineTypes } = require("@colyseus/schema");
-const { BaseEntity } = require("../../schemas/BaseEntity");
-const { Player } = require("../../schemas/Player");
+const { BaseEntity } = require("../../core/schemas/BaseEntity");
+const { Player } = require("../../core/schemas/Player");
 
 /**
- * Numberblock player schema - extends the Player schema
- * Adds Numberblock-specific properties
+ * Implementation player schema - extends the Player schema
+ * Adds implementation-specific properties
  */
-class NumberblockPlayer extends Player {
+class ImplementationPlayer extends Player {
     constructor() {
         super();
-        this.implementationType = "numberblocks";
+        this.implementationType = "numberblocks"; // Keep this one reference to the implementation
         this.operator = ""; // "plus" or "minus"
     }
 }
 
 // Register schema types
-type("string")(NumberblockPlayer.prototype, "operator");
+type("string")(ImplementationPlayer.prototype, "operator");
 
 /**
  * Operator entity schema - extends BaseEntity
@@ -33,24 +33,24 @@ class Operator extends BaseEntity {
 type("string")(Operator.prototype, "operatorType");
 
 /**
- * Static Numberblock entity schema - extends BaseEntity
- * Represents static numberblocks in the game that don't move
+ * Static entity schema - extends BaseEntity
+ * Represents static objects in the game that don't move
  */
-class StaticNumberblock extends BaseEntity {
+class StaticValueEntity extends BaseEntity {
     constructor() {
         super();
-        this.type = "staticNumberblock";
+        this.type = "staticValueEntity";
         this.isStatic = true;     // Flag indicating this is a static entity
         this.isInteractable = true; // Whether this block can be interacted with
     }
 }
 
 // Register only the new properties that aren't already in BaseEntity
-type("boolean")(StaticNumberblock.prototype, "isStatic");
-type("boolean")(StaticNumberblock.prototype, "isInteractable");
+type("boolean")(StaticValueEntity.prototype, "isStatic");
+type("boolean")(StaticValueEntity.prototype, "isInteractable");
 
 module.exports = {
-    NumberblockPlayer,
+    ImplementationPlayer,
     Operator,
-    StaticNumberblock
+    StaticValueEntity
 }; 

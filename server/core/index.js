@@ -9,8 +9,8 @@ const { Server } = require('colyseus');
 const path = require('path');
 
 // Import implementations
-const DefaultImpl = require('./implementations/default');
-const MathBlocksImpl = require('./implementations/numberblocks');
+const DefaultImpl = require('../implementations/default');
+const MathBlocksImpl = require('../implementations/numberblocks');
 
 // Available implementations
 const implementations = {
@@ -51,11 +51,11 @@ class GameServer {
      */
     configureApp() {
         // Set up static file serving
-        this.app.use(express.static(path.join(__dirname, '..', 'client')));
+        this.app.use(express.static(path.join(__dirname, '../..', 'client')));
         
         // Serve the main index.html
         this.app.get('/', (req, res) => {
-            res.sendFile(path.join(__dirname, '..', 'client', 'index.html'));
+            res.sendFile(path.join(__dirname, '../..', 'client', 'index.html'));
         });
         
         // API endpoint to get current active implementation
@@ -74,21 +74,58 @@ class GameServer {
         // Register each implementation's room
         for (const [implName, impl] of Object.entries(implementations)) {
             // Register implementation without logging each one
-            this.gameServer.define(impl.implementation.roomType, impl.DefaultRoom || impl.ImplementationRoom);
+            const roomType = impl.implementation.roomType;
+            const RoomClass = this.getRoomClass(impl);
+            
+            if (RoomClass) {
+                this.gameServer.define(roomType, RoomClass);
+            } else {
+                console.warn(`No room class found for implementation: ${implName}`);
+            }
         }
         
         // Set the active implementation as the default room
         if (implementations[serverConfig.activeImplementation]) {
             const activeImpl = implementations[serverConfig.activeImplementation];
             // Get the appropriate room from the implementation
-            const ImplementationRoom = activeImpl.DefaultRoom || activeImpl.ImplementationRoom;
-            this.gameServer.define('active', ImplementationRoom);
-            // Don't log active implementation here, will log at server start
+            const RoomClass = this.getRoomClass(activeImpl);
+            
+            if (RoomClass) {
+                this.gameServer.define('active', RoomClass);
+            } else {
+                console.warn(`No room class found for active implementation: ${serverConfig.activeImplementation}`);
+                // Fallback to default if no room class found
+                if (implementations.default && this.getRoomClass(implementations.default)) {
+                    this.gameServer.define('active', this.getRoomClass(implementations.default));
+                }
+            }
         } else {
             // Fallback to default if specified implementation doesn't exist
             console.warn(`Specified implementation "${serverConfig.activeImplementation}" not found. Using "default" instead.`);
-            this.gameServer.define('active', implementations.default.DefaultRoom);
+            const defaultRoomClass = this.getRoomClass(implementations.default);
+            if (defaultRoomClass) {
+                this.gameServer.define('active', defaultRoomClass);
+            }
         }
+    }
+    
+    /**
+     * Helper method to get the room class from an implementation
+     * @param {Object} implementation The implementation object
+     * @returns {Class} The room class, or null if not found
+     */
+    getRoomClass(implementation) {
+        if (implementation.DefaultRoom) {
+            return implementation.DefaultRoom;
+        } else if (implementation.NumberblocksRoom) {
+            return implementation.NumberblocksRoom;
+        } else if (implementation.ImplementationRoom) {
+            return implementation.ImplementationRoom;
+        }
+        
+        // Log what's available in the implementation for debugging
+        console.log(`Available properties in implementation: ${Object.keys(implementation).join(', ')}`);
+        return null;
     }
     
     /**

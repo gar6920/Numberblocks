@@ -4,7 +4,7 @@
  */
 
 // Import the server module
-const { gameServer } = require('./server/index');
+const { gameServer } = require('./index');
 
 // The server is automatically started in the imported module
 console.log('Server started through the modular architecture');

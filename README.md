@@ -1,6 +1,57 @@
 # 3D AI Game Platform
 
-A modular 3D multiplayer browser-based game platform with support for various game implementations. The platform is built with Three.js for 3D rendering and Colyseus for multiplayer functionality.
+A modular 3D multiplayer browser-based game platform with support for various game implementations.
+
+## Project Structure
+
+The project follows a modular architecture with core components separated from implementation-specific code:
+
+```
+/
+├── client/                 # Client-side code
+│   ├── css/                # Stylesheets
+│   ├── js/                 # JavaScript code
+│   │   ├── core/           # Core client components
+│   │   │   ├── main.js     # Main entry point
+│   │   │   ├── game-engine.js # Game engine
+│   │   │   ├── controls.js # Input controls
+│   │   │   └── ...         # Other core modules
+│   │   └── implementations/ # Implementation-specific client code
+│   │       └── ...         # Various game implementations
+│   └── index.html          # Main HTML file
+├── server/                 # Server-side code
+│   ├── core/               # Core server components
+│   │   ├── server.js       # Server entry point
+│   │   ├── index.js        # Core server logic
+│   │   ├── BaseRoom.js     # Base room implementation
+│   │   └── schemas/        # Core data schemas
+│   └── implementations/    # Implementation-specific server code
+│       └── ...             # Various game implementations
+└── package.json            # Node.js package configuration
+```
+
+## Getting Started
+
+1. Install dependencies:
+```
+npm install
+```
+
+2. Start the server:
+```
+npm start
+```
+
+3. Open your browser to `http://localhost:3000`
+
+## Core vs. Implementation
+
+The codebase separates core functionality from implementation-specific code:
+
+- **Core** components provide the underlying game platform features.
+- **Implementations** build on the core to create specific games.
+
+To create a new implementation, see the existing examples in the implementations directory.
 
 ## Modular Design
 
@@ -20,70 +71,11 @@ The first implementation is a mathematical building blocks game inspired by the 
 - **Features**: Dynamic number blocks, mathematical operators, player interaction
 - **Objectives**: Various game modes including target number challenges and elimination
 
-## Project Structure
-
-```
-Root
-├── server.js                   # Main entry point
-├── package.json
-├── README.md
-├── client                      # Client-side code
-│   ├── index.html              # Main HTML file
-│   ├── css/                    # CSS styles
-│   └── js/                     # JavaScript files
-│       ├── main.js             # Main loader
-│       ├── core/               # Core platform code
-│       │   ├── Entity.js       # Base entity class
-│       │   ├── Player.js       # Base player class
-│       │   ├── NPC.js          # Base NPC class
-│       │   ├── controls.js     # Camera and movement controls
-│       │   ├── collision.js    # Collision detection
-│       │   ├── EntityFactory.js # Entity creation factory
-│       │   ├── network-core.js # Network communication
-│       │   └── player-ui.js    # UI components
-│       ├── implementations/    # Game-specific implementations
-│       │   └── numberblocks/   # Numberblocks implementation
-│       │       ├── numberblock.js # Numberblock visual representation
-│       │       ├── operator.js    # Mathematical operators
-│       │       ├── NumberBlock.js # Numberblock entity
-│       │       └── index.js       # Implementation loader
-│       └── lib/                # Third-party libraries
-└── server                      # Server-side code
-    ├── index.js                # Server entry point
-    ├── core/                   # Core server functionality
-    │   └── BaseRoom.js         # Base room class
-    ├── schemas/                # Schema definitions
-    │   ├── BaseEntity.js       # Base entity schema
-    │   ├── Player.js           # Player schema
-    │   ├── InputState.js       # Input state schema
-    │   └── GameState.js        # Game state schema
-    └── implementations/        # Server-side implementations
-        └── numberblocks/       # Numberblocks implementation
-            ├── schemas.js      # Numberblocks-specific schemas
-            ├── NumberblocksRoom.js # Numberblocks room implementation
-            └── index.js        # Implementation exports
-```
-
 ## Tech Stack
 
 - **Front-End**: HTML5, CSS3, JavaScript (ES6+), Three.js
 - **Back-End**: Node.js, Colyseus (WebSocket-based multiplayer framework)
 - **Development Tools**: Git, Nodemon
-
-## Getting Started
-
-1. **Install dependencies**:
-   ```
-   npm install
-   ```
-
-2. **Start the server**:
-   ```
-   npm start
-   ```
-
-3. **Access the game**:
-   Open your browser and navigate to `http://localhost:3000`
 
 ## Adding New Implementations
 

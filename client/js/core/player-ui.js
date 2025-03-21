@@ -47,14 +47,12 @@ class PlayerUI {
                     if (myPlayer) {
                         this.addPlayerToList(myPlayer, mySessionId, true);
                         playerCount++;
-                    } else if (window.playerNumberblock) {
-                        // Fallback to using the player's numberblock object
-                        const fallbackPlayer = {
-                            name: "Me",
-                            value: window.playerNumberblock.value || 1,
-                            color: window.playerNumberblock.color || "#FFFF00"
-                        };
-                        this.addPlayerToList(fallbackPlayer, mySessionId, true);
+                    } else if (window.playerEntity) {
+                        // Show connected player UI
+                        this.updatePlayerUI({
+                            value: window.playerEntity.value || 1,
+                            color: window.playerEntity.color || "#FFFF00"
+                        });
                         playerCount++;
                     }
                     
