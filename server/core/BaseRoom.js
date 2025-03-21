@@ -156,14 +156,14 @@ class BaseRoom extends Room {
             
             if (input.keys.a) {
                 // Strafe left: Move perpendicular to the facing direction
-                dx += Math.sin(moveAngle + Math.PI/2) * speed;
-                dz += Math.cos(moveAngle + Math.PI/2) * speed;
+                dx -= Math.sin(moveAngle + Math.PI/2) * speed;
+                dz -= Math.cos(moveAngle + Math.PI/2) * speed;
             }
             
             if (input.keys.d) {
                 // Strafe right: Move perpendicular to the facing direction
-                dx -= Math.sin(moveAngle + Math.PI/2) * speed;
-                dz -= Math.cos(moveAngle + Math.PI/2) * speed;
+                dx += Math.sin(moveAngle + Math.PI/2) * speed;
+                dz += Math.cos(moveAngle + Math.PI/2) * speed;
             }
             
             // Handle Q and E for rotating the player in third-person mode
