@@ -114,4 +114,22 @@ npm start
 - Core modules must be loaded before implementation-specific modules
 - Use proper dependency management to avoid circular references
 
+## 4-Player Local Multiplayer Setup
+- The 4-player setup consists of two key files: `four_player_setup.html` and `open_4player_direct.bat`
+- **Do not delete** these files as they are essential for the 4-player functionality
+- When making changes that affect the client interface, test with the 4-player setup to ensure compatibility
+- The 4-player setup requires Chrome to be installed on the system
+
+### Running the 4-Player Setup
+- Use the `open_4player_direct.bat` script to launch the 4-player setup
+- The script automatically opens Chrome in app mode with the required HTML file
+- Press F11 in the browser for fullscreen mode
+- Ensure the game server is running at http://localhost:3000 before launching
+
+### Modifying the 4-Player Setup
+- If you need to modify the layout, edit the CSS grid properties in `four_player_setup.html`
+- The default setup is a 2×2 grid with minimal spacing between the viewports
+- Each viewport is an iframe that loads the game client independently
+- Changes to the main client should automatically reflect in all viewports
+
 ## Always follow the architecture.md - if there is any discrepancy then stop and bring it to my attention

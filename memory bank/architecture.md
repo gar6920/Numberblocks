@@ -239,7 +239,27 @@ The platform is designed with modularity in mind, allowing for different game im
   - View-specific movement and interaction behaviors
   - Seamless transitions between camera modes
 - **Multiplayer Support:** Multiple players can join the same game world
+- **Multi-Player Setup:** Supports a 4-player split-screen mode for local multiplayer gameplay
 - **Persistence:** Session reconnection support
 - **Browser Tab Synchronization:** Automatically updates game state when inactive tabs become active
 - **Entity Component System:** Flexible architecture for game entity management
 - **Modular Implementation System:** Support for various game types and mechanics
+
+## 4-Player Local Multiplayer Setup
+The platform includes a specialized setup for local multiplayer games with 4 players:
+
+**Implementation:**
+- Uses HTML grid layout to create a 2x2 split-screen arrangement
+- Each screen connects to the same game server but with a separate client connection
+- Simple batch script launcher for one-click setup
+- Supports four independent player instances in the same visual space
+
+**Files:**
+- `four_player_setup.html`: HTML file that creates a 2x2 grid of iframes, each loading the game client
+- `open_4player_direct.bat`: Batch script that opens the 4-player setup in Chrome's app mode
+
+**Key Features:**
+- Clean grid layout with minimal spacing between player views
+- Full-screen support for immersive gameplay
+- All players connect to the same game server instance
+- Client isolation ensures each player gets their own controls
