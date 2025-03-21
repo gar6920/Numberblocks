@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>3D AI Game - 4 Player Setup</title>
+    <title>3D AI Game - Multi-Player Setup</title>
     <style>
         body, html {
             margin: 0;
@@ -11,13 +11,30 @@
             overflow: hidden;
         }
         .container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr 1fr;
             width: 100vw;
             height: 100vh;
             gap: 2px;
             background-color: #000;
+            display: grid;
+        }
+        /* 2 players: top-bottom split */
+        .players-2 {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        /* 3 players: top left, top right, bottom left */
+        .players-3 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        .players-3 iframe:last-of-type {
+            grid-column: 1;
+            grid-row: 2;
+        }
+        /* 4 players: 2x2 grid */
+        .players-4 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
         }
         iframe {
             width: 100%;
@@ -37,16 +54,30 @@
         }
     </style>
     <script>
-        // Fetch the current implementation when the page loads
         window.addEventListener('DOMContentLoaded', async () => {
+            // Get number of players from URL parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const playerCount = parseInt(urlParams.get('players')) || 4;
+            
+            // Set container class based on player count
+            const container = document.querySelector('.container');
+            container.className = `container players-${playerCount}`;
+            
+            // Create iframes based on player count
+            container.innerHTML = '';
+            for (let i = 0; i < playerCount; i++) {
+                const iframe = document.createElement('iframe');
+                iframe.src = 'http://localhost:3000';
+                container.appendChild(iframe);
+            }
+
+            // Fetch implementation info
             try {
                 const response = await fetch('http://localhost:3000/api/config');
                 if (response.ok) {
                     const config = await response.json();
-                    // Update the page title
-                    document.title = `3D AI Game - 4 Players - ${config.activeImplementation}`;
+                    document.title = `3D AI Game - ${playerCount} Players - ${config.activeImplementation}`;
                     
-                    // Create a display for the implementation
                     const implDisplay = document.createElement('div');
                     implDisplay.id = 'implementation-display';
                     implDisplay.textContent = `Implementation: ${config.activeImplementation}`;
@@ -60,10 +91,7 @@
 </head>
 <body>
     <div class="container">
-        <iframe src="http://localhost:3000"></iframe>
-        <iframe src="http://localhost:3000"></iframe>
-        <iframe src="http://localhost:3000"></iframe>
-        <iframe src="http://localhost:3000"></iframe>
+        <!-- iframes will be added by JavaScript -->
     </div>
 </body>
 </html> 
