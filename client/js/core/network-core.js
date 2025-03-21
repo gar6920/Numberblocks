@@ -288,7 +288,7 @@ async function initNetworking() {
             // Store room in global scope
             window.room = room;
             
-            // Initialize object collections
+            // Initialize object collections - use a single source of truth
             window.otherPlayers = {};
             window.operators = {};
             window.staticNumberblocks = {};
@@ -303,12 +303,18 @@ async function initNetworking() {
             
             // Wait for the initial state before setting up listeners
             room.onStateChange.once((state) => {
+                console.log("Initial state received:", state);
                 setupRoomListeners(room);
                 setupRoomPlayerListeners(room);
                 
-                // Set up fallback polling for players without onChange
-                if (typeof window.setupPlayerPolling === 'function') {
-                    window.setupPlayerPolling();
+                // Register updateRemotePlayers with the animation loop
+                if (typeof window.registerAnimationCallback === 'function') {
+                    window.registerAnimationCallback(window.updateRemotePlayers);
+                    console.log("Registered updateRemotePlayers with animation loop");
+                } else {
+                    // Set up a fallback timer if animation callback registration is not available
+                    console.log("Setting up fallback timer for remote player updates");
+                    window.playerUpdateInterval = setInterval(window.updateRemotePlayers, 1000/60); // 60fps
                 }
                 
                 // Explicitly create local player object
@@ -320,11 +326,11 @@ async function initNetworking() {
                 });
                 console.log("Local player created and linked to existing Numberblock mesh:", window.myPlayer);
                 
-                animate();
+                if (typeof animate === 'function') {
+                    animate();
+                }
                 window.dispatchEvent(new CustomEvent('avatarReady'));
             });
-            
-            
             
             return room;
         } catch (roomError) {
@@ -362,10 +368,6 @@ function setupMessageHandlers() {
     });
 }
 
-// Send player position updates to the server
-// Send player position updates to the server correctly
-
-
 // Send numberblock collision message
 function sendNumberblockCollision(targetId) {
     if (!room) return;
@@ -400,9 +402,15 @@ function onPlayerJoin(player) {
 
 // Create 3D object for remote player
 function createRemotePlayerObject(player) {
+    // Validate that the player object and sessionId exist
+    if (!player || !player.sessionId) {
+        console.error("Invalid player data received - missing sessionId:", player);
+        return null;
+    }
+    
     if (!window.scene) {
         console.error("Scene not available to create remote player object");
-        return;
+        return null;
     }
     
     console.log("Creating remote player:", player);
@@ -412,7 +420,7 @@ function createRemotePlayerObject(player) {
         // Use DefaultPlayer if available, otherwise fallback to base Player
         const PlayerClass = window.DefaultPlayer || window.Player;
         const remotePlayer = new PlayerClass({
-            id: player.sessionId,
+            id: player.sessionId,  // Use the sessionId as the id
             isLocalPlayer: false,
             color: player.color || 0x3366CC,
             value: player.value || 1
@@ -425,7 +433,7 @@ function createRemotePlayerObject(player) {
         // Add to scene
         window.scene.add(remotePlayer.mesh);
         
-        // Store in global collections
+        // Store in global collections - use otherPlayers as the single source of truth
         window.otherPlayers = window.otherPlayers || {};
         window.otherPlayers[player.sessionId] = remotePlayer;
         
@@ -438,11 +446,18 @@ function createRemotePlayerObject(player) {
         return remotePlayer;
     } catch (error) {
         console.error("Failed to create remote player:", error);
+        return null;
     }
 }
 
 // Player left callback
 function onPlayerLeave(player) {
+    // Validate player data
+    if (!player || !player.sessionId) {
+        console.error("Invalid player in onPlayerLeave:", player);
+        return;
+    }
+    
     console.log(`Player left: ${player.sessionId}`);
     
     try {
@@ -518,22 +533,44 @@ window.updatePlayerListUI = function() {
     });
 };
 
-// Update remote players in the scene
+// Update remote players in the scene - this runs in the animation loop
 window.updateRemotePlayers = function() {
-    if (!window.room || !window.room.state || !window.scene) return;
+    if (!window.room || !window.room.state || !window.scene) {
+        return;
+    }
     
-    // Get list of all players from server
+    // Debug log periodically to confirm this is running
+    if (Math.random() < 0.001) {
+        console.log("updateRemotePlayers running, player count:", window.room.state.players.size);
+    }
+    
+    // First, collect all valid sessionIds from the server
+    const serverPlayerIds = new Set();
     window.room.state.players.forEach((player, sessionId) => {
-        // Skip local player
-        if (sessionId === window.room.sessionId) return;
+        if (sessionId && sessionId !== window.room.sessionId) {
+            serverPlayerIds.add(sessionId);
+        }
+    });
+    
+    // Now process each player from the server
+    window.room.state.players.forEach((player, sessionId) => {
+        // Skip local player and invalid sessionIds
+        if (!sessionId || sessionId === window.room.sessionId) return;
         
         // Create remote player object if it doesn't exist
-        if (!window.remotePlayers || !window.remotePlayers[sessionId]) {
-            createRemotePlayerObject(player);
+        if (!window.otherPlayers || !window.otherPlayers[sessionId]) {
+            console.log(`Creating missing remote player: ${sessionId}`);
+            // Ensure we pass the sessionId in the player object
+            const playerWithId = {
+                ...player,
+                sessionId: sessionId  // Explicitly set the sessionId
+            };
+            createRemotePlayerObject(playerWithId);
+            return;
         }
         
-        // Update remote player position and rotation
-        const remotePlayer = window.remotePlayers[sessionId];
+        // Update remote player position and rotation using otherPlayers collection
+        const remotePlayer = window.otherPlayers[sessionId];
         if (remotePlayer && remotePlayer.mesh) {
             // Update position with smooth lerping
             const lerpFactor = 0.3; // Smoothing factor for remote player movement
@@ -561,25 +598,51 @@ window.updateRemotePlayers = function() {
             
             // Update numberblock value if changed
             if (remotePlayer.value !== player.value) {
-                // Remove old mesh
-                if (remotePlayer.mesh.parent) {
-                    remotePlayer.mesh.parent.remove(remotePlayer.mesh);
+                try {
+                    // Remove old mesh
+                    if (remotePlayer.mesh.parent) {
+                        remotePlayer.mesh.parent.remove(remotePlayer.mesh);
+                    }
+                    
+                    // Create new numberblock with updated value
+                    const newNumberblock = new Numberblock(player.value);
+                    newNumberblock.id = sessionId;
+                    newNumberblock.mesh.position.copy(remotePlayer.mesh.position);
+                    newNumberblock.mesh.rotation.y = remotePlayer.mesh.rotation.y;
+                    
+                    // Add to scene
+                    window.scene.add(newNumberblock.mesh);
+                    
+                    // Update reference in otherPlayers collection
+                    window.otherPlayers[sessionId] = newNumberblock;
+                    // Also update in visuals collection
+                    if (window.visuals && window.visuals.players) {
+                        window.visuals.players[sessionId] = newNumberblock;
+                    }
+                } catch (error) {
+                    console.error("Error updating player value:", error);
                 }
-                
-                // Create new numberblock with updated value
-                const newNumberblock = new Numberblock(player.value);
-                newNumberblock.id = sessionId;
-                newNumberblock.mesh.position.copy(remotePlayer.mesh.position);
-                newNumberblock.mesh.rotation.y = remotePlayer.mesh.rotation.y;
-                
-                // Add to scene
-                window.scene.add(newNumberblock.mesh);
-                
-                // Update reference
-                window.remotePlayers[sessionId] = newNumberblock;
             }
         }
     });
+    
+    // Check for players in otherPlayers that no longer exist in the server state
+    if (window.otherPlayers) {
+        for (const sessionId in window.otherPlayers) {
+            // Validate sessionId to avoid issues with undefined
+            if (!sessionId || sessionId === "undefined") {
+                console.error("Invalid sessionId in otherPlayers:", sessionId);
+                delete window.otherPlayers[sessionId];
+                continue;
+            }
+            
+            // Check if this player still exists on the server
+            if (!serverPlayerIds.has(sessionId)) {
+                console.log(`Removing stale player: ${sessionId}`);
+                onPlayerLeave({ sessionId: sessionId });
+            }
+        }
+    }
 };
 
 // Setup room-level listeners specifically for Players
@@ -599,54 +662,72 @@ function setupRoomPlayerListeners(room) {
         // Process existing players
         console.log('[setupRoomPlayerListeners] Processing existing players');
         room.state.players.forEach((player, sessionId) => {
+            // Skip players without valid sessionId or local player
+            if (!sessionId || sessionId === room.sessionId) return;
+            
             console.log(`Setting up existing player: ${sessionId}`, player);
             
             // Create remote player for other players
-            if (sessionId !== room.sessionId) {
-                createRemotePlayerObject(player);
-            }
+            createRemotePlayerObject({...player, sessionId: sessionId});
         });
         
         // Update UI immediately to show all players
         if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
             window.playerUI.updatePlayerListUI();
+        } else {
+            updatePlayerListUI();
         }
         
         // Listen for player added events
         room.state.players.onAdd = (player, sessionId) => {
+            // Skip invalid sessionIds or local player
+            if (!sessionId || sessionId === room.sessionId) return;
+            
             console.log(`Player added: ${sessionId}`, player);
             
-            // Skip local player
-            if (sessionId === room.sessionId) return;
+            // Ensure the player object has a sessionId field
+            const playerWithId = {...player, sessionId: sessionId};
             
             // Create remote player object
-            createRemotePlayerObject(player);
+            createRemotePlayerObject(playerWithId);
             
             // Update UI
             if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
                 window.playerUI.updatePlayerListUI();
+            } else {
+                updatePlayerListUI();
             }
         };
         
         // Listen for player removed events
         room.state.players.onRemove = (player, sessionId) => {
+            // Skip invalid sessionIds or local player
+            if (!sessionId || sessionId === room.sessionId) return;
+            
             console.log(`Player removed: ${sessionId}`);
             
             // Remove player
-            onPlayerLeave({ sessionId });
+            onPlayerLeave({ sessionId: sessionId });
             
             // Update UI
             if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
                 window.playerUI.updatePlayerListUI();
+            } else {
+                updatePlayerListUI();
             }
         };
         
         // Listen for player changes
         room.state.players.onChange = (player, sessionId) => {
-            // Skip local player
-            if (sessionId === room.sessionId) return;
+            // Skip invalid sessionIds or local player
+            if (!sessionId || sessionId === room.sessionId) return;
             
-            // Update remote player
+            // For debugging
+            if (Math.random() < 0.01) {
+                console.log(`Player changed: ${sessionId}, pos: (${player.x.toFixed(2)}, ${player.y.toFixed(2)}, ${player.z.toFixed(2)})`);
+            }
+            
+            // Update remote player - using otherPlayers consistently
             if (window.otherPlayers && window.otherPlayers[sessionId]) {
                 // Update position with lerping for smooth movement
                 const remotePlayer = window.otherPlayers[sessionId];
@@ -676,12 +757,18 @@ function setupRoomPlayerListeners(room) {
                     remotePlayer.mesh.rotation.y = player.rotationY;
                     
                     // Update player info in UI periodically
-                    if (Math.random() < 0.05) { // Only update UI occasionally to save performance
+                    if (Math.random() < 0.01) { // Only update UI occasionally to save performance
                         if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
                             window.playerUI.updatePlayerListUI();
+                        } else {
+                            updatePlayerListUI();
                         }
                     }
                 }
+            } else {
+                // If player exists in server state but not in otherPlayers, create it
+                console.log(`Creating missing player from onChange: ${sessionId}`);
+                createRemotePlayerObject({...player, sessionId: sessionId});
             }
         };
     } else {
@@ -766,6 +853,60 @@ function setupRoomListeners(room) {
     
     console.log('[setupRoomListeners] Entity listeners setup complete');
 }
+
+// Clean up network resources when leaving
+window.cleanupNetworking = function() {
+    console.log("Cleaning up network resources");
+    
+    // Clear the player update interval if it exists
+    if (window.playerUpdateInterval) {
+        clearInterval(window.playerUpdateInterval);
+        window.playerUpdateInterval = null;
+    }
+    
+    // Unregister updateRemotePlayers if it was registered with the animation loop
+    if (typeof window.unregisterAnimationCallback === 'function' && 
+        typeof window.updateRemotePlayers === 'function') {
+        window.unregisterAnimationCallback(window.updateRemotePlayers);
+    }
+    
+    // Clean up other players
+    if (window.otherPlayers) {
+        for (const sessionId in window.otherPlayers) {
+            if (sessionId) {  // Skip undefined keys
+                try {
+                    if (window.scene && window.otherPlayers[sessionId] && window.otherPlayers[sessionId].mesh) {
+                        window.scene.remove(window.otherPlayers[sessionId].mesh);
+                    }
+                } catch (error) {
+                    console.error(`Error removing player ${sessionId} from scene:`, error);
+                }
+            }
+        }
+        window.otherPlayers = {};
+    }
+    
+    // Clean up visuals
+    if (window.visuals && window.visuals.players) {
+        window.visuals.players = {};
+    }
+    
+    // Leave the room if connected
+    if (window.room) {
+        try {
+            window.room.leave();
+        } catch (error) {
+            console.error("Error leaving room:", error);
+        }
+        window.room = null;
+    }
+    
+    // Reset client
+    client = null;
+    room = null;
+    
+    console.log("Network resources cleaned up successfully");
+};
 
 // Make functions available globally
 window.initNetworking = initNetworking;

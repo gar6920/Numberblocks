@@ -31,6 +31,17 @@ The core platform provides foundational functionality that all game implementati
   - Manages input handling for keyboard and mouse
   - Implements quaternion-based rotation for smooth camera movement
 
+- **game-engine.js:**
+  - Initializes the Three.js scene, renderer, and camera
+  - Sets up player controls and world objects
+  - Manages the animation loop for continuous rendering
+  - Implements three distinct camera systems:
+    - First-person view: Camera attached to player's head position
+    - Third-person view: Camera follows behind player with intelligent rotation alignment
+    - Free camera mode: Independent camera with WASD/QE movement and mouse look functionality
+  - Handles smooth camera transitions between view modes
+  - Maintains proper camera orientation with Euler angles to prevent unwanted roll
+
 - **network-core.js:**
   - Establishes and maintains WebSocket connection to the server via Colyseus
   - Sends player actions to the server
@@ -205,7 +216,15 @@ The platform is designed with modularity in mind, allowing for different game im
    - Core platform handles common functionality and lifecycle management
 
 ## Key Features
-- **Triple View Modes:** First-person, third-person, and free roam
+- **Triple View Modes:** 
+  - First-person view with player model hidden
+  - Third-person view with camera following player and aligning with player's facing direction
+  - Free roam camera with independent movement and rotation, maintaining proper orientation
+- **Camera Controls:**
+  - Mouse wheel zoom for third-person view
+  - Mouse-based rotation with proper Euler angle handling to prevent camera roll
+  - View-specific movement and interaction behaviors
+  - Seamless transitions between camera modes
 - **Multiplayer Support:** Multiple players can join the same game world
 - **Persistence:** Session reconnection support
 - **Browser Tab Synchronization:** Automatically updates game state when inactive tabs become active

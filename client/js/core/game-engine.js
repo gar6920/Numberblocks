@@ -52,6 +52,30 @@ let lastInputUpdate = 0;
 window.inputThrottleMs = 16; // Send inputs roughly every frame (60fps = 16.67ms)
 window.lastInputTime = 0;
 
+// Array to store animation callbacks
+window.animationCallbacks = [];
+
+// Function to register callbacks to be executed during the animation loop
+window.registerAnimationCallback = function(callback) {
+    if (typeof callback === 'function' && !window.animationCallbacks.includes(callback)) {
+        window.animationCallbacks.push(callback);
+        console.log("Registered animation callback:", callback.name || "anonymous");
+        return true;
+    }
+    return false;
+};
+
+// Function to unregister a callback from the animation loop
+window.unregisterAnimationCallback = function(callback) {
+    const index = window.animationCallbacks.indexOf(callback);
+    if (index !== -1) {
+        window.animationCallbacks.splice(index, 1);
+        console.log("Unregistered animation callback:", callback.name || "anonymous");
+        return true;
+    }
+    return false;
+};
+
 // Initialize physics variables and flags
 function initPhysics() {
     try {
@@ -317,16 +341,85 @@ window.switchToThirdPersonView = function() {
 window.switchToFreeCameraView = function() {
     // Store current camera position for when we return
     window.playerPosition = camera.position.clone();
+    window.isFreeCameraMode = true;
     
-    // Initial free camera setup
-    window.freeCameraYaw = window.freeCameraYaw || 0;
-    window.freeCameraPitch = window.freeCameraPitch || 0;
-    
-    // Set camera position to current view with a slight elevation
-    if (window.myPlayer && window.myPlayer.mesh) {
-        window.myPlayer.mesh.visible = true;
+    // Show player mesh since we're viewing from outside
+    if (window.playerNumberblock && window.playerNumberblock.mesh) {
+        window.playerNumberblock.mesh.visible = true;
     }
+    
+    // Keep pointer lock active but disable normal controls
+    if (controls) {
+        if (!controls.isLocked) {
+            controls.lock();
+        }
+        controls.enabled = false;
+    }
+    
+    // Initialize free camera movement speed
+    window.freeCameraSpeed = 0.5;
+    
+    console.log("Switched to free camera view");
 };
+
+// Handle mouse movement for free camera
+function onMouseMove(event) {
+    if (!window.controls || !window.controls.isLocked) return;
+    
+    // Store mouse movement for input state
+    window.inputState.mouseDelta.x += event.movementX;
+    window.inputState.mouseDelta.y += event.movementY;
+    
+    if (window.isFreeCameraMode) {
+        // Initialize Euler angles if they don't exist
+        if (!window.freeCameraEuler) {
+            window.freeCameraEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+        }
+        
+        // Update rotation with mouse movement
+        const rotationSpeed = 0.002;
+        
+        // Update yaw (left/right) and pitch (up/down)
+        window.freeCameraEuler.y -= event.movementX * rotationSpeed;
+        window.freeCameraEuler.x = Math.max(
+            -Math.PI/2,
+            Math.min(Math.PI/2,
+                window.freeCameraEuler.x - event.movementY * rotationSpeed
+            )
+        );
+        
+        // Keep roll (z-axis) at 0 to prevent tilting
+        window.freeCameraEuler.z = 0;
+        
+        // Apply rotation to camera, maintaining upright orientation
+        camera.quaternion.setFromEuler(window.freeCameraEuler);
+    }
+}
+
+// Handle keyboard movement for free camera
+function updateFreeCameraMovement() {
+    if (!window.isFreeCameraMode) return;
+    
+    const speed = window.freeCameraSpeed;
+    const moveVector = new THREE.Vector3();
+    
+    // Get camera's forward and right vectors
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    
+    // WASD movement
+    if (window.inputState.keys.w) moveVector.add(forward.multiplyScalar(speed));
+    if (window.inputState.keys.s) moveVector.sub(forward);
+    if (window.inputState.keys.a) moveVector.sub(right);
+    if (window.inputState.keys.d) moveVector.add(right);
+    
+    // Up/Down movement with Q/E
+    if (window.inputState.keys.q) moveVector.y += speed;
+    if (window.inputState.keys.e) moveVector.y -= speed;
+    
+    // Apply movement
+    camera.position.add(moveVector.multiplyScalar(speed));
+}
 
 // Position camera behind player for third-person view - more responsive
 window.updateThirdPersonCamera = function() {
@@ -615,7 +708,12 @@ function setupPointerLockControls() {
                     animate();
                 }
             } else {
-                instructions.style.display = 'block';
+                // Only show instructions if we're not in free camera mode AND not already playing
+                if (!window.isFreeCameraMode && !window.playerLoaded) {
+                    instructions.style.display = 'block';
+                } else {
+                    instructions.style.display = 'none';
+                }
                 debug('Pointer is unlocked');
             }
         }
@@ -718,61 +816,64 @@ function updatePlayerPhysics(delta) {
 // initialize your global visuals safely if not done already
 window.visuals = window.visuals || { players: {}, operators: {}, staticNumberblocks: {} };
 
-// animate loop with continuous rendering
-function animate() {
-    // Request the next frame immediately to maintain high frame rate
+// Animation loop
+function animate(currentTime) {
     requestAnimationFrame(animate);
-
-    const currentTime = performance.now();
-    const delta = Math.min((currentTime - window.prevTime) / 1000, 0.1); // Cap delta to prevent large jumps
+    
+    if (!window.prevTime) window.prevTime = performance.now();
+    if (!currentTime) currentTime = performance.now();
+    
+    const delta = Math.min((currentTime - window.prevTime) / 1000, 0.1);
     window.prevTime = currentTime;
-
-    // Only update local controls if we have pointer lock
-    if (controls && controls.isLocked) {
+    
+    // Handle different camera modes
+    if (window.isFreeCameraMode) {
+        // Update free camera movement
+        updateFreeCameraMovement();
+    } else if (controls && controls.isLocked) {
+        // Normal controls update for first/third person
         window.updateControls(controls, delta);
+        updatePlayerPhysics(delta);
     }
-
-    // Update player physics (server-driven movement)
-    updatePlayerPhysics(delta);
-
-    // Always check for player state from the server and update accordingly
+    
+    // Update player state from server
     if (window.room && window.room.state && window.room.state.players) {
         const playerState = window.room.state.players.get(window.room.sessionId);
         if (playerState) {
-            // Always update player mesh position based on server state
+            // Update player mesh
             if (window.playerNumberblock && window.playerNumberblock.mesh) {
-                // Update the player mesh position
                 window.playerNumberblock.mesh.position.set(playerState.x, playerState.y, playerState.z);
                 window.playerNumberblock.mesh.rotation.y = playerState.rotationY;
-                
-                // Make sure player visibility is properly set based on view mode
-                window.playerNumberblock.mesh.visible = !window.isFirstPerson;
-            }
-
-            // Update the camera based on the current view mode
-            if (window.isFirstPerson && !window.isFreeCameraMode) {
-                // First-person camera updates - camera should be at exact player position
-                window.updateFirstPersonCamera();
-            } else if (window.isFreeCameraMode) {
-                // Free camera mode - no update needed, handled by controls
-            } else {
-                // Third-person camera updates
-                window.updateThirdPersonCamera();
+                window.playerNumberblock.mesh.visible = window.isFreeCameraMode || !window.isFirstPerson;
             }
             
-            // Update any other players in the scene
-            if (typeof window.updateRemotePlayers === 'function') {
-                window.updateRemotePlayers();
-            }
-            
-            // Update any operators or other dynamic elements
-            if (window.operatorManager && typeof window.operatorManager.updateOperators === 'function') {
-                window.operatorManager.updateOperators();
+            // Only update camera for first/third person modes
+            if (!window.isFreeCameraMode) {
+                if (window.isFirstPerson) {
+                    window.updateFirstPersonCamera();
+                } else {
+                    window.updateThirdPersonCamera();
+                }
             }
         }
     }
-
-    // Always render the scene to ensure smooth visual updates
+    
+    // Execute all registered animation callbacks
+    if (window.animationCallbacks && window.animationCallbacks.length > 0) {
+        for (let i = 0; i < window.animationCallbacks.length; i++) {
+            try {
+                window.animationCallbacks[i](delta);
+            } catch (error) {
+                console.error("Error in animation callback:", error);
+            }
+        }
+    }
+    
+    // Explicitly call updateRemotePlayers to ensure other players are always rendered
+    if (typeof window.updateRemotePlayers === 'function') {
+        window.updateRemotePlayers();
+    }
+    
     renderer.render(scene, camera);
 }
 
@@ -984,15 +1085,6 @@ function updateThirdPersonCamera() {
         
         // Apply smooth rotation
         window.playerNumberblock.mesh.rotation.y += rotDiff * 0.1;
-    }
-}
-
-// Mouse move event handler - capture mouse movement for camera rotation
-function onMouseMove(event) {
-    if (window.controls && window.controls.isLocked) {
-        // Store mouse movement for input state
-        window.inputState.mouseDelta.x += event.movementX;
-        window.inputState.mouseDelta.y += event.movementY;
     }
 }
 
