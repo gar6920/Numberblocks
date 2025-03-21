@@ -111,6 +111,8 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Client sends player actions to the server at regular intervals
 - Server validates actions, updates game state, and broadcasts to all clients
 - Efficient state synchronization with delta updates
+- Robust player synchronization with proper sessionId handling
+- Smooth interpolation of remote player movements using lerping
 
 **Key Features:**
 - Session persistence with reconnection support
@@ -118,11 +120,27 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Message-based communication for game events
 - Schema-based state synchronization with type annotations
 - Player list UI showing all connected players
+- Automatic remote player creation and cleanup
+- Smooth remote player movement interpolation
+- Proper handling of player value updates and mesh recreation
+- Resilient error handling for network disconnections
+- Automatic cleanup of stale player instances
 
 **Schema Implementation:**
 - Proper MapSchema collections for players, operators, and static objects
 - Type annotations for all schema properties
 - Structured synchronization patterns for consistent state updates
+- Robust sessionId tracking for player identification
+- Proper player state management with value updates
+
+**Player Synchronization:**
+- Automatic creation of remote player instances with proper sessionId tracking
+- Smooth position interpolation using Three.js lerping
+- Proper cleanup of disconnected player instances
+- Value-based mesh updates for Numberblock changes
+- Efficient player collection management using Set data structure
+- Proper separation of local and remote player handling
+- Resilient error handling for edge cases
 
 ## File Structure
 ```
@@ -161,7 +179,7 @@ Each game implementation extends the core platform with specific gameplay mechan
 │   │   └── BaseRoom.js     # Base room implementation
 │   ├── schemas/            # Colyseus schema definitions
 │   │   ├── BaseEntity.js   # Base entity schema
-│   │   ├── DefaultRoom.js  # Default room implementation
+│       │   ├── DefaultRoom.js  # Default room implementation
 │   │   ├── GameState.js    # Game state schema
 │   │   ├── Player.js       # Player schema
 │   │   └── InputState.js   # Input state schema
