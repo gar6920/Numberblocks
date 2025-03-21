@@ -294,7 +294,7 @@ function onKeyDown(event) {
             break;
 
         case 'KeyV':
-            toggleCameraView(); 
+            window.toggleCameraView(); // Call the global toggleCameraView function
             break;
         case 'ShiftLeft':
         case 'ShiftRight':
@@ -461,6 +461,9 @@ window.toggleCameraView = function() {
         window.viewMode = 'thirdPerson';
         window.isFirstPerson = false;
         window.isFreeCameraMode = false;
+        if (typeof window.switchToThirdPersonView === 'function') {
+            window.switchToThirdPersonView();
+        }
         console.log("[DEBUG] Switched to third-person view");
     } else if (window.viewMode === 'thirdPerson') {
         window.viewMode = 'freeCamera';
@@ -472,11 +475,17 @@ window.toggleCameraView = function() {
             pos.y += 3; // Start slightly above the player
             window.camera.position.copy(pos);
         }
+        if (typeof window.switchToFreeCameraView === 'function') {
+            window.switchToFreeCameraView();
+        }
         console.log("[DEBUG] Switched to free camera view");
     } else {
         window.viewMode = 'firstPerson';
         window.isFirstPerson = true;
         window.isFreeCameraMode = false;
+        if (typeof window.switchToFirstPersonView === 'function') {
+            window.switchToFirstPersonView();
+        }
         console.log("[DEBUG] Switched back to first-person view");
     }
     

@@ -100,25 +100,8 @@ This game platform allows players to navigate a 3D world with customizable chara
 - Real-time multiplayer with server-side state management
 - Optimized for performance across devices
 
-## Expansion Framework
-- **New Implementations**: Blueprint for creating new game themes (e.g., Letterblocks, Shapes)
-- **Asset Integration**: System for adding new models, textures, and sounds
-- **Rule Customization**: Framework for defining custom game rules
-- **UI Theming**: Adaptable UI system for different game implementations
 
-## File Structure
-- **/client**: Front-end code
-  - **/js**: JavaScript files
-    - **/core**: Core engine components
-    - **/entities**: Entity definitions
-    - **/implementations**: Game-specific implementations
-    - **/ui**: User interface components
-  - **/css**: Styling
-  - **/assets**: Game assets
-- **/server**: Server-side code
-  - Game room definition
-  - State management
-  - Physics processing
+
 
 ## Conclusion
 The 3D AI Game platform provides a flexible foundation for creating multiplayer 3D web games with different themes and mechanics. By separating core functionality from specific implementations, developers can create new games while leveraging the existing multiplayer infrastructure, 3D rendering capabilities, and entity management system.

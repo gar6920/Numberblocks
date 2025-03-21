@@ -95,3 +95,4 @@ npm start
 ## Adding New Game Implementations
 - Create a new implementation directory as all implementation should be completely independent from the core structure
 
+## always follow the architecture.md - if their is any descrepency then stop and bring it to my attention

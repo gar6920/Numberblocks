@@ -138,13 +138,9 @@ window.onload = function() {
     window.viewMode = 'firstPerson';
     window.isFirstPerson = true;
     window.isFreeCameraMode = false;
+    window.playerLoaded = false; // Track if player has been created
     
-    // Add keyboard shortcut for camera toggle (V key)
-    document.addEventListener('keydown', function(event) {
-        if (event.code === 'KeyV') {
-            toggleCameraView();
-        }
-    });
+    // Note: The 'v' keypress listener has been removed as it's handled in controls.js
     
     init();
 };
@@ -172,8 +168,8 @@ function addViewToggleButton() {
             document.body.appendChild(viewToggleBtn);
         }
         
-        // Add click event listener
-        viewToggleBtn.addEventListener('click', toggleCameraView);
+        // Add click event listener to use the function from controls.js
+        viewToggleBtn.addEventListener('click', window.toggleCameraView);
         
         debug('View toggle button added');
     } catch (error) {
@@ -181,233 +177,213 @@ function addViewToggleButton() {
     }
 }
 
-// Toggle between first-person and third-person view
-function toggleCameraView() {
-    // Toggle between first-person, third-person, and free camera modes
-    if (window.viewMode === 'firstPerson') {
-        window.viewMode = 'thirdPerson';
-        window.isFirstPerson = false;
-        window.isFreeCameraMode = false;
-        switchToThirdPersonView();
-    } else if (window.viewMode === 'thirdPerson') {
-        window.viewMode = 'freeCamera';
-        window.isFirstPerson = false;
-        window.isFreeCameraMode = true;
-        switchToFreeCameraView();
-    } else {
-        window.viewMode = 'firstPerson';
-        window.isFirstPerson = true;
-        window.isFreeCameraMode = false;
-        switchToFirstPersonView();
-    }
-    
-    // Update UI elements to match the new view mode
-    updateViewModeUI();
-    
-    // Update mouse sensitivity based on new view mode
-    updateMouseSensitivity();
-    
-    console.log(`View mode changed to ${window.viewMode}`);
-}
+// Toggle between first-person, third-person and free camera view functions have been moved to controls.js
 
 // First-person setup
-function switchToFirstPersonView() {
-    // Restore player visibility
+window.switchToFirstPersonView = function() {
+    // Hide player's mesh in first-person
     if (window.myPlayer && window.myPlayer.mesh) {
         window.myPlayer.mesh.visible = false;
+    }
+    
+    if (window.playerNumberblock && window.playerNumberblock.mesh) {
+        window.playerNumberblock.mesh.visible = false;
     }
     
     // Reset free camera variables
     window.freeCameraYaw = 0;
     window.freeCameraPitch = 0;
     
-    if (controls && window.room && window.room.state.players) {
-        // Position camera at player's head
+    // Set camera position based on the available player information
+    // Try multiple sources to ensure we always have a position
+    let playerX = 0, playerY = 0, playerZ = 0, rotationY = 0, pitch = 0;
+    
+    // First check server state if available
+    if (window.room && window.room.state && window.room.state.players) {
         const playerState = window.room.state.players.get(window.room.sessionId);
         if (playerState) {
-            camera.position.set(
-                playerState.x,
-                playerState.y + window.playerHeight,
-                playerState.z
-            );
-            
-            // Set camera rotation using quaternions to prevent gimbal lock
-            camera.quaternion.setFromEuler(new THREE.Euler(
-                playerState.pitch,
-                playerState.rotationY + Math.PI,
-                0,
-                'YXZ'  // Important for proper FPS controls
-            ));
-            
-            // Update controls position
-            controls.getObject().position.copy(camera.position);
+            playerX = playerState.x;
+            playerY = playerState.y;
+            playerZ = playerState.z;
+            rotationY = playerState.rotationY || 0;
+            pitch = playerState.pitch || 0;
+        }
+    }
+    // Fallback to local player object if server state not available
+    else if (window.playerNumberblock && window.playerNumberblock.mesh) {
+        playerX = window.playerNumberblock.mesh.position.x;
+        playerY = window.playerNumberblock.mesh.position.y;
+        playerZ = window.playerNumberblock.mesh.position.z;
+        rotationY = window.playerNumberblock.mesh.rotation.y || 0;
+    }
+    
+    // Position camera at player's head
+    if (window.camera) {
+        window.camera.position.set(
+            playerX,
+            playerY + (window.playerHeight || 2.0),
+            playerZ
+        );
+        
+        // Set camera rotation using quaternions to prevent gimbal lock
+        window.camera.quaternion.setFromEuler(new THREE.Euler(
+            pitch,
+            rotationY + Math.PI,
+            0,
+            'YXZ'  // Important for proper FPS controls
+        ));
+        
+        // Update controls position if available
+        if (controls) {
+            controls.getObject().position.copy(window.camera.position);
+        }
+        
+        // Force an immediate render to show the new view
+        if (window.renderer && window.scene) {
+            window.renderer.render(window.scene, window.camera);
         }
     }
     
     // If we were in free camera mode, tell the server we're back
     if (window.isFreeCameraMode) {
-        // Send an immediate input update to refresh server state
         window.isFreeCameraMode = false;
-        sendInputUpdate();
+        if (window.sendInputUpdate) {
+            window.sendInputUpdate();
+        }
     }
     
-    // Update mouse sensitivity
-    updateMouseSensitivity();
-    
-    // Update UI
-    const instructions = document.getElementById('lock-instructions');
-    if (instructions) {
-        instructions.innerHTML = "WASD to move, Mouse to look<br>Press V to switch to third-person view";
-    }
-}
+    console.log("Switched to first-person view. Camera at:", window.camera.position);
+};
 
 // Third-person setup
-function switchToThirdPersonView() {
-    // Position camera behind player, use thirdPersonDistance as the distance
+window.switchToThirdPersonView = function() {
+    // Show player's mesh in third-person
     if (window.myPlayer && window.myPlayer.mesh) {
         window.myPlayer.mesh.visible = true;
     }
     
-    // Initialize orbit angles to position camera behind the player
-    if (window.room && window.room.state.players) {
+    if (window.playerNumberblock && window.playerNumberblock.mesh) {
+        window.playerNumberblock.mesh.visible = true;
+    }
+    
+    // Reset orbit angles if they don't exist
+    window.thirdPersonCameraOrbitX = window.thirdPersonCameraOrbitX || 0;
+    window.thirdPersonCameraOrbitY = window.thirdPersonCameraOrbitY || 0.5;
+    
+    // Make sure player state exists
+    if (window.room && window.room.state && window.room.state.players) {
         const playerState = window.room.state.players.get(window.room.sessionId);
         if (playerState) {
-            // Set the horizontal orbit angle to match the player's rotation
-            // Adding PI places it directly behind the player
-            window.thirdPersonCameraOrbitX = playerState.rotationY + Math.PI;
+            // Position camera based on player's current position/rotation
+            const offsetX = window.thirdPersonCameraDistance * Math.sin(playerState.rotationY) * Math.cos(window.thirdPersonCameraOrbitY);
+            const offsetZ = window.thirdPersonCameraDistance * Math.cos(playerState.rotationY) * Math.cos(window.thirdPersonCameraOrbitY);
+            const offsetY = window.thirdPersonCameraDistance * Math.sin(window.thirdPersonCameraOrbitY);
             
-            // Set vertical orbit angle to be slightly elevated (positive value)
-            window.thirdPersonCameraOrbitY = 0.4; // Slightly elevated position
+            // Immediately position camera with offset for immediate visual feedback
+            window.camera.position.set(
+                playerState.x + offsetX,
+                playerState.y + window.thirdPersonCameraHeight + offsetY,
+                playerState.z + offsetZ
+            );
+            
+            // Set camera to look at player
+            const lookTarget = new THREE.Vector3(
+                playerState.x, 
+                playerState.y + window.thirdPersonCameraHeight * 0.8, // Look at upper body
+                playerState.z
+            );
+            
+            // Create look direction and rotation
+            const direction = new THREE.Vector3().subVectors(lookTarget, window.camera.position).normalize();
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(
+                new THREE.Vector3(0, 0, -1),
+                direction
+            );
+            
+            // Apply rotation to camera immediately
+            window.camera.quaternion.copy(quaternion);
+            
+            // Force an immediate render to update the view
+            if (window.renderer && window.scene) {
+                window.renderer.render(window.scene, window.camera);
+            }
         }
-    } else {
-        // Fallback if player state is unavailable
-        window.thirdPersonCameraOrbitX = Math.PI; // Behind player
-        window.thirdPersonCameraOrbitY = 0.4;     // Slightly elevated
     }
     
-    // Update camera position based on orbit angles
-    updateThirdPersonCameraPosition();
-    
-    // Update mouse sensitivity
-    updateMouseSensitivity();
-    
-    // Update UI
-    const instructions = document.getElementById('lock-instructions');
-    if (instructions) {
-        instructions.innerHTML = "WASD to move, Right-click + Mouse to orbit camera<br>Press V to switch to free camera view";
-    }
-}
+    console.log("Switched to third-person view. Camera at:", window.camera.position);
+};
 
-// Position camera behind player for third-person view
-function positionCameraBehindPlayer(playerState) {
+// Free camera setup
+window.switchToFreeCameraView = function() {
+    // Store current camera position for when we return
+    window.playerPosition = camera.position.clone();
+    
+    // Initial free camera setup
+    window.freeCameraYaw = window.freeCameraYaw || 0;
+    window.freeCameraPitch = window.freeCameraPitch || 0;
+    
+    // Set camera position to current view with a slight elevation
+    if (window.myPlayer && window.myPlayer.mesh) {
+        window.myPlayer.mesh.visible = true;
+    }
+};
+
+// Position camera behind player for third-person view - more responsive
+window.updateThirdPersonCamera = function() {
+    if (!window.room || !window.room.state || !window.room.state.players) return;
+    
+    const playerState = window.room.state.players.get(window.room.sessionId);
     if (!playerState) return;
     
-    // Calculate camera position based on orbit angles
-    // Start with a position vector at the desired distance
-    const distance = window.thirdPersonCameraDistance;
+    // Calculate offset based on orbit angles
+    const offsetX = window.thirdPersonCameraDistance * Math.sin(window.thirdPersonCameraOrbitX) * Math.cos(window.thirdPersonCameraOrbitY);
+    const offsetZ = window.thirdPersonCameraDistance * Math.cos(window.thirdPersonCameraOrbitX) * Math.cos(window.thirdPersonCameraOrbitY);
+    const offsetY = window.thirdPersonCameraDistance * Math.sin(window.thirdPersonCameraOrbitY);
     
-    // Calculate horizontal position using orbit X angle
-    const horizontalX = Math.sin(window.thirdPersonCameraOrbitX) * distance;
-    const horizontalZ = Math.cos(window.thirdPersonCameraOrbitX) * distance;
+    // Calculate target camera position
+    const targetX = playerState.x + offsetX;
+    const targetY = playerState.y + window.thirdPersonCameraHeight + offsetY;
+    const targetZ = playerState.z + offsetZ;
     
-    // Apply vertical orbit angle for height
-    const verticalFactor = Math.sin(window.thirdPersonCameraOrbitY) * distance;
-    const distanceFactor = Math.cos(window.thirdPersonCameraOrbitY);
+    // Use faster lerp for more responsive camera movement
+    const lerpFactor = 0.3; // Higher = more responsive
     
-    // Calculate final camera position
-    const cameraPosition = new THREE.Vector3(
-        playerState.x + horizontalX * distanceFactor,
-        playerState.y + window.playerHeight + verticalFactor,
-        playerState.z + horizontalZ * distanceFactor
+    // Apply smooth but responsive camera movement
+    window.camera.position.x = THREE.MathUtils.lerp(window.camera.position.x, targetX, lerpFactor);
+    window.camera.position.y = THREE.MathUtils.lerp(window.camera.position.y, targetY, lerpFactor);
+    window.camera.position.z = THREE.MathUtils.lerp(window.camera.position.z, targetZ, lerpFactor);
+    
+    // Instant position correction if too far away (prevents extreme lag)
+    const distSq = Math.pow(window.camera.position.x - targetX, 2) +
+                   Math.pow(window.camera.position.y - targetY, 2) +
+                   Math.pow(window.camera.position.z - targetZ, 2);
+                   
+    if (distSq > 25) { // About 5 units away - immediately snap to correct position
+        window.camera.position.set(targetX, targetY, targetZ);
+    }
+    
+    // Point camera at player
+    const lookTarget = new THREE.Vector3(
+        playerState.x, 
+        playerState.y + window.thirdPersonCameraHeight * 0.8, // Look at upper body
+        playerState.z
     );
     
-    // Set camera position
-    camera.position.copy(cameraPosition);
-    
-    // Calculate look direction (from camera to player)
-    const lookDirection = new THREE.Vector3();
-    lookDirection.subVectors(new THREE.Vector3(playerState.x, playerState.y + window.playerHeight * 0.6, playerState.z), camera.position).normalize();
-    
-    // Calculate the correct up vector (always world up)
-    const up = new THREE.Vector3(0, 1, 0);
-    
-    // Create quaternion from lookAt matrix
-    const quaternion = new THREE.Quaternion();
-    const lookAtMatrix = new THREE.Matrix4().lookAt(
-        camera.position,
-        new THREE.Vector3(playerState.x, playerState.y + window.playerHeight * 0.6, playerState.z),
-        up
-    );
-    quaternion.setFromRotationMatrix(lookAtMatrix);
-    camera.quaternion.copy(quaternion);
-}
-
-// Function to fix camera orientation in third-person view
-function setThirdPersonCameraOrientation(camera, targetPos, playerPos) {
-    // Calculate look at position (upper part of the player)
-    const lookAtPosition = new THREE.Vector3(
-        playerPos.x,
-        playerPos.y + window.playerHeight * 0.6, // Look at upper body
-        playerPos.z
+    // Create look direction and rotation
+    const direction = new THREE.Vector3().subVectors(lookTarget, window.camera.position).normalize();
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, -1),
+        direction
     );
     
-    // Calculate the correct up vector (always world up)
-    const worldUp = new THREE.Vector3(0, 1, 0);
+    // Apply rotation to camera immediately for responsive look
+    window.camera.quaternion.copy(quaternion);
     
-    // Create a matrix for the camera to look at the player
-    const lookAtMatrix = new THREE.Matrix4();
-    lookAtMatrix.lookAt(camera.position, lookAtPosition, worldUp);
-    
-    // Set quaternion from the matrix
-    const quaternion = new THREE.Quaternion();
-    quaternion.setFromRotationMatrix(lookAtMatrix);
-    camera.quaternion.copy(quaternion);
-}
-
-// Free camera view setup
-function switchToFreeCameraView() {
-    // Make sure player is visible
-    if (window.myPlayer && window.myPlayer.mesh) {
-        window.myPlayer.mesh.visible = true;
+    // Ensure player mesh is visible in third-person view
+    if (window.playerNumberblock && window.playerNumberblock.mesh) {
+        window.playerNumberblock.mesh.visible = true;
     }
-    
-    // Unlock camera from pointer controls to allow free movement
-    if (controls && controls.isLocked) {
-        controls.unlock();
-    }
-    
-    // Initialize free camera orientation from player's current orientation
-    if (window.room && window.room.state.players) {
-        const playerState = window.room.state.players.get(window.room.sessionId);
-        if (playerState) {
-            window.freeCameraYaw = playerState.rotationY;
-            window.freeCameraPitch = playerState.pitch;
-        }
-    }
-    
-    // Position camera at a slight offset from the player
-    if (window.playerPosition) {
-        camera.position.set(
-            window.playerPosition.x + 5,
-            window.playerPosition.y + 5,
-            window.playerPosition.z + 5
-        );
-        
-        // Set initial camera orientation using quaternions
-        camera.quaternion.setFromEuler(new THREE.Euler(
-            window.freeCameraPitch,
-            window.freeCameraYaw,
-            0,
-            'YXZ'  // Important for proper FPS controls
-        ));
-    }
-    
-    // Update UI
-    const instructions = document.getElementById('lock-instructions');
-    if (instructions) {
-        instructions.innerHTML = "WASD to move, Mouse to look, Space/Shift for up/down<br>Press V to return to first-person view";
-    }
-}
+};
 
 // Main initialization function
 function init() {
@@ -423,7 +399,8 @@ function init() {
         // Create the camera
         debug('Creating camera');
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 2, 5); // Start a bit back to see the player
+        // Only initialize with temporary position - actual position will be set when player is created
+        camera.position.set(0, 0, 0);
         window.camera = camera; // Make globally available
         
         // Setup renderer
@@ -449,24 +426,8 @@ function init() {
         // Setup controls for player movement
         setupPointerLockControls();
         
-        // Initialize the player
-        debug('Initializing Player');
-        playerNumberblock = window.createPlayerNumberblock(scene);
-        window.playerNumberblock = playerNumberblock;
-        debug('Player successfully initialized');
-       
-        // Initialize networking for multiplayer
-        window.initNetworking().then((roomInstance) => {
-            window.gameRoom = roomInstance;
-            window.room = roomInstance;
+        // Player will be created after clicking "Click to play"
         
-            setInterval(sendInputUpdate, 1000 / 30);
-                        
-            animate(); // Explicitly start animation here if needed
-        }).catch((error) => {
-            debug(`Networking error: ${error.message}`, true);
-        });
-                
         // Add resize event listener
         window.addEventListener('resize', onWindowResize, false);
         
@@ -505,8 +466,6 @@ function init() {
         window.camera = camera;
         window.renderer = renderer;
         window.controls = controls;
-        window.playerNumberblock = playerNumberblock;
-        window.playerValue = playerValue;
         
         // Expose sendInputUpdate to window for access from other modules
         window.sendInputUpdate = sendInputUpdate;
@@ -593,7 +552,7 @@ function setupPointerLockControls() {
             instructions.style.backgroundColor = 'rgba(0,0,0,0.5)';
             instructions.style.cursor = 'pointer';
             instructions.style.zIndex = '1000';
-            instructions.innerHTML = '<p>Click to enable controls</p>';
+            instructions.innerHTML = '<p>Click to play</p>';
             document.body.appendChild(instructions);
         }
 
@@ -613,6 +572,43 @@ function setupPointerLockControls() {
                 document.body.classList.add('controls-enabled');
                 window.canJump = true;
                 window.isControlsEnabled = true;
+                
+                // Create the player's block if not already created
+                if (!window.playerLoaded) {
+                    debug('Creating player block after click to play');
+                    // Initialize the player
+                    window.playerNumberblock = window.createPlayerNumberblock(scene);
+                    window.player = window.playerNumberblock;
+                    window.playerLoaded = true;
+                    
+                    // Make sure player mesh is invisible in first-person view
+                    if (window.playerNumberblock && window.playerNumberblock.mesh) {
+                        window.playerNumberblock.mesh.visible = false;
+                    }
+                    
+                    // Initialize networking if not already done
+                    if (!window.room) {
+                        window.initNetworking().then((roomInstance) => {
+                            window.gameRoom = roomInstance;
+                            window.room = roomInstance;
+                            
+                            // Start getting updates from the server
+                            setInterval(sendInputUpdate, 1000 / 30);
+                            
+                            // Apply the first-person view once the room is joined
+                            if (window.switchToFirstPersonView) {
+                                window.switchToFirstPersonView();
+                            }
+                        }).catch((error) => {
+                            debug(`Networking error: ${error.message}`, true);
+                        });
+                    } else {
+                        // Apply the first-person view if we already have a room
+                        if (window.switchToFirstPersonView) {
+                            window.switchToFirstPersonView();
+                        }
+                    }
+                }
 
                 if (!window.isAnimating) {
                     window.isAnimating = true;
@@ -638,20 +634,19 @@ function setupPointerLockControls() {
     }
 }
 
-// Update player movement physics
+// Update player movement physics with more responsive server sync
 function updatePlayerPhysics(delta) {
     if (!controls || !scene || !controls.isLocked) return;
     
     const controlsObject = controls.getObject();
-    let playerMoved = false;
     
     // Get current player state from server if available
     if (window.room && window.room.state && window.room.state.players) {
         const player = window.room.state.players.get(window.room.sessionId);
         if (player) {
             // Update the player's position based on the server position
-            // This ensures server authority while allowing client-side prediction
-            const lerpFactor = 0.1; // Lower value = smoother but more latent transition
+            // Higher lerpFactor means more responsive but potentially less smooth
+            const lerpFactor = 0.3; // Increased for more responsive movement
             
             // Smoothly interpolate to the server position
             controlsObject.position.x = THREE.MathUtils.lerp(
@@ -678,37 +673,42 @@ function updatePlayerPhysics(delta) {
                 Math.pow(controlsObject.position.x - player.x, 2) + 
                 Math.pow(controlsObject.position.z - player.z, 2);
                 
-            if (distanceSquared > 10) { // More than ~3 units away
+            if (distanceSquared > 5) { // Lowered threshold for quicker corrections
                 controlsObject.position.x = player.x;
                 controlsObject.position.z = player.z;
                 controlsObject.position.y = player.y;
-                console.log("Significant position correction applied");
+                console.log("Position correction applied");
             }
             
             // Update the player's velocity
-            velocity.y = player.velocityY;
+            window.velocity.y = player.velocityY;
             
             // Update Numberblock position and scale to match player value
-            updatePlayerNumberblock(player.value);
+            if (typeof updatePlayerNumberblock === 'function') {
+                updatePlayerNumberblock(player.value);
+            }
             
             // Update player info in UI if available
             if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
                 window.playerUI.updatePlayerListUI();
             }
             
-            playerMoved = true;
+            // Force camera to update based on view mode for immediate feedback
+            if (window.isFirstPerson && !window.isFreeCameraMode) {
+                window.updateFirstPersonCamera();
+            } else if (!window.isFreeCameraMode) {
+                window.updateThirdPersonCamera();
+            }
         }
-    }
-    
-    // Use client-side physics for prediction, but will be overridden by server
-    if (!playerMoved) {
+    } else {
+        // Use client-side physics for prediction if server data not available
         // Apply gravity
-        velocity.y -= 9.8 * delta;
-        controlsObject.position.y += velocity.y * delta;
+        window.velocity.y -= 9.8 * delta;
+        controlsObject.position.y += window.velocity.y * delta;
         
         // Basic ground collision
         if (controlsObject.position.y < 1) {
-            velocity.y = 0;
+            window.velocity.y = 0;
             controlsObject.position.y = 1;
             window.canJump = true;
         }
@@ -718,12 +718,13 @@ function updatePlayerPhysics(delta) {
 // initialize your global visuals safely if not done already
 window.visuals = window.visuals || { players: {}, operators: {}, staticNumberblocks: {} };
 
-// animate loop (exactly like this)
+// animate loop with continuous rendering
 function animate() {
+    // Request the next frame immediately to maintain high frame rate
     requestAnimationFrame(animate);
 
     const currentTime = performance.now();
-    const delta = (currentTime - window.prevTime) / 1000;
+    const delta = Math.min((currentTime - window.prevTime) / 1000, 0.1); // Cap delta to prevent large jumps
     window.prevTime = currentTime;
 
     // Only update local controls if we have pointer lock
@@ -734,7 +735,7 @@ function animate() {
     // Update player physics (server-driven movement)
     updatePlayerPhysics(delta);
 
-    // Check if we have our player state from the server
+    // Always check for player state from the server and update accordingly
     if (window.room && window.room.state && window.room.state.players) {
         const playerState = window.room.state.players.get(window.room.sessionId);
         if (playerState) {
@@ -750,22 +751,28 @@ function animate() {
 
             // Update the camera based on the current view mode
             if (window.isFirstPerson && !window.isFreeCameraMode) {
-                // First-person camera updates
-                updateFirstPersonCamera();
+                // First-person camera updates - camera should be at exact player position
+                window.updateFirstPersonCamera();
             } else if (window.isFreeCameraMode) {
                 // Free camera mode - no update needed, handled by controls
             } else {
                 // Third-person camera updates
-                updateThirdPersonCamera();
+                window.updateThirdPersonCamera();
+            }
+            
+            // Update any other players in the scene
+            if (typeof window.updateRemotePlayers === 'function') {
+                window.updateRemotePlayers();
+            }
+            
+            // Update any operators or other dynamic elements
+            if (window.operatorManager && typeof window.operatorManager.updateOperators === 'function') {
+                window.operatorManager.updateOperators();
             }
         }
     }
 
-    // Update other players in the scene if available
-    if (typeof window.updateRemotePlayers === 'function') {
-        window.updateRemotePlayers();
-    }
-
+    // Always render the scene to ensure smooth visual updates
     renderer.render(scene, camera);
 }
 
@@ -776,8 +783,8 @@ function onWindowResize() {
 }
 
 function sendInputUpdate() {
-    // Don't send updates if we're in free camera mode
-    if (window.isFreeCameraMode) {
+    // Don't send updates if we're in free camera mode or if player isn't loaded yet
+    if (window.isFreeCameraMode || !window.playerLoaded) {
         return;
     }
 
@@ -872,51 +879,50 @@ function updateThirdPersonCameraPosition() {
     );
 }
 
-// Handle view-specific camera updates
-function updateFirstPersonCamera() {
-    // First-person: Directly update camera with player state
-    const playerState = window.room.state.players.get(window.room.sessionId);
+// Make updateFirstPersonCamera globally accessible
+window.updateFirstPersonCamera = function() {
+    if (!window.room || !window.room.state || !window.room.state.players) return;
     
-    if (playerState) {
-        // Update the camera position to match the server player position
-        camera.position.set(
-            playerState.x, 
-            playerState.y + window.playerHeight, 
+    const playerState = window.room.state.players.get(window.room.sessionId);
+    if (!playerState) return;
+    
+    // Update camera position to be exactly at player's position (with head height)
+    if (window.camera && controls) {
+        // Position camera exactly at player position with head height
+        window.camera.position.set(
+            playerState.x,
+            playerState.y + (window.playerHeight || 2.0),
             playerState.z
         );
         
-        // Apply rotation from the server OR from local client
-        // We'll use a hybrid approach: server position with client-side rotation for responsiveness
-        // If playerRotationY exists, use that (client-side), otherwise fall back to server
-        const rotationY = (typeof window.playerRotationY !== 'undefined') 
-            ? window.playerRotationY 
-            : playerState.rotationY;
+        // Apply proper rotation using player's server-side rotation values
+        // and any local camera pitch changes for immediate feedback
+        const pitch = typeof window.firstPersonCameraPitch !== 'undefined' 
+            ? window.firstPersonCameraPitch 
+            : (playerState.pitch || 0);
             
-        const pitch = (typeof window.firstPersonCameraPitch !== 'undefined')
-            ? window.firstPersonCameraPitch
-            : playerState.pitch;
+        const rotationY = typeof window.playerRotationY !== 'undefined'
+            ? window.playerRotationY
+            : (playerState.rotationY || 0);
             
-        // Apply rotation using quaternion to prevent gimbal lock
-        camera.quaternion.setFromEuler(new THREE.Euler(
+        window.camera.quaternion.setFromEuler(new THREE.Euler(
             pitch,
             rotationY,
             0,
-            'YXZ'  // Important for proper FPS controls
+            'YXZ' // Important for proper FPS rotation order
         ));
         
-        // Make sure player mesh is invisible in first-person mode
-        if (window.playerNumberblock && window.playerNumberblock.mesh) {
-            window.playerNumberblock.mesh.visible = false;
-            
-            // Make sure it stays updated with position though
-            window.playerNumberblock.mesh.position.set(playerState.x, playerState.y, playerState.z);
-            window.playerNumberblock.mesh.rotation.y = rotationY;
+        // Update the controls object to match camera position
+        if (controls.getObject) {
+            controls.getObject().position.copy(window.camera.position);
         }
         
-        // Update controls position
-        controls.getObject().position.copy(camera.position);
+        // Make sure the player mesh is invisible in first-person
+        if (window.playerNumberblock && window.playerNumberblock.mesh) {
+            window.playerNumberblock.mesh.visible = false;
+        }
     }
-}
+};
 
 // Handle view-specific camera updates
 function updateThirdPersonCamera() {
@@ -980,12 +986,6 @@ function updateThirdPersonCamera() {
         window.playerNumberblock.mesh.rotation.y += rotDiff * 0.1;
     }
 }
-
-// Create player's block
-debug('Initializing Player');
-player = window.createPlayerNumberblock(scene);
-window.player = player;
-debug('Player successfully initialized');
 
 // Mouse move event handler - capture mouse movement for camera rotation
 function onMouseMove(event) {
