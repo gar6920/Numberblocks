@@ -5,8 +5,10 @@ class DefaultPlayer extends Player {
     constructor(params) {
         super(params);
         
-        // Default properties
-        this.color = params.color || 0x3366CC;
+        // Use color from params, gameConfig, or fallback to default blue
+        this.color = params.color || 
+                     (window.gameConfig && window.gameConfig.playerSettings.playerColor) || 
+                     0x3366CC;
     }
     
     // Create a simple box mesh

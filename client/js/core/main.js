@@ -1,5 +1,29 @@
 // 3D Game Platform - Main Entry Point
 
+// Parse URL parameters for customization
+function getUrlParams() {
+    const params = {};
+    const queryString = window.location.search;
+    const urlParams = new URLSearchParams(queryString);
+    
+    // Get custom player name if provided
+    if (urlParams.has('playerName')) {
+        params.playerName = urlParams.get('playerName');
+    }
+    
+    // Get custom player color if provided
+    if (urlParams.has('playerColor')) {
+        // Convert hex string to number
+        const colorStr = urlParams.get('playerColor');
+        params.playerColor = parseInt(colorStr, 16);
+    }
+    
+    return params;
+}
+
+// Get URL parameters
+const urlParams = getUrlParams();
+
 // Game configuration
 const gameConfig = {
     debug: false,                 // Debug mode
@@ -14,13 +38,17 @@ const gameConfig = {
             y: 1,
             z: 0
         },
-        viewMode: 'firstPerson'   // 'firstPerson', 'thirdPerson', or 'freeRoam'
+        viewMode: 'firstPerson',   // 'firstPerson', 'thirdPerson', or 'freeRoam'
+        // Use custom player name if provided in URL, otherwise generate random name
+        playerName: urlParams.playerName || `Player_${Math.floor(Math.random() * 1000)}`,
+        // Use custom player color if provided in URL
+        playerColor: urlParams.playerColor || 0xFFFF00 // Default to yellow
     },
     networkSettings: {
         serverUrl: window.location.hostname.includes('localhost') 
             ? `ws://${window.location.hostname}:3000` // Local development
             : `wss://${window.location.hostname}`,    // Production
-        roomName: 'default'       // Default room name
+        roomName: 'active'       // Default active room
     }
 };
 
@@ -30,6 +58,12 @@ window.gameConfig = gameConfig;
 // Main game initialization
 function initGame() {
     console.log('Initializing 3D Game Platform...');
+    
+    // Display player name in loading screen if custom name provided
+    if (urlParams.playerName) {
+        const loadingStatus = document.getElementById('loading-status');
+        loadingStatus.textContent = `Loading game engine for ${urlParams.playerName}...`;
+    }
     
     // Load core modules
     loadCoreModules()
@@ -89,11 +123,11 @@ function initGameEngine() {
     
     // Initialize default player factory first
     window.createPlayerEntity = function(scene, value = 1) {
-        // Create a simple player with a box
+        // Create a player with color from gameConfig
         const player = new window.Player({
             id: 'player',
             isLocalPlayer: true,
-            color: 0xFFFF00
+            color: gameConfig.playerSettings.playerColor
         });
         
         if (scene && player.mesh) {
