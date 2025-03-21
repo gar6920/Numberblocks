@@ -114,6 +114,35 @@
             100% { transform: rotate(360deg); }
         }
     </style>
+    <script>
+        // Fetch the current implementation information and update the page title
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    // Update the page title with the active implementation
+                    document.title = `3D AI Game - ${config.activeImplementation}`;
+                    
+                    // Also add a small indicator in the corner
+                    const implIndicator = document.createElement('div');
+                    implIndicator.style.position = 'absolute';
+                    implIndicator.style.top = '5px';
+                    implIndicator.style.right = '10px';
+                    implIndicator.style.background = 'rgba(0,0,0,0.5)';
+                    implIndicator.style.color = 'white';
+                    implIndicator.style.padding = '5px 10px';
+                    implIndicator.style.borderRadius = '3px';
+                    implIndicator.style.fontSize = '12px';
+                    implIndicator.style.zIndex = '1000';
+                    implIndicator.textContent = `Implementation: ${config.activeImplementation}`;
+                    document.body.appendChild(implIndicator);
+                }
+            } catch (error) {
+                console.error('Failed to fetch implementation info:', error);
+            }
+        });
+    </script>
 </head>
 <body>
     <canvas id="game-canvas"></canvas>

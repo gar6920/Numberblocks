@@ -24,7 +24,39 @@
             height: 100%;
             border: none;
         }
+        #implementation-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
     </style>
+    <script>
+        // Fetch the current implementation when the page loads
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('http://localhost:3000/api/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    // Update the page title
+                    document.title = `3D AI Game - 4 Players - ${config.activeImplementation}`;
+                    
+                    // Create a display for the implementation
+                    const implDisplay = document.createElement('div');
+                    implDisplay.id = 'implementation-display';
+                    implDisplay.textContent = `Implementation: ${config.activeImplementation}`;
+                    document.body.appendChild(implDisplay);
+                }
+            } catch (error) {
+                console.error('Failed to fetch implementation info:', error);
+            }
+        });
+    </script>
 </head>
 <body>
     <div class="container">

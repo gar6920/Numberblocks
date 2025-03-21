@@ -1,0 +1,5 @@
+npm error Missing script: "start:default"
+npm error
+npm error To see a list of scripts, run:
+npm error   npm run
+npm error A complete log of this run can be found in: C:\Users\Garrett\AppData\Local\npm-cache\_logs\2025-03-21T16_42_31_721Z-debug-0.log
