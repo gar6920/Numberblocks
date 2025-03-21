@@ -603,7 +603,7 @@ window.updateRemotePlayers = function() {
             // Update rotation
             remotePlayer.mesh.rotation.y = player.rotationY;
             
-            // Update numberblock value if changed
+            
             if (remotePlayer.value !== player.value) {
                 try {
                     // Remove old mesh
