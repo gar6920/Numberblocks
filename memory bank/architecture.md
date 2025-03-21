@@ -169,10 +169,10 @@ Each game implementation extends the core platform with specific gameplay mechan
 │               └── index.js       # Implementation entry point
 ├── server/                 # Server-side code
 │   ├── core/               # Core server components
-│   │   ├── server.js       # Server entry point
+│   │   ├── server.js       # Main server entry point
 │   │   ├── index.js        # Core server initialization
 │   │   ├── BaseRoom.js     # Base room implementation
-│   │   └── schemas/        # Core schema definitions
+│   │   └── schemas/        # All schema definitions
 │   │       ├── BaseEntity.js # Base entity schema
 │   │       ├── DefaultRoom.js # Default room implementation
 │   │       ├── GameState.js  # Game state schema
@@ -186,6 +186,8 @@ Each game implementation extends the core platform with specific gameplay mechan
 │           ├── index.js    # Implementation entry point
 │           ├── schemas.js  # Implementation-specific schemas
 │           └── NumberblocksRoom.js # Implementation room
+├── four_player_setup.html  # HTML for 4-player split-screen setup
+├── open_4player_direct.bat # Batch script to launch 4-player mode
 └── memory bank/            # Documentation and reference materials
 ```
 

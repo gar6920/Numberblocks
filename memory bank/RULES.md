@@ -47,6 +47,12 @@ npm start
 - All schema definitions must be in `/server/core/schemas/`
 - Core room implementations must be in `/server/core/` (e.g., BaseRoom.js)
 
+### Schema Organization
+- All schemas (including implementation-specific ones) should properly extend the base schemas
+- Core schemas must be in `/server/core/schemas/`
+- Implementation-specific schemas should be in their respective implementation directory
+- Never create schemas outside of these designated locations
+
 ## Implementation Guidelines
 
 ### Modular Design Principles
