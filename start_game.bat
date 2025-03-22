@@ -65,7 +65,7 @@ set "SINGLE_FILE=%~dp0client/index.html"
 REM Launch appropriate number of clients
 if !PLAYER_COUNT!==1 (
     echo Opening single player mode...
-    start "" "%CHROME_PATH%" --app="file:///%SINGLE_FILE:\=/%"
+    start "" "%CHROME_PATH%" --app="http://localhost:3000"
 ) else (
     echo Opening !PLAYER_COUNT!-player setup...
     start "" "%CHROME_PATH%" --app="file:///%SETUP_FILE:\=/%?players=!PLAYER_COUNT!"
@@ -79,6 +79,7 @@ echo Server is running at http://localhost:3000
 echo To quit, close all windows and press Ctrl+C in the server window.
 
 REM Clean up temporary file
-if exist server_output.tmp del server_output.tmp
+REM Commented out to prevent file access error as server is still using it
+REM if exist server_output.tmp del server_output.tmp
 
 pause 
