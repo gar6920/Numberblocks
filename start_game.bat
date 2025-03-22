@@ -6,13 +6,6 @@ echo Killing any existing Node.js processes...
 taskkill /F /IM node.exe 2>nul
 timeout /t 2 /nobreak >nul
 
-REM Start the server and capture its output
-echo Starting server...
-start "3D AI Game Server" /B cmd /c "start_server.bat > server_output.tmp 2>&1"
-
-REM Wait for server to initialize and show implementation selection
-timeout /t 2 /nobreak >nul
-
 :IMPLEMENTATION_SELECT
 cls
 echo ===== 3D AI Game Platform =====
@@ -22,17 +15,21 @@ echo 2. numberblocks
 echo.
 set /p IMPL_CHOICE="Select implementation (1-2): "
 
-REM Send implementation choice
+REM Map choice to implementation name
 if !IMPL_CHOICE!==1 (
-    echo 1
+    set IMPLEMENTATION=default
 ) else if !IMPL_CHOICE!==2 (
-    echo 2
+    set IMPLEMENTATION=numberblocks
 ) else (
     goto IMPLEMENTATION_SELECT
 )
 
-REM Wait for implementation to be set
-timeout /t 3 /nobreak >nul
+REM Start the server with the selected implementation
+echo Starting server with !IMPLEMENTATION! implementation...
+start "3D AI Game Server" /B cmd /c "set GAME_IMPLEMENTATION=!IMPLEMENTATION! && start_server.bat > server_output.tmp 2>&1"
+
+REM Wait for server to initialize
+timeout /t 2 /nobreak >nul
 
 :PLAYER_COUNT
 cls

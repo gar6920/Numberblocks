@@ -20,8 +20,8 @@ const implementations = {
 
 // Server-side configuration
 const serverConfig = {
-    // Set the active implementation here - change this value to switch implementations
-    activeImplementation: "default", // Options: "default", "numberblocks"
+    // Read implementation from command line args or environment variable, default to "default"
+    activeImplementation: process.env.GAME_IMPLEMENTATION || process.argv[2] || "default",
     port: process.env.PORT || 3000
 };
 

@@ -14,12 +14,14 @@
 - Processes player inputs (e.g., movement, collisions)
 - Broadcasts state updates to all connected clients
 - Handles entity spawning and lifecycle management
+- Supports dynamic implementation selection via command-line arguments or environment variables
 
 **Key Features:**
 - Room-based multiplayer with session persistence
 - State synchronization using Colyseus schema
 - Server-authoritative position tracking
 - Dynamic entity spawning system
+- Runtime implementation switching based on user selection
 
 ### 2. Client Core Platform (/client/js/core)
 The core platform provides foundational functionality that all game implementations can leverage.
@@ -302,3 +304,42 @@ The platform supports flexible local multiplayer configurations through a dynami
 - **Dynamic Resizing:** Maintains proper ratios on window resize
 - **Efficient Resource Usage:** Only creates needed game instances
 - **Seamless Integration:** Works with all game implementations
+
+## Implementation Selection System
+The platform supports multiple game implementations that can be selected at runtime:
+
+1. **Selection Process:**
+   - User selects implementation through the startup batch file
+   - Selection is passed to the server via environment variables (GAME_IMPLEMENTATION)
+   - Server dynamically loads the appropriate implementation based on this selection
+   - Implementation identifier is displayed in the game UI
+
+2. **Technical Components:**
+   ```javascript
+   // server/core/index.js
+   const serverConfig = {
+     // Read implementation from command line args or environment variable
+     activeImplementation: process.env.GAME_IMPLEMENTATION || process.argv[2] || "default",
+     port: process.env.PORT || 3000
+   };
+   ```
+
+   ```batch
+   # start_game.bat
+   # Maps user selection to implementation name and sets environment variable
+   if !IMPL_CHOICE!==1 (
+     set IMPLEMENTATION=default
+   ) else if !IMPL_CHOICE!==2 (
+     set IMPLEMENTATION=numberblocks
+   )
+   # Passes the selection to the server
+   set GAME_IMPLEMENTATION=!IMPLEMENTATION! && start_server.bat
+   ```
+
+3. **Available Implementations:**
+   - **default:** Simple box-based characters and environment
+   - **numberblocks:** Mathematical block-based gameplay
+
+4. **Implementation Registry:**
+   - Central registry in server/core/index.js maps implementation names to their module exports
+   - New implementations can be added by extending this registry
