@@ -29,7 +29,8 @@ echo Starting server with !IMPLEMENTATION! implementation...
 start "3D AI Game Server" /B cmd /c "set GAME_IMPLEMENTATION=!IMPLEMENTATION! && start_server.bat > server_output.tmp 2>&1"
 
 REM Wait for server to initialize
-timeout /t 2 /nobreak >nul
+echo Waiting for server to initialize...
+timeout /t 5 /nobreak >nul
 
 :PLAYER_COUNT
 cls
