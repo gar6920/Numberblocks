@@ -1,2 +1,41 @@
 Starting 3D AI Game Server
 Server starting - press Ctrl+C to stop
+
+> 3d-ai-game-platform@1.0.0 start
+> node server/core/server.js
+
+DEPRECATION WARNING: 'pingInterval', 'pingMaxRetries', 'server', and 'verifyClient' Server options will be permanently moved to WebSocketTransport on v0.15
+new Server({
+  transport: new WebSocketTransport({
+    pingInterval: ...,
+    pingMaxRetries: ...,
+    server: ...,
+    verifyClient: ...
+  })
+})
+👉 Documentation: https://docs.colyseus.io/server/transport/
+Specified implementation "numberblocks " not found. Using "default" instead.
+
+===== 3D AI Game Platform =====
+Available implementations:
+1. default
+2. numberblocks
+
+Current implementation: numberblocks 
+
+Press 1 or 2 to select an implementation
+Starting with current implementation in 10 seconds...
+3D Game Platform server running on http://localhost:3000
+Available implementations: default, numberblocks
+Active implementation: numberblocks 
+Starting with current implementation in 9 seconds...Starting with current implementation in 8 seconds...Starting with current implementation in 7 seconds...Starting with current implementation in 6 seconds...Starting with current implementation in 5 seconds...Starting with current implementation in 4 seconds...Starting with current implementation in 3 seconds...BaseRoom created! { name: 'Player_917', color: '#C37D1F' }
+Default room implementation initialized
+Client joined: ssXnRKfX5
+Starting with current implementation in 2 seconds...Starting with current implementation in 1 seconds...
+Using current implementation: numberblocks 
+Server running on http://localhost:3000
+Client joined: TFg8tgGEd
+Client joined: mjj2QM8QJ
+Client left: mjj2QM8QJ
+Client left: ssXnRKfX5
+Client left: TFg8tgGEd

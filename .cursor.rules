@@ -1,0 +1,68 @@
+rules_version = 1
+
+# ⚠️ CRITICAL RULES ⚠️
+# 1. Server Authority Rule:
+#    - Server MUST have final authority over ALL game state
+#    - Server MUST control ALL movements and positions
+#    - Client can ONLY:
+#      * Send input/action requests to server
+#      * Render authoritative state from server
+#      * Interpolate between server updates
+
+# 2. Core vs Implementation Rule:
+#    - If multiple implementations need it -> MUST be in core
+#    - If unique to one implementation -> MUST be in implementation folder
+#    - NEVER mix implementation-specific code into core
+
+[*.{js,jsx,ts,tsx}]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+max_line_length = 100
+
+[*.html]
+indent_style = space
+indent_size = 2
+
+[*.css]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.bat]
+end_of_line = crlf
+
+[{package.json,.travis.yml}]
+indent_style = space
+indent_size = 2
+
+# Project-specific rules
+[server/core/**]
+# Core server components must be kept isolated from implementations
+implementation_specific = false
+
+[client/js/core/**]
+# Core client components must be kept isolated from implementations
+implementation_specific = false
+
+[server/implementations/**]
+# Implementation-specific server code only
+implementation_specific = true
+
+[client/js/implementations/**]
+# Implementation-specific client code only
+implementation_specific = true
+
+# Schema organization
+[server/core/schemas/**]
+# Core schemas only
+schema_type = core
+
+[server/implementations/*/schemas/**]
+# Implementation-specific schemas
+schema_type = implementation 

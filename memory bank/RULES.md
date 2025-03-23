@@ -1,3 +1,156 @@
+# 3D AI Game Platform - Rules and Guidelines
+
+## Core Principles
+
+1. **Modular Design**
+   - All new features must follow the modular architecture
+   - Implementations must extend base classes and interfaces
+   - Use dependency injection for core components
+   - Register new entity types with EntityFactory
+
+2. **Camera System Rules**
+   - Support all three view modes (first-person, third-person, free roam)
+   - Maintain proper Euler angles to prevent camera roll
+   - Implement smooth transitions between camera modes
+   - Handle mouse wheel zoom for third-person view
+   - Ensure proper camera orientation in all modes
+
+3. **Networking Rules**
+   - Server is always authoritative for game state
+   - Use Colyseus Schema for state synchronization
+   - Implement proper session persistence
+   - Handle player disconnections gracefully
+   - Use efficient delta updates for state changes
+   - Maintain proper sessionId tracking
+
+4. **Implementation Guidelines**
+   - Place client-side code in `/client/js/implementations/[name]`
+   - Place server-side code in `/server/implementations/[name]`
+   - Extend base classes (Entity, Player, NPC)
+   - Register custom entity factories
+   - Implement required interfaces
+   - Follow the established communication flow
+
+5. **Entity Management**
+   - Use EntityFactory for creating entities
+   - Implement proper lifecycle management
+   - Handle entity state synchronization
+   - Clean up entities on destruction
+   - Use proper collision detection
+
+6. **Multiplayer Setup**
+   - Support 1-4 player configurations
+   - Maintain proper viewport layouts
+   - Handle screen space allocation
+   - Implement clean separation between viewports
+   - Support dynamic resizing
+
+7. **Code Organization**
+   - Follow the established file structure
+   - Keep implementation-specific code isolated
+   - Use proper schema definitions
+   - Maintain clear separation of concerns
+   - Document new features and changes
+
+8. **Performance Guidelines**
+   - Use efficient state synchronization
+   - Implement proper interpolation for smooth movement
+   - Optimize network message frequency
+   - Handle browser tab synchronization
+   - Clean up resources when not in use
+
+9. **UI Guidelines**
+   - Use player-ui.js for common UI elements
+   - Implement clear feedback for player actions
+   - Show implementation identifier
+   - Display connection status
+   - Maintain proper player list
+
+10. **Error Handling**
+    - Implement proper error recovery
+    - Handle network disconnections
+    - Validate all user inputs
+    - Provide clear error messages
+    - Log important events
+
+## Implementation Selection Rules
+
+1. **Adding New Implementations**
+   - Register in server/core/index.js
+   - Update start_game.bat with new option
+   - Provide proper documentation
+   - Include test cases
+   - Follow naming conventions
+
+2. **Configuration Requirements**
+   - Support environment variable configuration
+   - Handle command-line arguments
+   - Provide default values
+   - Document configuration options
+   - Support runtime switching
+
+## Development Workflow
+
+1. **Adding Features**
+   - Create feature branch
+   - Follow modular design principles
+   - Write tests for new functionality
+   - Document changes
+   - Submit pull request
+
+2. **Testing Requirements**
+   - Test all view modes
+   - Verify multiplayer functionality
+   - Check network resilience
+   - Validate state synchronization
+   - Ensure proper cleanup
+
+3. **Documentation**
+   - Update relevant documentation
+   - Add inline code comments
+   - Document API changes
+   - Update README if needed
+   - Include usage examples
+
+## Security Guidelines
+
+1. **Network Security**
+   - Validate all server inputs
+   - Sanitize user data
+   - Use proper session management
+   - Implement rate limiting
+   - Handle edge cases
+
+2. **Client Security**
+   - Validate local inputs
+   - Handle malformed data
+   - Protect against injection
+   - Implement proper error boundaries
+   - Use secure defaults
+
+## Best Practices
+
+1. **Code Style**
+   - Use consistent formatting
+   - Follow naming conventions
+   - Write clear comments
+   - Keep functions focused
+   - Use proper typing
+
+2. **Performance**
+   - Optimize render loops
+   - Minimize network traffic
+   - Use efficient data structures
+   - Implement proper caching
+   - Profile critical paths
+
+3. **Maintenance**
+   - Keep dependencies updated
+   - Remove unused code
+   - Maintain test coverage
+   - Document technical debt
+   - Plan for scalability
+
 # Development Rules and Notes
 
 ## Server Management
