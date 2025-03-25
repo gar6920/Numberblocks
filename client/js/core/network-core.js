@@ -1,4 +1,3 @@
-
 // Handles connection to the server and basic network setup
 
 // Network configuration
@@ -275,8 +274,22 @@ async function initNetworking() {
         // Create client if needed
         if (!client) {
             try {
-                client = new Colyseus.Client(endpoint);
-                console.log("Colyseus client created");
+                // Check which client constructor is available (handles both 0.14.x and 0.16.x versions)
+                if (typeof Colyseus !== 'undefined') {
+                    if (typeof Colyseus.Client === 'function') {
+                        client = new Colyseus.Client(endpoint);
+                    } else if (typeof colyseus !== 'undefined' && typeof colyseus.Client === 'function') {
+                        client = new colyseus.Client(endpoint);
+                    } else {
+                        // Direct instantiation for older versions
+                        client = new Client(endpoint);
+                    }
+                } else if (typeof Client === 'function') {
+                    client = new Client(endpoint);
+                } else {
+                    throw new Error("Colyseus client library not found");
+                }
+                console.log("Colyseus client created successfully");
             } catch (clientError) {
                 console.error("Failed to create Colyseus client:", clientError);
                 throw new Error(`Failed to create client: ${clientError.message}`);

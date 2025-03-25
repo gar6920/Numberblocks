@@ -50,6 +50,13 @@ class GameServer {
      * Configure Express app
      */
     configureApp() {
+        // Set up CORS headers for all requests
+        this.app.use((req, res, next) => {
+            res.header("Access-Control-Allow-Origin", "*");
+            res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+            next();
+        });
+        
         // Set up static file serving
         this.app.use(express.static(path.join(__dirname, '../..', 'client')));
         
