@@ -113,6 +113,12 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .hide-cursor, .hide-cursor * {
+            cursor: none !important;
+        }
+        #building-menu button {
+            cursor: pointer !important;
+        }
     </style>
     <script>
         // Fetch the current implementation information and update the page title
@@ -183,5 +189,1230 @@
     
     <!-- Main loader script -->
     <script src="js/core/main.js"></script>
+    
+    <!-- Simple Building Mode Script -->
+    <script>
+    // Wait for the game to load
+    window.addEventListener('DOMContentLoaded', function() {
+        console.log("Simple building mode script loaded");
+        
+        // Global flag to track if user has interacted with the game
+        window.hasInteracted = false;
+        
+        // Add listener to set interacted flag
+        document.addEventListener('click', function() {
+            window.hasInteracted = true;
+        }, { once: true });
+        
+        // Wait a bit for the game to fully initialize
+        setTimeout(function() {
+            // Create the building mode indicator
+            const buildingModeIndicator = document.createElement('div');
+            buildingModeIndicator.id = 'building-mode-indicator';
+            buildingModeIndicator.style.position = 'fixed';
+            buildingModeIndicator.style.bottom = '50px';
+            buildingModeIndicator.style.right = '20px';
+            buildingModeIndicator.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+            buildingModeIndicator.style.color = 'white';
+            buildingModeIndicator.style.padding = '5px 10px';
+            buildingModeIndicator.style.borderRadius = '5px';
+            buildingModeIndicator.style.fontFamily = 'Arial, sans-serif';
+            buildingModeIndicator.style.fontSize = '14px';
+            buildingModeIndicator.style.zIndex = '1000';
+            buildingModeIndicator.style.display = 'none';
+            buildingModeIndicator.textContent = 'Building Mode';
+            document.body.appendChild(buildingModeIndicator);
+            
+            // Create the building menu with higher z-index
+            const buildingMenu = document.createElement('div');
+            buildingMenu.id = 'building-menu';
+            buildingMenu.style.position = 'fixed';
+            buildingMenu.style.bottom = '10px';
+            buildingMenu.style.left = '50%';
+            buildingMenu.style.transform = 'translateX(-50%)';
+            buildingMenu.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+            buildingMenu.style.color = 'white';
+            buildingMenu.style.padding = '8px';
+            buildingMenu.style.borderRadius = '5px';
+            buildingMenu.style.display = 'none';
+            buildingMenu.style.zIndex = '2000'; // Much higher z-index
+            buildingMenu.style.textAlign = 'center';
+            buildingMenu.style.pointerEvents = 'auto'; // Ensure clicks work
+            document.body.appendChild(buildingMenu);
+            
+            // Create placement preview smaller and more visible
+            const placementPreview = document.createElement('div');
+            placementPreview.id = 'placement-preview';
+            placementPreview.style.position = 'fixed';
+            placementPreview.style.width = '16px';
+            placementPreview.style.height = '16px';
+            placementPreview.style.backgroundColor = 'rgba(0, 255, 0, 0.7)';
+            placementPreview.style.border = '2px solid white';
+            placementPreview.style.borderRadius = '50%';
+            placementPreview.style.pointerEvents = 'none'; // Don't interfere with clicks
+            placementPreview.style.transform = 'translate(-50%, -50%)';
+            placementPreview.style.zIndex = '1001';
+            placementPreview.style.display = 'none';
+            placementPreview.style.boxShadow = '0 0 5px rgba(0, 0, 0, 0.5)'; // Add shadow for visibility
+            document.body.appendChild(placementPreview);
+            
+            // Add structure buttons
+            const structureTypes = [
+                { id: 'building', name: 'Building' },
+                { id: 'wall', name: 'Wall' }
+            ];
+            
+            // Create structure buttons
+            structureTypes.forEach(type => {
+                const button = document.createElement('button');
+                button.textContent = type.name;
+                button.style.margin = '0 5px';
+                button.style.padding = '5px 10px';
+                button.style.backgroundColor = '#555';
+                button.style.color = 'white';
+                button.style.border = 'none';
+                button.style.borderRadius = '3px';
+                button.style.cursor = 'pointer';
+                button.style.position = 'relative';
+                button.style.zIndex = '1002';
+                button.style.pointerEvents = 'auto';
+                
+                // Add button click handler with special handling
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    selectStructureType(type.id);
+                    
+                    // Keep controls unlocked
+                    if (window.controls && window.controls.isLocked) {
+                        window.controls.unlock();
+                    }
+                });
+                
+                buildingMenu.appendChild(button);
+            });
+            
+            // Add rotate button
+            const rotateButton = document.createElement('button');
+            rotateButton.textContent = 'Rotate (Q/E)';
+            rotateButton.title = 'Hold Q or E to rotate smoothly in 15° increments';
+            rotateButton.style.margin = '0 5px';
+            rotateButton.style.padding = '5px 10px';
+            rotateButton.style.backgroundColor = '#555';
+            rotateButton.style.color = 'white';
+            rotateButton.style.border = 'none';
+            rotateButton.style.borderRadius = '3px';
+            rotateButton.style.cursor = 'pointer';
+            rotateButton.style.position = 'relative';
+            rotateButton.style.zIndex = '1002';
+            rotateButton.style.pointerEvents = 'auto';
+            
+            rotateButton.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                rotateStructure();
+                
+                // Keep controls unlocked
+                if (window.controls && window.controls.isLocked) {
+                    window.controls.unlock();
+                }
+            });
+            
+            buildingMenu.appendChild(rotateButton);
+            
+            // Global building mode state
+            window.buildingMode = {
+                active: false,
+                currentStructure: null,
+                rotation: 0,
+                toggle: function() {
+                    this.active = !this.active;
+                    
+                    // Update prevention flag
+                    window.preventPointerLock = this.active;
+                    
+                    // Show/hide UI elements
+                    buildingModeIndicator.style.display = this.active ? 'block' : 'none';
+                    buildingMenu.style.display = this.active ? 'block' : 'none';
+                    placementPreview.style.display = this.active ? 'block' : 'none';
+                    
+                    // Always hide lock instructions in building mode, but only show
+                    // when exiting if user hasn't interacted yet
+                    const lockInstructions = document.getElementById('lock-instructions');
+                    if (lockInstructions) {
+                        if (this.active) {
+                            lockInstructions.style.display = 'none';
+                        } else if (!window.hasInteracted) {
+                            // Only show instructions if user hasn't interacted yet
+                            lockInstructions.style.display = 'flex';
+                        }
+                    }
+                    
+                    // Initialize 3D preview if needed
+                    if (this.active && !window.buildingPreview && window.scene) {
+                        createPreviewModels();
+                    }
+                    
+                    // Show/hide 3D preview and grid
+                    if (window.buildingPreview) {
+                        window.buildingPreview.group.visible = this.active;
+                        window.buildingPreview.grid.visible = this.active;
+                        
+                        // Set current type if activating
+                        if (this.active && this.currentStructure) {
+                            window.buildingPreview.currentType = this.currentStructure;
+                        }
+                    }
+                    
+                    // Unlock/lock pointer
+                    if (this.active) {
+                        // Unlock the pointer to show cursor
+                        if (window.controls && window.controls.isLocked) {
+                            window.controls.unlock();
+                        }
+                        
+                        // Most aggressive approach - add class to html element
+                        document.documentElement.classList.add('hide-cursor');
+                        
+                        // Create and use a completely transparent cursor as fallback
+                        const transparentCursor = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+                        document.body.style.cursor = `url(${transparentCursor}), none`;
+                        document.documentElement.style.cursor = `url(${transparentCursor}), none`;
+                        
+                        if (window.renderer && window.renderer.domElement) {
+                            window.renderer.domElement.style.cursor = `url(${transparentCursor}), none`;
+                        }
+                        
+                        // Disable pointer lock controls to prevent auto-locking
+                        if (window.controls) {
+                            window.controls.enabled = false;
+                        }
+                        
+                        // Add a click interceptor div to prevent clicks from triggering pointer lock
+                        const clickInterceptor = document.createElement('div');
+                        clickInterceptor.id = 'build-click-interceptor';
+                        clickInterceptor.style.position = 'fixed';
+                        clickInterceptor.style.top = '0';
+                        clickInterceptor.style.left = '0';
+                        clickInterceptor.style.width = '100%';
+                        clickInterceptor.style.height = '100%';
+                        clickInterceptor.style.zIndex = '900'; // Below our UI but above everything else
+                        clickInterceptor.style.pointerEvents = 'all';
+
+                        // Completely rewrite the click handling for reliability - SIMPLIFIED VERSION
+                        clickInterceptor.addEventListener('mousedown', function(event) {
+                            // Only handle LEFT CLICKS (button 0)
+                            if (event.button !== 0) return;
+                            
+                            // Skip if clicking on UI
+                            if (event.target.closest('#building-menu')) return;
+                            
+                            event.preventDefault();
+                            event.stopPropagation();
+                            
+                            // Get world position
+                            const worldPos = screenToWorld(event.clientX, event.clientY);
+                            if (!worldPos) return;
+                            
+                            // Check if valid placement
+                            if (!window.buildingPreview || !window.buildingPreview.isValid) return;
+                            
+                            // Send structure placement request to server - SIMPLE VERSION
+                            if (window.room) {
+                                window.room.send("placeStructure", {
+                                    structureType: window.buildingMode.currentStructure,
+                                    x: Math.round(worldPos.x),
+                                    y: Math.round(worldPos.y) || 0,
+                                    z: Math.round(worldPos.z),
+                                    rotation: window.buildingMode.rotation * (Math.PI / 180)
+                                });
+                                
+                                // Important: Force refresh preview position after building
+                                setTimeout(() => {
+                                    // Force cursor update with current mouse position
+                                    if (event) updateCursorPosition(event);
+                                }, 50);
+                            }
+                        });
+
+                        // Add response handler for structure placement
+                        if (window.room) {
+                            window.room.onMessage("structurePlaced", (response) => {
+                                console.log("Server responded to structure placement:", response);
+                                
+                                if (response.success) {
+                                    console.log("Structure placed successfully, id:", response.id);
+                                    
+                                    // Force update the preview to show it's ready for the next build
+                                    setTimeout(() => {
+                                        if (window.lastMouseEvent) {
+                                            // Re-trigger cursor update to refresh preview
+                                            updateCursorPosition(window.lastMouseEvent);
+                                        }
+                                    }, 200);
+                                } else {
+                                    console.error("Server rejected structure placement:", response.error);
+                                }
+                            });
+                        }
+
+                        document.body.appendChild(clickInterceptor);
+                        
+                        // Position cursor at center initially
+                        updateCursorPosition({
+                            clientX: window.innerWidth / 2,
+                            clientY: window.innerHeight / 2
+                        });
+                        
+                        // Start tracking mouse movement for placement preview
+                        document.addEventListener('mousemove', updateCursorPosition);
+                        
+                        // Modify building menu button styles to ensure they're clickable
+                        const allButtons = buildingMenu.querySelectorAll('button');
+                        allButtons.forEach(button => {
+                            button.style.zIndex = '1002'; // Higher than placement preview
+                            button.style.position = 'relative'; // Ensure proper stacking
+                            button.style.pointerEvents = 'auto'; // Force clickable
+                        });
+                    } else {
+                        // Remove cursor-hiding class
+                        document.documentElement.classList.remove('hide-cursor');
+                        
+                        // Stop tracking mouse movement
+                        document.removeEventListener('mousemove', updateCursorPosition);
+                        
+                        // Restore cursor style
+                        document.body.style.cursor = 'default';
+                        document.documentElement.style.cursor = 'default';
+                        
+                        if (window.renderer && window.renderer.domElement) {
+                            window.renderer.domElement.style.cursor = 'default';
+                        }
+                        
+                        // Re-enable controls
+                        if (window.controls) {
+                            window.controls.enabled = true;
+                        }
+                        
+                        // Remove click interceptor
+                        const clickInterceptor = document.getElementById('build-click-interceptor');
+                        if (clickInterceptor) {
+                            clickInterceptor.remove();
+                        }
+                    }
+                    
+                    console.log("Building mode " + (this.active ? "activated" : "deactivated"));
+                    
+                    // Select default structure if activating
+                    if (this.active && !this.currentStructure) {
+                        selectStructureType('building');
+                    }
+
+                    // Ensure lock instructions stay hidden after exiting building mode
+                    if (!this.active) {
+                        const lockInstructions = document.getElementById('lock-instructions');
+                        if (lockInstructions) {
+                            lockInstructions.style.display = 'none';
+                        }
+                    }
+                }
+            };
+            
+            // Function to update cursor position for placement preview
+            function updateCursorPosition(event) {
+                // Update 2D cursor preview position
+                placementPreview.style.left = event.clientX + 'px';
+                placementPreview.style.top = event.clientY + 'px';
+                
+                // Get 3D world position from screen position
+                const worldPos = screenToWorld(event.clientX, event.clientY);
+                
+                if (worldPos && window.buildingMode.active) {
+                    // Check if placement is valid
+                    window.buildingPreview.isValid = checkPlacementValidity(worldPos);
+                    
+                    // Update 3D preview position
+                    window.updatePreviewPosition(worldPos);
+                }
+            }
+            
+            // Check if placement is valid at a position
+            function checkPlacementValidity(position) {
+                // If we don't have a room or structures, assume valid
+                if (!window.room || !window.room.state || !window.room.state.structures) {
+                    return true;
+                }
+                
+                const structureType = window.buildingMode.currentStructure;
+                const rotationDegrees = window.buildingMode.rotation;
+                const rotationRadians = rotationDegrees * (Math.PI / 180);
+                
+                // Get base dimensions based on type
+                let width = 4, depth = 4;
+                if (structureType === 'wall') {
+                    width = 4;
+                    depth = 0.5;
+                    
+                    // For continuous rotation, calculate the actual footprint using trigonometry
+                    // This handles any arbitrary rotation angle, not just 90-degree increments
+                    const absRotation = rotationDegrees % 180; // Only need to consider 0-180 due to symmetry
+                    const normalizedRotation = absRotation > 90 ? 180 - absRotation : absRotation;
+                    const radians = normalizedRotation * (Math.PI / 180);
+                    
+                    // Calculate effective width and depth after rotation
+                    const effectiveWidth = Math.abs(width * Math.cos(radians)) + Math.abs(depth * Math.sin(radians));
+                    const effectiveDepth = Math.abs(width * Math.sin(radians)) + Math.abs(depth * Math.cos(radians));
+                    
+                    width = effectiveWidth;
+                    depth = effectiveDepth;
+                }
+                
+                // Create bounding box for new structure
+                const halfWidth = width / 2;
+                const halfDepth = depth / 2;
+                
+                const newMin = { 
+                    x: position.x - halfWidth, 
+                    z: position.z - halfDepth 
+                };
+                const newMax = { 
+                    x: position.x + halfWidth, 
+                    z: position.z + halfDepth 
+                };
+                
+                // Check for collisions with existing structures
+                let isValid = true;
+                
+                window.room.state.structures.forEach(structure => {
+                    if (!isValid) return; // Skip if already invalid
+                    
+                    // Get structure dimensions
+                    let otherWidth = structure.width;
+                    let otherDepth = structure.depth;
+                    
+                    // Create bounding box for existing structure
+                    const otherHalfWidth = otherWidth / 2;
+                    const otherHalfDepth = otherDepth / 2;
+                    
+                    const otherMin = { 
+                        x: structure.x - otherHalfWidth, 
+                        z: structure.z - otherHalfDepth 
+                    };
+                    const otherMax = { 
+                        x: structure.x + otherHalfWidth, 
+                        z: structure.z + otherHalfDepth 
+                    };
+                    
+                    // Check for overlap
+                    if (newMin.x <= otherMax.x && newMax.x >= otherMin.x &&
+                        newMin.z <= otherMax.z && newMax.z >= otherMin.z) {
+                        isValid = false;
+                    }
+                });
+                
+                return isValid;
+            }
+            
+            // Function to select structure type
+            function selectStructureType(typeId) {
+                window.buildingMode.currentStructure = typeId;
+                console.log("Selected structure type:", typeId);
+                
+                // Update 3D preview type
+                if (window.buildingPreview) {
+                    window.buildingPreview.currentType = typeId;
+                    
+                    // Update preview position based on last mouse position
+                    if (window.lastMousePosition) {
+                        window.updatePreviewPosition(window.lastMousePosition);
+                    }
+                }
+                
+                // Update button styling
+                const buttons = buildingMenu.querySelectorAll('button');
+                buttons.forEach(button => {
+                    if (button.textContent === structureTypes.find(t => t.id === typeId)?.name) {
+                        button.style.backgroundColor = 'blue';
+                    } else if (['Rotate (Q/E)'].indexOf(button.textContent) === -1) {
+                        button.style.backgroundColor = '#555';
+                    }
+                });
+            }
+            
+            // Setup rotation key holding - make it global by adding to window
+            window.rotationInterval = null;
+            const rotationSpeed = 15; // degrees per interval
+            const rotationIntervalMs = 100; // milliseconds between rotations
+
+            // Add continuous rotation on key hold
+            document.addEventListener('keydown', function(event) {
+                // Skip if interval already exists
+                if (window.rotationInterval) return;
+                
+                // Only handle in building mode
+                if (!window.buildingMode || !window.buildingMode.active) return;
+                
+                if (event.key === 'q' || event.key === 'Q') {
+                    // Start continuous counter-clockwise rotation
+                    window.rotationInterval = setInterval(() => {
+                        window.buildingMode.rotation = (window.buildingMode.rotation - rotationSpeed) % 360;
+                        if (window.buildingMode.rotation < 0) window.buildingMode.rotation += 360;
+                        
+                        // Update preview
+                        if (window.lastMousePosition) {
+                            window.updatePreviewPosition(window.lastMousePosition);
+                        }
+                    }, rotationIntervalMs);
+                } 
+                else if (event.key === 'e' || event.key === 'E') {
+                    // Start continuous clockwise rotation
+                    window.rotationInterval = setInterval(() => {
+                        window.buildingMode.rotation = (window.buildingMode.rotation + rotationSpeed) % 360;
+                        
+                        // Update preview
+                        if (window.lastMousePosition) {
+                            window.updatePreviewPosition(window.lastMousePosition);
+                        }
+                    }, rotationIntervalMs);
+                }
+            });
+
+            // Add keyup event to stop rotation
+            document.addEventListener('keyup', function(event) {
+                if ((event.key === 'q' || event.key === 'Q' || event.key === 'e' || event.key === 'E') && window.rotationInterval) {
+                    clearInterval(window.rotationInterval);
+                    window.rotationInterval = null;
+                }
+            });
+            
+            // Set up mouse motion tracking to ensure preview updates properly
+            document.addEventListener('mousemove', function(event) {
+                if (window.buildingMode && window.buildingMode.active) {
+                    updateCursorPosition(event);
+                }
+            });
+            
+            // Function to rotate structure
+            function rotateStructure() {
+                window.buildingMode.rotation = (window.buildingMode.rotation + 90) % 360;
+                console.log("Rotating structure to", window.buildingMode.rotation, "degrees");
+            }
+            
+            // Convert screen position to world position using raycasting
+            function screenToWorld(screenX, screenY) {
+                // Need to normalize coordinates for raycaster
+                const normalizedX = (screenX / window.innerWidth) * 2 - 1;
+                const normalizedY = -(screenY / window.innerHeight) * 2 + 1;
+                
+                if (!window.camera || !window.scene) {
+                    console.error("Camera or scene not available for raycasting");
+                    return null;
+                }
+                
+                // Create raycaster
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(normalizedX, normalizedY), window.camera);
+                
+                // Create a ground plane at y=0
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const intersection = new THREE.Vector3();
+                
+                if (raycaster.ray.intersectPlane(groundPlane, intersection)) {
+                    // Round coordinates to grid
+                    intersection.x = Math.round(intersection.x);
+                    intersection.y = 0; // Structures always start at ground level
+                    intersection.z = Math.round(intersection.z);
+                    
+                    return intersection;
+                }
+                
+                return null;
+            }
+            
+            // Set up listeners for structure state changes from server
+            if (window.room) {
+                // Add structure handlers to the room
+                window.room.state.structures.onAdd = (structure, key) => {
+                    console.log("Server confirmed structure placement:", key, structure);
+                    // Only now that the server confirmed it, create the actual structure in the world
+                    createStructureInWorld(structure, key);
+                };
+                
+                window.room.state.structures.onChange = (structure, key) => {
+                    console.log("Server updated structure:", key, structure);
+                    // Update structure based on server state
+                    updateStructureInWorld(structure, key);
+                };
+                
+                window.room.state.structures.onRemove = (structure, key) => {
+                    console.log("Server removed structure:", key);
+                    // Remove structure based on server command
+                    removeStructureFromWorld(key);
+                };
+            }
+            
+            // Global collection of structure meshes
+            window.worldStructures = new Map();
+            
+            // Create a structure in the 3D world
+            function createStructureInWorld(structure, key) {
+                console.log("Creating structure in world:", key, structure);
+                
+                // Skip if structure already exists
+                if (window.worldStructures && window.worldStructures.has(key)) {
+                    console.log("Structure already exists, skipping creation:", key);
+                    return;
+                }
+                
+                if (!window.scene) {
+                    console.error("Scene not available to create structure");
+                    return;
+                }
+                
+                // Validate structure data
+                if (!structure || !structure.structureType) {
+                    console.error("Invalid structure data:", structure);
+                    return;
+                }
+                
+                console.log("Building structure:", structure.structureType, "at", structure.x, structure.y, structure.z);
+                
+                // Generate a basic mesh based on structure type
+                let mesh;
+                
+                try {
+                    switch (structure.structureType) {
+                        case "building":
+                            const buildingGeometry = new THREE.BoxGeometry(structure.width, structure.height, structure.depth);
+                            const buildingMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
+                            mesh = new THREE.Mesh(buildingGeometry, buildingMaterial);
+                            break;
+                            
+                        case "wall":
+                            const wallGeometry = new THREE.BoxGeometry(structure.width, structure.height, structure.depth);
+                            const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x555555 });
+                            mesh = new THREE.Mesh(wallGeometry, wallMaterial);
+                            break;
+                            
+                        default:
+                            console.log("Unknown structure type, using default:", structure.structureType);
+                            const defaultGeometry = new THREE.BoxGeometry(1, 1, 1);
+                            const defaultMaterial = new THREE.MeshLambertMaterial({ color: 0xffff00 });
+                            mesh = new THREE.Mesh(defaultGeometry, defaultMaterial);
+                    }
+                    
+                    // Set position and rotation
+                    mesh.position.set(structure.x, structure.y + structure.height/2, structure.z);
+                    mesh.rotation.y = structure.rotationY || 0;
+                    
+                    // Add to scene
+                    window.scene.add(mesh);
+                    
+                    // Initialize worldStructures map if needed
+                    if (!window.worldStructures) {
+                        window.worldStructures = new Map();
+                    }
+                    
+                    // Store reference to mesh
+                    window.worldStructures.set(key, mesh);
+                    console.log("Structure created successfully:", key);
+                } catch (error) {
+                    console.error("Error creating structure:", error);
+                }
+            }
+            
+            // Update a structure in the 3D world
+            function updateStructureInWorld(structure, key) {
+                const mesh = window.worldStructures.get(key);
+                
+                if (mesh) {
+                    // Update position and rotation
+                    mesh.position.set(structure.x, structure.y + structure.height/2, structure.z);
+                    mesh.rotation.y = structure.rotationY || 0;
+                } else {
+                    // If mesh doesn't exist, create it
+                    createStructureInWorld(structure, key);
+                }
+            }
+            
+            // Remove a structure from the 3D world
+            function removeStructureFromWorld(key) {
+                const mesh = window.worldStructures.get(key);
+                
+                if (mesh && window.scene) {
+                    window.scene.remove(mesh);
+                    window.worldStructures.delete(key);
+                }
+            }
+            
+            // Create preview models for building preview
+            function createPreviewModels() {
+                if (!window.scene) return;
+                
+                // Create materials
+                const validMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x00ff00,
+                    transparent: true,
+                    opacity: 0.5
+                });
+                
+                const invalidMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xff0000,
+                    transparent: true,
+                    opacity: 0.5
+                });
+                
+                // Building preview mesh
+                const buildingGeometry = new THREE.BoxGeometry(4, 3, 4);
+                const buildingMesh = new THREE.Mesh(buildingGeometry, validMaterial.clone());
+                
+                // Wall preview mesh
+                const wallGeometry = new THREE.BoxGeometry(4, 2, 0.5);
+                const wallMesh = new THREE.Mesh(wallGeometry, validMaterial.clone());
+                
+                // Create preview container
+                const previewGroup = new THREE.Group();
+                previewGroup.visible = false;
+                window.scene.add(previewGroup);
+                
+                // Create grid helper
+                const grid = new THREE.GridHelper(50, 50, 0x444444, 0x888888);
+                grid.position.y = 0.01; // Slightly above ground
+                grid.visible = false;
+                window.scene.add(grid);
+                
+                // Store references
+                window.buildingPreview = {
+                    group: previewGroup,
+                    grid: grid,
+                    models: {
+                        building: buildingMesh,
+                        wall: wallMesh
+                    },
+                    materials: {
+                        valid: validMaterial,
+                        invalid: invalidMaterial
+                    },
+                    currentType: null,
+                    isValid: true
+                };
+                
+                console.log("Created 3D preview models");
+            }
+            
+            // Function to update preview position and visibility - make it globally accessible
+            window.updatePreviewPosition = function(worldPos) {
+                if (!window.buildingPreview || !window.buildingPreview.group) return;
+                
+                // Get preview data
+                const preview = window.buildingPreview;
+                
+                // Clear current preview
+                while (preview.group.children.length > 0) {
+                    preview.group.remove(preview.group.children[0]);
+                }
+                
+                // If no world position or no selected type, hide preview
+                if (!worldPos || !preview.currentType) {
+                    preview.group.visible = false;
+                    return;
+                }
+                
+                // Get appropriate model
+                const model = preview.models[preview.currentType].clone();
+                
+                // Apply appropriate material
+                model.material = preview.isValid ? 
+                    preview.materials.valid.clone() : 
+                    preview.materials.invalid.clone();
+                
+                // Position model in group
+                model.position.y = model.geometry.parameters.height / 2;
+                
+                // Position group in world
+                preview.group.position.set(worldPos.x, worldPos.y, worldPos.z);
+                
+                // Apply rotation
+                preview.group.rotation.y = window.buildingMode.rotation * (Math.PI / 180);
+                
+                // Add model to group and show
+                preview.group.add(model);
+                preview.group.visible = true;
+            }
+            
+            console.log("Building mode setup complete - press B to toggle");
+
+            // Global flag to prevent pointer lock while building
+            window.preventPointerLock = false;
+
+            // Modify any existing pointer lock controls to check this flag
+            const originalPointerLockInit = window.initPointerLock || function(){};
+            window.initPointerLock = function() {
+                if (window.preventPointerLock) {
+                    console.log("Pointer lock prevented - building mode active");
+                    return false;
+                }
+                return originalPointerLockInit.apply(this, arguments);
+            };
+
+            // Add a listener to prevent pointer lock even if another system tries to request it
+            document.addEventListener('pointerlockchange', function() {
+                if (window.preventPointerLock && document.pointerLockElement) {
+                    // If pointer lock was activated while it should be prevented, exit it immediately
+                    document.exitPointerLock();
+                    console.log("Forced exit of pointer lock - building mode active");
+                }
+            }, false);
+
+            // Also listen for the pointer lock error event to avoid console errors
+            document.addEventListener('pointerlockerror', function(event) {
+                if (window.preventPointerLock) {
+                    // Prevent the error from propagating when we're in building mode
+                    event.preventDefault();
+                    console.log("Prevented pointer lock error while in building mode");
+                }
+            }, false);
+        }, 2000);
+    });
+    </script>
+    
+    <!-- Add main keyboard controls -->
+    <script>
+    document.addEventListener('keydown', function(event) {
+        // B key toggles building mode
+        if (event.key === 'b' || event.key === 'B') {
+            window.buildingMode.toggle();
+        }
+        
+        // Only handle these keys if in building mode
+        if (window.buildingMode && window.buildingMode.active) {
+            // Single key presses for rotation (handled separately from continuous rotation)
+            if ((event.key === 'q' || event.key === 'Q') && !window.rotationInterval) {
+                window.buildingMode.rotation = (window.buildingMode.rotation - 15) % 360;
+                if (window.buildingMode.rotation < 0) window.buildingMode.rotation += 360;
+                console.log("Rotating structure to", window.buildingMode.rotation, "degrees");
+                
+                // Update preview position with new rotation
+                if (window.lastMousePosition) {
+                    window.updatePreviewPosition(window.lastMousePosition);
+                }
+            }
+            
+            if ((event.key === 'e' || event.key === 'E') && !window.rotationInterval) {
+                window.buildingMode.rotation = (window.buildingMode.rotation + 15) % 360;
+                console.log("Rotating structure to", window.buildingMode.rotation, "degrees");
+                
+                // Update preview position with new rotation
+                if (window.lastMousePosition) {
+                    window.updatePreviewPosition(window.lastMousePosition);
+                }
+            }
+            
+            // Escape key - exit building mode
+            if (event.key === 'Escape') {
+                window.buildingMode.toggle();
+            }
+        }
+    });
+    </script>
+    
+    <!-- Wait for room connection to be established and set up listeners -->
+    <script>
+    function setupRoomListeners() {
+        if (!window.room) {
+            console.log("Waiting for room connection...");
+            setTimeout(setupRoomListeners, 1000);
+            return;
+        }
+        
+        console.log("Setting up structure listeners for room", window.room.id || "unknown");
+        
+        // Wait for state to be available
+        if (!window.room.state) {
+            console.log("Room state not yet available, retrying...");
+            setTimeout(setupRoomListeners, 500);
+            return;
+        }
+        
+        // Listen for when structures schema is added to state
+        const setupStructureHandlers = () => {
+            console.log("Setting up structure handlers");
+            
+            // Add structure handlers to the room
+            window.room.state.structures.onAdd = (structure, key) => {
+                console.log("Server confirmed structure placement:", key, structure);
+                // Only now that the server confirmed it, create the actual structure in the world
+                createStructureInWorld(structure, key);
+            };
+            
+            window.room.state.structures.onChange = (structure, key) => {
+                console.log("Server updated structure:", key, structure);
+                // Update structure based on server state
+                updateStructureInWorld(structure, key);
+            };
+            
+            window.room.state.structures.onRemove = (structure, key) => {
+                console.log("Server removed structure:", key);
+                // Remove structure based on server command
+                removeStructureFromWorld(key);
+            };
+            
+            // Check for existing structures that may have been missed
+            window.room.state.structures.forEach((structure, key) => {
+                console.log("Processing existing structure:", key);
+                createStructureInWorld(structure, key);
+            });
+            
+            console.log("Structure listeners set up successfully");
+        };
+        
+        // If structures schema is already available, set up handlers immediately
+        if (window.room.state.structures) {
+            setupStructureHandlers();
+        } else {
+            // If not, add a schema listener to detect when it becomes available
+            console.log("Structures schema not found, adding state listener");
+            
+            // Use Colyseus state change listener to detect when structures are added
+            window.room.onStateChange((state) => {
+                if (state.structures && !window.structureListenersSetup) {
+                    console.log("Structures schema detected in state change");
+                    window.structureListenersSetup = true;
+                    setupStructureHandlers();
+                }
+            });
+            
+            // Also set a timeout just in case
+            setTimeout(() => {
+                if (!window.structureListenersSetup && window.room.state.structures) {
+                    console.log("Structures schema detected in timeout check");
+                    window.structureListenersSetup = true;
+                    setupStructureHandlers();
+                }
+            }, 3000);
+        }
+    }
+
+    // Start setting up room listeners
+    setupRoomListeners();
+    </script>
+    
+    <!-- Add connection monitoring -->
+    <script>
+    window.addEventListener('DOMContentLoaded', function() {
+        console.log("Setting up room connection monitoring");
+        
+        // Check room connection every second
+        const connectionChecker = setInterval(() => {
+            if (window.room) {
+                console.log("Room connection detected:", window.room.id);
+                clearInterval(connectionChecker);
+                
+                // Add debug event listeners for room state
+                window.room.onStateChange((state) => {
+                    console.log("State update received, structures count:", 
+                        state.structures ? state.structures.size : "no structures schema");
+                    
+                    // Log all structures when state changes
+                    if (state.structures && state.structures.size > 0) {
+                        console.log("Current structures:");
+                        state.structures.forEach((structure, key) => {
+                            console.log(`- ${key}: ${structure.structureType} at (${structure.x}, ${structure.y}, ${structure.z})`);
+                        });
+                    }
+                });
+                
+                // Listen for errors
+                window.room.onError((err) => {
+                    console.error("Room error:", err);
+                });
+                
+                // Detect when room is ready
+                if (window.room.state) {
+                    console.log("Room state is already available");
+                    console.log("Initial structures count:", 
+                        window.room.state.structures ? window.room.state.structures.size : "no structures schema");
+                }
+            }
+        }, 1000);
+        
+        // After 30 seconds, stop checking to avoid memory leaks
+        setTimeout(() => {
+            clearInterval(connectionChecker);
+        }, 30000);
+    });
+    </script>
+    
+    <!-- Add basic structure functions for client-side rendering -->
+    <script>
+    // Global map to store structure meshes
+    window.worldStructuresMap = new Map();
+    
+    // Create a structure in the 3D world based on server data
+    function createStructureInWorld(structure, key) {
+        console.log("Creating structure in world:", key, structure);
+        
+        // Skip if structure already exists
+        if (window.worldStructuresMap.has(key)) {
+            console.log("Structure already exists, updating instead:", key);
+            return updateStructureInWorld(structure, key);
+        }
+        
+        if (!window.scene) {
+            console.error("Scene not available to create structure");
+            return null;
+        }
+        
+        // Validate structure data
+        if (!structure || !structure.structureType) {
+            console.error("Invalid structure data:", structure);
+            return null;
+        }
+        
+        console.log("Building structure:", structure.structureType, "at", structure.x, structure.y, structure.z);
+        
+        // Generate mesh based on structure type
+        let mesh;
+        let geometry, material;
+        
+        switch (structure.structureType) {
+            case "building":
+                // Create a building with roof
+                const buildingHeight = structure.height || 3;
+                const buildingWidth = structure.width || 4;
+                const buildingDepth = structure.depth || 4;
+                
+                // Main building
+                geometry = new THREE.BoxGeometry(buildingWidth, buildingHeight, buildingDepth);
+                material = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Brown
+                mesh = new THREE.Mesh(geometry, material);
+                
+                // Add a roof
+                const roofGeometry = new THREE.ConeGeometry(buildingWidth * 0.7, buildingHeight * 0.5, 4);
+                const roofMaterial = new THREE.MeshLambertMaterial({ color: 0xA52A2A }); // Dark red
+                const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+                roof.position.y = buildingHeight/2 + buildingHeight*0.25/2;
+                roof.rotation.y = Math.PI/4; // 45 degrees
+                mesh.add(roof);
+                break;
+                
+            case "wall":
+                geometry = new THREE.BoxGeometry(structure.width || 4, structure.height || 2, structure.depth || 0.5);
+                material = new THREE.MeshLambertMaterial({ color: 0x808080 }); // Gray
+                mesh = new THREE.Mesh(geometry, material);
+                break;
+                
+            default:
+                console.log("Unknown structure type, using default:", structure.structureType);
+                geometry = new THREE.BoxGeometry(1, 1, 1);
+                material = new THREE.MeshLambertMaterial({ color: 0xffff00 });
+                mesh = new THREE.Mesh(geometry, material);
+        }
+        
+        // Position the structure (center Y position based on height)
+        mesh.position.set(
+            structure.x, 
+            structure.y + (structure.height || 1) / 2, 
+            structure.z
+        );
+        mesh.rotation.y = structure.rotationY || 0;
+        
+        // Add to scene
+        window.scene.add(mesh);
+        
+        // Store reference to mesh
+        window.worldStructuresMap.set(key, mesh);
+        console.log("Structure created successfully:", key);
+        
+        return mesh;
+    }
+    
+    // Update a structure in the 3D world
+    function updateStructureInWorld(structure, key) {
+        const mesh = window.worldStructuresMap.get(key);
+        
+        if (mesh) {
+            // Update position and rotation
+            mesh.position.set(structure.x, structure.y + (structure.height || 1)/2, structure.z);
+            mesh.rotation.y = structure.rotationY || 0;
+            return mesh;
+        } else {
+            // If mesh doesn't exist, create it
+            return createStructureInWorld(structure, key);
+        }
+    }
+    
+    // Remove a structure from the 3D world
+    function removeStructureFromWorld(key) {
+        const mesh = window.worldStructuresMap.get(key);
+        
+        if (mesh && window.scene) {
+            window.scene.remove(mesh);
+            window.worldStructuresMap.delete(key);
+            
+            // Cleanup resources
+            if (mesh.geometry) mesh.geometry.dispose();
+            if (mesh.material) {
+                if (Array.isArray(mesh.material)) {
+                    mesh.material.forEach(m => m.dispose());
+                } else {
+                    mesh.material.dispose();
+                }
+            }
+            
+            return true;
+        }
+        return false;
+    }
+    </script>
+    
+    <!-- Add structure listeners for server updates -->
+    <script>
+    // Set up structure listeners when the room is available
+    function setupStructureListeners() {
+        console.log("Setting up structure listeners");
+        
+        // Wait for room and state to be available
+        if (!window.room || !window.room.state) {
+            console.log("Room or state not ready, waiting...");
+            setTimeout(setupStructureListeners, 500);
+            return;
+        }
+        
+        // Wait for structures schema to be available
+        if (!window.room.state.structures) {
+            console.log("Structures not available in state, waiting...");
+            setTimeout(setupStructureListeners, 500);
+            return;
+        }
+        
+        console.log("Setting up structure listeners for room:", window.room.id);
+        
+        // Handler for new structures added by the server
+        window.room.state.structures.onAdd = (structure, key) => {
+            console.log("New structure from server:", key, structure);
+            createStructureInWorld(structure, key);
+        };
+        
+        // Handler for structures removed from the server
+        window.room.state.structures.onRemove = (structure, key) => {
+            console.log("Server removed structure:", key);
+            removeStructureFromWorld(key);
+        };
+        
+        // Handler for structures modified on the server
+        window.room.state.structures.onChange = (structure, key) => {
+            console.log("Server updated structure:", key, structure);
+            updateStructureInWorld(structure, key);
+        };
+        
+        // Check for existing structures
+        if (window.room.state.structures.size > 0) {
+            console.log("Processing existing structures:", window.room.state.structures.size);
+            window.room.state.structures.forEach((structure, key) => {
+                console.log("Processing existing structure:", key);
+                createStructureInWorld(structure, key);
+            });
+        }
+        
+        console.log("Structure listeners setup complete");
+    }
+    
+    // Start the listener setup when the page loads
+    window.addEventListener('DOMContentLoaded', function() {
+        setTimeout(setupStructureListeners, 1000);
+    });
+    </script>
+    
+    <!-- Remove older or duplicate setup code -->
+    <script>
+    // Clean up any existing setup
+    window.addEventListener('DOMContentLoaded', function() {
+        console.log("Cleaning up any existing structure handling");
+        
+        // Override any previous global structure related functions 
+        // with our new simplified ones
+        window.createStructureInWorld = createStructureInWorld;
+        window.updateStructureInWorld = updateStructureInWorld;
+        window.removeStructureFromWorld = removeStructureFromWorld;
+        
+        // Clear any previous listeners when setting up new ones
+        setTimeout(() => {
+            if (window.room && window.room.state && window.room.state.structures) {
+                console.log("Clearing any existing structure listeners before setup");
+                
+                // Attempt to remove existing listeners (if possible)
+                if (window.room.state.structures._callbacks) {
+                    window.room.state.structures._callbacks = {};
+                }
+            }
+        }, 500);
+    });
+    </script>
+    
+    <!-- Add simple debug tool -->
+    <script>
+    // Press Shift+S to show structure info
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'S' && event.shiftKey) {
+            console.log("=== STRUCTURE DEBUG INFO ===");
+            
+            // Check if we have structures in memory
+            if (window.worldStructuresMap) {
+                console.log(`Total structures in memory: ${window.worldStructuresMap.size}`);
+                
+                // List all structures
+                if (window.worldStructuresMap.size > 0) {
+                    let i = 1;
+                    window.worldStructuresMap.forEach((mesh, key) => {
+                        console.log(`${i}. ${key} at (${Math.round(mesh.position.x)}, ${Math.round(mesh.position.z)})`);
+                        i++;
+                    });
+                }
+            } else {
+                console.log("No worldStructuresMap found");
+            }
+            
+            // Check server structures
+            if (window.room && window.room.state && window.room.state.structures) {
+                console.log(`Total structures on server: ${window.room.state.structures.size}`);
+                
+                // List all server structures
+                if (window.room.state.structures.size > 0) {
+                    let i = 1;
+                    window.room.state.structures.forEach((structure, key) => {
+                        console.log(`${i}. ${key} - ${structure.structureType} at (${structure.x}, ${structure.z})`);
+                        i++;
+                    });
+                }
+            } else {
+                console.log("No server structures available");
+            }
+            
+            console.log("===========================");
+        }
+        
+        // Press Shift+R to resync structures
+        if (event.key === 'R' && event.shiftKey) {
+            console.log("Force resyncing structures from server");
+            
+            // Clear and rebuild all structures
+            if (window.worldStructuresMap) {
+                // Remove all structures from scene
+                window.worldStructuresMap.forEach((mesh, key) => {
+                    removeStructureFromWorld(key);
+                });
+                
+                // Recreate from server
+                if (window.room && window.room.state && window.room.state.structures) {
+                    console.log(`Recreating ${window.room.state.structures.size} structures from server`);
+                    window.room.state.structures.forEach((structure, key) => {
+                        createStructureInWorld(structure, key);
+                    });
+                }
+            }
+        }
+    });
+    </script>
 </body>
 </html>

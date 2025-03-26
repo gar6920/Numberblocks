@@ -2,6 +2,7 @@ const { Room } = require("colyseus");
 const { GameState } = require("./schemas/GameState");
 const { Player, MoveTarget } = require("./schemas/Player");
 const { BaseEntity } = require("./schemas/BaseEntity");
+const { Structure } = require("./schemas/Structure");
 
 /**
  * Base room class for all game implementations
@@ -46,6 +47,16 @@ class BaseRoom extends Room {
         // Listen for RTS move commands
         this.onMessage("moveCommand", (client, message) => {
             this.handleMoveCommand(client, message);
+        });
+        
+        // Listen for structure placement
+        this.onMessage("placeStructure", (client, message) => {
+            this.handlePlaceStructure(client, message);
+        });
+        
+        // Listen for structure demolish
+        this.onMessage("demolishStructure", (client, message) => {
+            this.handleDemolishStructure(client, message);
         });
     }
     
@@ -492,6 +503,166 @@ class BaseRoom extends Room {
             y: minHeight,
             z: (Math.random() * mapSize) - (mapSize / 2)
         };
+    }
+    
+    /**
+     * Handle structure placement message from client
+     * @param {Client} client The client that sent the message
+     * @param {Object} message The message containing structure details
+     */
+    handlePlaceStructure(client, message) {
+        console.log(`Handling structure placement from ${client.sessionId}:`, message);
+        
+        // Validate player
+        const player = this.state.players.get(client.sessionId);
+        if (!player) { 
+            console.log("Player not found for structure placement");
+            return; 
+        }
+        
+        // Extract data
+        const { structureType, x, y, z, rotation = 0 } = message;
+        
+        // Validate data
+        if (!structureType || typeof x !== 'number' || typeof z !== 'number') {
+            console.log("Invalid structure data:", message);
+            return;
+        }
+        
+        // Optional: Check if placement is valid
+        if (!this.isStructurePlacementValid(structureType, x, y, z, rotation)) {
+            console.log("Structure placement invalid - collision detected");
+            return;
+        }
+        
+        // Create a new structure entry with unique ID
+        const id = "structure_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+        const structure = new Structure();
+        structure.id = id;
+        structure.structureType = structureType;
+        structure.x = x;
+        structure.y = y || 0;
+        structure.z = z;
+        structure.rotationY = rotation;
+        structure.ownerId = client.sessionId;
+        
+        // Set dimensions based on structure type
+        this.setStructureDimensions(structure);
+        
+        // Add to state - this automatically broadcasts to all clients
+        this.state.structures.set(id, structure);
+        
+        console.log(`Structure ${id} placed at (${x}, ${y}, ${z})`);
+        
+        // Optional: Send confirmation to the client who placed it
+        client.send("structurePlaced", { 
+            success: true, 
+            id: id,
+            data: message
+        });
+    }
+    
+    /**
+     * Handle structure demolition message from client
+     * @param {Client} client The client that sent the message
+     * @param {Object} message The message containing structure id
+     */
+    handleDemolishStructure(client, message) {
+        const { structureId } = message;
+        const structure = this.state.structures.get(structureId);
+        
+        // Only allow owner to demolish their structures
+        if (structure && structure.ownerId === client.sessionId) {
+            this.state.structures.delete(structureId);
+            console.log(`Structure ${structureId} demolished by ${client.sessionId}`);
+        }
+    }
+    
+    /**
+     * Check if a structure placement is valid
+     * @param {string} structureType Type of structure
+     * @param {number} x X position
+     * @param {number} y Y position
+     * @param {number} z Z position
+     * @param {number} rotation Rotation in radians
+     * @returns {boolean} Whether placement is valid
+     */
+    isStructurePlacementValid(structureType, x, y, z, rotation) {
+        // Get dimensions based on type
+        let width = 1, depth = 1;
+        
+        switch (structureType) {
+            case "building":
+                width = 4;
+                depth = 4;
+                break;
+            case "wall":
+                width = 4;
+                depth = 0.5;
+                // Adjust for rotation
+                if (Math.abs(rotation % Math.PI) > 0.1) {
+                    [width, depth] = [depth, width];
+                }
+                break;
+        }
+        
+        // Check for collisions with other structures
+        let isValid = true;
+        
+        // Create bounding box for new structure
+        const halfWidth = width / 2;
+        const halfDepth = depth / 2;
+        const newMin = { x: x - halfWidth, z: z - halfDepth };
+        const newMax = { x: x + halfWidth, z: z + halfDepth };
+        
+        // Check against all other structures
+        this.state.structures.forEach((structure) => {
+            // Skip if already invalid
+            if (!isValid) return;
+            
+            const otherHalfWidth = structure.width / 2;
+            const otherHalfDepth = structure.depth / 2;
+            
+            const otherMin = {
+                x: structure.x - otherHalfWidth,
+                z: structure.z - otherHalfDepth
+            };
+            const otherMax = {
+                x: structure.x + otherHalfWidth,
+                z: structure.z + otherHalfDepth
+            };
+            
+            // Check if bounding boxes overlap
+            if (newMin.x <= otherMax.x && newMax.x >= otherMin.x &&
+                newMin.z <= otherMax.z && newMax.z >= otherMin.z) {
+                isValid = false;
+            }
+        });
+        
+        return isValid;
+    }
+    
+    /**
+     * Set dimensions for a structure
+     * @param {Structure} structure The structure to set dimensions for
+     */
+    setStructureDimensions(structure) {
+        switch (structure.structureType) {
+            case "building":
+                structure.width = 4;
+                structure.height = 3;
+                structure.depth = 4;
+                break;
+            case "wall":
+                structure.width = 4;
+                structure.height = 2;
+                structure.depth = 0.5;
+                break;
+            default:
+                structure.width = 1;
+                structure.height = 1;
+                structure.depth = 1;
+        }
     }
 }
 
