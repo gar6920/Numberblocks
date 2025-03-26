@@ -15,6 +15,7 @@
 - Broadcasts state updates to all connected clients
 - Handles entity spawning and lifecycle management
 - Supports dynamic implementation selection via command-line arguments or environment variables
+- Validates and manages structure placement in the building system
 
 **Key Features:**
 - Room-based multiplayer with session persistence
@@ -22,6 +23,7 @@
 - Server-authoritative position tracking
 - Dynamic entity spawning system
 - Runtime implementation switching based on user selection
+- Server-validated building placement system
 
 ### 2. Client Core Platform (/client/js/core)
 The core platform provides foundational functionality that all game implementations can leverage.
@@ -155,6 +157,66 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Efficient player collection management using Set data structure
 - Proper separation of local and remote player handling
 - Resilient error handling for edge cases
+
+### 6. Building System
+**Technology:** Three.js for rendering, Colyseus for server-side validation and synchronization.
+
+**Implementation:**
+- Server-authoritative structure placement system 
+- Client-side preview with real-time validation feedback
+- Built on Colyseus Schema for synchronized structure collections
+- Toggle between game and building modes with keystroke (B key)
+- Grid-based placement with 15° rotation increments (Q/E keys)
+- Seamless operation across all camera modes
+
+**Client Components:**
+- Building mode UI overlay with structure selection menu
+- Structure preview mesh with valid/invalid placement indicators
+- Click-to-place functionality with server authorization
+- Structure rotation controls (Q/E for 15° increments)
+- Cross-camera mode compatibility (first-person, third-person, RTS)
+- Interactive grid system for structure placement
+
+**Server Components:**
+- Structure schema extending BaseEntity
+- Structure collection in GameState
+- Server-side collision detection and validation
+- Server broadcasting of structure changes to all clients
+- Authoritative structure placement confirmation
+
+**Structure Types:**
+- Buildings: Base structures with customizable dimensions
+- Walls: Thin structures with height/width customization
+- Additional types can be added by extending the Structure schema
+
+**Networking Flow:**
+1. Client enters building mode and selects structure type
+2. Client shows preview mesh at mouse pointer location
+3. Client validates placement and shows green/red indicator
+4. Client sends placement request to server on valid click
+5. Server validates placement and checks for collisions
+6. Server creates structure and broadcasts to all clients
+7. All clients render the confirmed structure
+
+**Key Features:**
+- Complete cross-client synchronization of structures
+- Real-time placement validation with visual feedback
+- Seamless integration with all camera modes
+- Full server authority for all structure placement
+- Interactive preview system with structural rotation
+- Grid-based placement with customizable sizing
+
+**File Components:**
+```
+├── server/
+│   ├── core/
+│   │   ├── BaseRoom.js      # Structure placement handling
+│   │   └── schemas/
+│   │       ├── Structure.js # Structure schema definition
+│   │       └── GameState.js # Structure collection
+├── client/
+│   └── index.html           # Building UI and client logic
+```
 
 ## File Structure
 ```
