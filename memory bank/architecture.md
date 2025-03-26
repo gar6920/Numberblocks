@@ -42,12 +42,25 @@ The core platform provides foundational functionality that all game implementati
   - Initializes the Three.js scene, renderer, and camera
   - Sets up player controls and world objects
   - Manages the animation loop for continuous rendering
-  - Implements three distinct camera systems:
+  - Implements four distinct camera systems:
     - First-person view: Camera attached to player's head position
     - Third-person view: Camera follows behind player with intelligent rotation alignment
     - Free camera mode: Independent camera with WASD/QE movement and mouse look functionality
+    - RTS view mode: Top-down strategic view with:
+      - WASD for camera panning
+      - Q/E for camera height adjustment
+      - Click-and-drag box selection
+      - Right-click movement commands
+      - Visual selection rings and move markers
+      - Custom cursor system
   - Handles smooth camera transitions between view modes
   - Maintains proper camera orientation with Euler angles to prevent unwanted roll
+  - Implements RTS-specific features:
+    - Selection system with single-click and box selection
+    - Unit movement commands
+    - Visual feedback (selection rings, move markers)
+    - Custom cursor management
+    - View-specific input handling
 
 - **network-core.js:**
   - Establishes and maintains WebSocket connection to the server via Colyseus
@@ -248,6 +261,18 @@ The platform is designed with modularity in mind, allowing for different game im
 - **Browser Tab Synchronization:** Automatically updates game state when inactive tabs become active
 - **Entity Component System:** Flexible architecture for game entity management
 - **Modular Implementation System:** Support for various game types and mechanics
+- **RTS View Mode:** Top-down strategic view with:
+  - WASD for camera panning
+  - Q/E for camera height adjustment
+  - Click-and-drag box selection
+  - Right-click movement commands
+  - Visual selection rings and move markers
+  - Custom cursor system
+- **Advanced Unit Selection:** Single-click and box selection
+- **Unit Movement Commands:** WASD for panning
+- **Visual Feedback:** Selection rings, move markers
+- **Custom Cursor:** Custom cursor system
+- **Mode-Specific Input Handling:** View-specific input handling and UI elements
 
 ## Multi-Player Local Setup
 The platform supports flexible local multiplayer configurations through a dynamic split-screen system:
