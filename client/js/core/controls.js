@@ -46,15 +46,27 @@ window.freeCameraRotationSpeed = 0.003; // Rotation speed for free camera
 window.freeCameraPitch = 0;          // Vertical rotation of free camera
 window.freeCameraYaw = 0;            // Horizontal rotation of free camera
 
+// Add variables for RTS view mode
+window.rtsCameraHeight = 30.0;        // Fixed height for RTS camera
+window.rtsCameraMinHeight = 10.0;     // Minimum height for RTS camera (zoom in)
+window.rtsCameraMaxHeight = 60.0;     // Maximum height for RTS camera (zoom out)
+window.rtsCameraZoomSpeed = 30.0;     // Speed for RTS camera zoom (keeping as requested)
+window.rtsCameraPanSpeed = 0.5;       // Speed for RTS camera panning (reduced from 2.0)
+window.isRTSMode = false;             // Flag for RTS mode
+window.rtsSelectedUnit = null;        // Currently selected unit in RTS mode
+window.rtsSelectedUnits = [];         // Array for multiple unit selection
+
 // Mouse sensitivity settings
 window.mouseSensitivity = {
   firstPerson: 1.0,    // Sensitivity multiplier in first-person
   thirdPerson: 0.7,    // Sensitivity multiplier in third-person (slightly lower for smoother movement)
+  freeCamera: 1.0,     // Sensitivity for free camera
+  rtsView: 0.5,        // Sensitivity for RTS view (lower as it's more tactical)
   current: 1.0         // Current sensitivity based on view mode
 };
 
 // Add a global viewMode state variable
-window.viewMode = 'firstPerson'; // Values: 'firstPerson', 'thirdPerson', 'freeCamera'
+window.viewMode = 'firstPerson'; // Values: 'firstPerson', 'thirdPerson', 'freeCamera', 'rtsView'
 
 // Initialize controls for the camera
 window.initControls = function(camera, domElement) {
@@ -226,9 +238,10 @@ function updateMouseSensitivity() {
         window.mouseSensitivity.current = window.mouseSensitivity.firstPerson;
     } else if (window.viewMode === 'thirdPerson') {
         window.mouseSensitivity.current = window.mouseSensitivity.thirdPerson;
-    } else {
-        // Free camera uses first-person sensitivity
-        window.mouseSensitivity.current = window.mouseSensitivity.firstPerson;
+    } else if (window.viewMode === 'freeCamera') {
+        window.mouseSensitivity.current = window.mouseSensitivity.freeCamera;
+    } else if (window.viewMode === 'rtsView') {
+        window.mouseSensitivity.current = window.mouseSensitivity.rtsView;
     }
     console.log(`Updated mouse sensitivity to ${window.mouseSensitivity.current} (${window.viewMode} mode)`);
 }
@@ -370,8 +383,15 @@ function onKeyUp(event) {
 
 // Update controls - call this in the animation loop
 window.updateControls = function(controls, delta) {
-    if (!controls.isLocked) return;
+    // Special handling for RTS mode - don't require pointer lock
+    if (window.isRTSMode) {
+        updateRTSCameraMovement(delta);
+        return;
+    }
 
+    // For other modes, require pointer lock
+    if (!controls.isLocked) return;
+    
     // If we're in free camera mode, handle movement without updating the server
     if (window.isFreeCameraMode) {
         updateFreeCameraMovement(delta);
@@ -453,12 +473,57 @@ function updateFreeCameraMovement(delta) {
     }
 }
 
+// Handle RTS camera movement (WASD for panning, Q/E for zoom)
+function updateRTSCameraMovement(delta) {
+    if (!window.isRTSMode) return;
+    
+    // In RTS view, we directly manipulate the camera position
+    // Use a slightly higher multiplier for consistent speed with delta adjustment
+    const panSpeed = window.rtsCameraPanSpeed * delta * 60; // Adjusted calculation with lower base panSpeed
+    
+    // Apply camera movements based on WASD keys
+    if (window.inputState.keys.w) {
+        window.camera.position.z -= panSpeed;
+    }
+    if (window.inputState.keys.s) {
+        window.camera.position.z += panSpeed;
+    }
+    if (window.inputState.keys.a) {
+        window.camera.position.x -= panSpeed;
+    }
+    if (window.inputState.keys.d) {
+        window.camera.position.x += panSpeed;
+    }
+    
+    // Handle zoom with Q/E keys (changes camera height)
+    const zoomSpeed = window.rtsCameraZoomSpeed * delta;
+    
+    if (window.inputState.keys.q) { // Q key - zoom in (lower height)
+        window.rtsCameraHeight = Math.max(
+            window.rtsCameraMinHeight, 
+            window.rtsCameraHeight - zoomSpeed
+        );
+        window.camera.position.y = window.rtsCameraHeight;
+    }
+    if (window.inputState.keys.e) { // E key - zoom out (increase height)
+        window.rtsCameraHeight = Math.min(
+            window.rtsCameraMaxHeight, 
+            window.rtsCameraHeight + zoomSpeed
+        );
+        window.camera.position.y = window.rtsCameraHeight;
+    }
+    
+    // Ensure camera always looks straight down
+    window.camera.quaternion.setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0, 'YXZ'));
+}
+
 // Function to toggle between camera views
 window.toggleCameraView = function() {
     if (window.viewMode === 'firstPerson') {
         window.viewMode = 'thirdPerson';
         window.isFirstPerson = false;
         window.isFreeCameraMode = false;
+        window.isRTSMode = false;
         if (typeof window.switchToThirdPersonView === 'function') {
             window.switchToThirdPersonView();
         }
@@ -467,6 +532,7 @@ window.toggleCameraView = function() {
         window.viewMode = 'freeCamera';
         window.isFirstPerson = false;
         window.isFreeCameraMode = true;
+        window.isRTSMode = false;
         // Save player position for free camera starting point
         if (window.playerEntity && window.playerEntity.mesh) {
             const pos = window.playerEntity.mesh.position.clone();
@@ -477,10 +543,20 @@ window.toggleCameraView = function() {
             window.switchToFreeCameraView();
         }
         console.log("[DEBUG] Switched to free camera view");
+    } else if (window.viewMode === 'freeCamera') {
+        window.viewMode = 'rtsView';
+        window.isFirstPerson = false;
+        window.isFreeCameraMode = false;
+        window.isRTSMode = true;
+        if (typeof window.switchToRTSView === 'function') {
+            window.switchToRTSView();
+        }
+        console.log("[DEBUG] Switched to RTS view");
     } else {
         window.viewMode = 'firstPerson';
         window.isFirstPerson = true;
         window.isFreeCameraMode = false;
+        window.isRTSMode = false;
         if (typeof window.switchToFirstPersonView === 'function') {
             window.switchToFirstPersonView();
         }
@@ -500,8 +576,10 @@ window.toggleCameraView = function() {
             viewToggleBtn.textContent = 'First-Person View';
         } else if (window.viewMode === 'thirdPerson') {
             viewToggleBtn.textContent = 'Third-Person View';
-        } else {
+        } else if (window.viewMode === 'freeCamera') {
             viewToggleBtn.textContent = 'Free Camera View';
+        } else {
+            viewToggleBtn.textContent = 'RTS View';
         }
     }
     

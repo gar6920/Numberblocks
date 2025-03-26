@@ -210,9 +210,31 @@ window.switchToFirstPersonView = function() {
         window.playerEntity.mesh.visible = false;
     }
     
+    // Hide selection rings in first-person view
+    if (window.rtsSelectionRings) {
+        window.rtsSelectionRings.forEach(ring => {
+            if (ring) ring.visible = false;
+        });
+    }
+    
     // Reset free camera variables
     window.freeCameraYaw = 0;
     window.freeCameraPitch = 0;
+    
+    // Hide RTS cursor when switching to first-person view
+    if (document.getElementById('rts-cursor')) {
+        document.getElementById('rts-cursor').style.display = 'none';
+    }
+    
+    // Reset cursor styles that might have been set in RTS mode
+    document.body.style.cursor = 'default';
+    document.documentElement.style.cursor = 'default';
+    renderer.domElement.style.cursor = 'default';
+    
+    // Then relock pointer for first-person view
+    if (controls && !controls.isLocked) {
+        controls.lock();
+    }
     
     // Set camera position based on the available player information
     // Try multiple sources to ensure we always have a position
@@ -282,6 +304,28 @@ window.switchToThirdPersonView = function() {
         window.playerEntity.mesh.visible = true;
     }
     
+    // Hide selection rings in third-person view
+    if (window.rtsSelectionRings) {
+        window.rtsSelectionRings.forEach(ring => {
+            if (ring) ring.visible = false;
+        });
+    }
+    
+    // Hide RTS cursor when switching to third-person view
+    if (document.getElementById('rts-cursor')) {
+        document.getElementById('rts-cursor').style.display = 'none';
+    }
+    
+    // Reset cursor styles that might have been set in RTS mode
+    document.body.style.cursor = 'default';
+    document.documentElement.style.cursor = 'default';
+    renderer.domElement.style.cursor = 'default';
+    
+    // Relock pointer for third-person view
+    if (controls && !controls.isLocked) {
+        controls.lock();
+    }
+    
     // Reset orbit angles if they don't exist
     window.thirdPersonCameraOrbitX = window.thirdPersonCameraOrbitX || 0;
     window.thirdPersonCameraOrbitY = window.thirdPersonCameraOrbitY || 0.5;
@@ -340,13 +384,30 @@ window.switchToFreeCameraView = function() {
         window.playerEntity.mesh.visible = true;
     }
     
-    // Keep pointer lock active but disable normal controls
-    if (controls) {
-        if (!controls.isLocked) {
-            controls.lock();
-        }
-        controls.enabled = false;
+    // Hide selection rings in free camera view
+    if (window.rtsSelectionRings) {
+        window.rtsSelectionRings.forEach(ring => {
+            if (ring) ring.visible = false;
+        });
     }
+    
+    // Hide RTS cursor when switching to free camera view
+    if (document.getElementById('rts-cursor')) {
+        document.getElementById('rts-cursor').style.display = 'none';
+    }
+    
+    // Reset cursor styles that might have been set in RTS mode
+    document.body.style.cursor = 'default';
+    document.documentElement.style.cursor = 'default';
+    renderer.domElement.style.cursor = 'default';
+    
+    // Relock pointer for free camera view
+    if (controls && !controls.isLocked) {
+        controls.lock();
+    }
+    
+    // Keep pointer lock active but disable normal controls
+    controls.enabled = false;
     
     // Initialize free camera movement speed
     window.freeCameraSpeed = 0.5;
@@ -354,8 +415,200 @@ window.switchToFreeCameraView = function() {
     console.log("Switched to free camera view");
 };
 
+// RTS view setup
+window.switchToRTSView = function() {
+    // Show player mesh since we're viewing from above
+    if (window.playerEntity && window.playerEntity.mesh) {
+        window.playerEntity.mesh.visible = true;
+    }
+    
+    // Show selection rings in RTS view if there are selected units
+    if (window.rtsSelectionRings) {
+        window.rtsSelectionRings.forEach(ring => {
+            if (ring) ring.visible = true;
+        });
+    }
+    
+    // For RTS view, we need to see the cursor and keep it unlocked
+    if (controls && controls.isLocked) {
+        controls.unlock();
+    }
+    controls.enabled = false;
+    
+    // Set a timeout to ensure we stay unlocked if the browser is slow to respond
+    setTimeout(() => {
+        // Double check that we're still in RTS mode
+        if (window.isRTSMode && controls && controls.isLocked) {
+            controls.unlock();
+        }
+    }, 100);
+    
+    // Initialize RTS selection box variables
+    window.rtsSelectionBoxActive = false;
+    window.rtsSelectionStartX = 0;
+    window.rtsSelectionStartY = 0;
+    window.rtsSelectionEndX = 0;
+    window.rtsSelectionEndY = 0;
+    
+    // Create selection box element if it doesn't exist
+    if (!document.getElementById('rts-selection-box')) {
+        const selectionBox = document.createElement('div');
+        selectionBox.id = 'rts-selection-box';
+        selectionBox.style.position = 'fixed';
+        selectionBox.style.border = '2px solid #00ff00';
+        selectionBox.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
+        selectionBox.style.pointerEvents = 'none';
+        selectionBox.style.display = 'none';
+        selectionBox.style.zIndex = '9998'; // Just below cursor
+        document.body.appendChild(selectionBox);
+    }
+    
+    // Add specific RTS mode keyboard listener
+    if (!window.rtsKeyboardListenerAdded) {
+        document.addEventListener('keydown', function rtsKeyboardHandler(event) {
+            if (!window.isRTSMode) return;
+            
+            // Log key presses in RTS mode for debugging
+            console.log("RTS Mode Key Pressed:", event.code);
+            
+            switch (event.code) {
+                case 'KeyW':
+                    window.inputState.keys.w = true;
+                    console.log("W key pressed in RTS mode");
+                    break;
+                case 'KeyA':
+                    window.inputState.keys.a = true;
+                    console.log("A key pressed in RTS mode");
+                    break;
+                case 'KeyS':
+                    window.inputState.keys.s = true;
+                    console.log("S key pressed in RTS mode");
+                    break;
+                case 'KeyD':
+                    window.inputState.keys.d = true;
+                    console.log("D key pressed in RTS mode");
+                    break;
+                case 'KeyQ':
+                    window.inputState.keys.q = true;
+                    console.log("Q key pressed in RTS mode");
+                    break;
+                case 'KeyE':
+                    window.inputState.keys.e = true;
+                    console.log("E key pressed in RTS mode");
+                    break;
+            }
+        });
+        
+        document.addEventListener('keyup', function rtsKeyboardHandler(event) {
+            if (!window.isRTSMode) return;
+            
+            switch (event.code) {
+                case 'KeyW':
+                    window.inputState.keys.w = false;
+                    break;
+                case 'KeyA':
+                    window.inputState.keys.a = false;
+                    break;
+                case 'KeyS':
+                    window.inputState.keys.s = false;
+                    break;
+                case 'KeyD':
+                    window.inputState.keys.d = false;
+                    break;
+                case 'KeyQ':
+                    window.inputState.keys.q = false;
+                    break;
+                case 'KeyE':
+                    window.inputState.keys.e = false;
+                    break;
+            }
+        });
+        
+        window.rtsKeyboardListenerAdded = true;
+    }
+    
+    // Set initial camera position - start above the player
+    let playerX = 0, playerZ = 0;
+    
+    // Try to get player position from server or local object
+    if (window.room && window.room.state && window.room.state.players) {
+        const playerState = window.room.state.players.get(window.room.sessionId);
+        if (playerState) {
+            playerX = playerState.x;
+            playerZ = playerState.z;
+        }
+    }
+    // Fallback to local player object
+    else if (window.playerEntity && window.playerEntity.mesh) {
+        playerX = window.playerEntity.mesh.position.x;
+        playerZ = window.playerEntity.mesh.position.z;
+    }
+    
+    // Position camera above player
+    window.camera.position.set(playerX, window.rtsCameraHeight, playerZ);
+    
+    // Set camera to look straight down
+    window.camera.quaternion.setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0, 'YXZ'));
+    
+    // Force an immediate render to update the view
+    if (window.renderer && window.scene) {
+        window.renderer.render(window.scene, window.camera);
+    }
+    
+    // Add RTS cursor unless it already exists
+    if (!document.getElementById('rts-cursor')) {
+        createRTSCursor();
+    }
+    
+    // Show our custom RTS cursor and hide system cursor
+    const rtsCursor = document.getElementById('rts-cursor');
+    rtsCursor.style.display = 'block';
+    rtsCursor.style.transform = 'translate(-50%, -50%)';
+    
+    // Get current mouse position from system
+    const mouseX = window.lastMouseX || window.innerWidth / 2;
+    const mouseY = window.lastMouseY || window.innerHeight / 2;
+    
+    // Position cursor at current mouse position
+    rtsCursor.style.left = mouseX + 'px';
+    rtsCursor.style.top = mouseY + 'px';
+    
+    // Apply cursor hiding to all relevant elements
+    document.body.style.cursor = 'none';
+    document.documentElement.style.cursor = 'none';
+    renderer.domElement.style.cursor = 'none';
+    
+    // Hide pointer lock instructions if they're visible
+    const instructions = document.getElementById('lock-instructions');
+    if (instructions) {
+        instructions.style.display = 'none';
+    }
+    
+    console.log("Switched to RTS view");
+};
+
 // Handle mouse movement for free camera
 function onMouseMove(event) {
+    // In RTS mode, handle selection box if active
+    if (window.isRTSMode) {
+        if (window.rtsSelectionBoxActive) {
+            window.rtsSelectionEndX = event.clientX;
+            window.rtsSelectionEndY = event.clientY;
+            updateSelectionBox();
+        }
+        
+        // Ensure pointer lock is off and just update our custom cursor
+        if (controls && controls.isLocked) {
+            controls.unlock();
+        }
+        
+        // Update our custom cursor position
+        if (document.getElementById('rts-cursor')) {
+            updateRTSCursorPosition(event);
+        }
+        return;
+    }
+    
     if (!window.controls || !window.controls.isLocked) return;
     
     // Store mouse movement for input state
@@ -386,6 +639,9 @@ function onMouseMove(event) {
         // Apply rotation to camera, maintaining upright orientation
         camera.quaternion.setFromEuler(window.freeCameraEuler);
     }
+    
+    // In RTS mode, camera rotation with mouse is disabled
+    // as the camera always looks straight down
 }
 
 // Handle keyboard movement for free camera
@@ -643,6 +899,10 @@ function setupPointerLockControls() {
 
         // Add click event to the entire document
         document.addEventListener('click', () => {
+            // Don't lock pointer if in RTS mode
+            if (window.isRTSMode) {
+                return;
+            }
             controls.lock();
         }, false);
 
@@ -700,11 +960,21 @@ function setupPointerLockControls() {
                     animate();
                 }
             } else {
-                // Only show instructions if we're not in free camera mode AND not already playing
-                if (!window.isFreeCameraMode && !window.playerLoaded) {
-                    instructions.style.display = 'block';
-                } else {
+                // If we were in RTS mode, don't show instructions on unlock
+                if (window.isRTSMode) {
                     instructions.style.display = 'none';
+                    
+                    // Make sure RTS cursor is still visible
+                    if (document.getElementById('rts-cursor')) {
+                        document.getElementById('rts-cursor').style.display = 'block';
+                    }
+                } else {
+                    // Only show instructions if we're not in free camera mode AND not already playing
+                    if (!window.isFreeCameraMode && !window.playerLoaded) {
+                        instructions.style.display = 'block';
+                    } else {
+                        instructions.style.display = 'none';
+                    }
                 }
                 debug('Pointer is unlocked');
             }
@@ -822,6 +1092,9 @@ function animate(currentTime) {
     if (window.isFreeCameraMode) {
         // Update free camera movement
         updateFreeCameraMovement();
+    } else if (window.isRTSMode) {
+        // Update RTS camera movement - call directly instead of through updateControls
+        updateRTSCameraMovement(delta);
     } else if (controls && controls.isLocked) {
         // Normal controls update for first/third person
         window.updateControls(controls, delta);
@@ -836,11 +1109,11 @@ function animate(currentTime) {
             if (window.playerEntity && window.playerEntity.mesh) {
                 window.playerEntity.mesh.position.set(playerState.x, playerState.y, playerState.z);
                 window.playerEntity.mesh.rotation.y = playerState.rotationY;
-                window.playerEntity.mesh.visible = window.isFreeCameraMode || !window.isFirstPerson;
+                window.playerEntity.mesh.visible = window.isFreeCameraMode || window.isRTSMode || !window.isFirstPerson;
             }
             
             // Only update camera for first/third person modes
-            if (!window.isFreeCameraMode) {
+            if (!window.isFreeCameraMode && !window.isRTSMode) {
                 if (window.isFirstPerson) {
                     window.updateFirstPersonCamera();
                 } else {
@@ -876,11 +1149,11 @@ function onWindowResize() {
 }
 
 function sendInputUpdate() {
-    // Don't send updates if we're in free camera mode or if player isn't loaded yet
-    if (window.isFreeCameraMode || !window.playerLoaded) {
+    // Don't send updates if we're in free camera mode or RTS mode or if player isn't loaded yet
+    if (window.isFreeCameraMode || window.isRTSMode || !window.playerLoaded) {
         return;
     }
-
+    
     if (window.room) {
         const now = performance.now();
         if ((now - window.lastInputTime) > window.inputThrottleMs) {
@@ -1082,6 +1355,30 @@ function updateThirdPersonCamera() {
 
 // Mouse down event handler
 function onMouseDown(event) {
+    // For RTS mode, handle without pointer lock
+    if (window.isRTSMode) {
+        // Left button: start selection box or select unit
+        if (event.button === 0) {
+            // Start selection box
+            window.rtsSelectionBoxActive = true;
+            window.rtsSelectionStartX = event.clientX;
+            window.rtsSelectionStartY = event.clientY;
+            window.rtsSelectionEndX = event.clientX;
+            window.rtsSelectionEndY = event.clientY;
+            
+            // Show selection box
+            updateSelectionBox();
+        }
+        // Right button: move selected unit(s)
+        else if (event.button === 2) {
+            moveSelectedUnits();
+        }
+        return;
+    }
+    
+    // Original behavior for other modes (which require pointer lock)
+    if (!document.pointerLockElement) return;
+    
     // Left button: 0, Middle: 1, Right: 2
     if (event.button === 2) {
         window.rightMouseDown = true;
@@ -1092,9 +1389,642 @@ function onMouseDown(event) {
 
 // Mouse up event handler
 function onMouseUp(event) {
+    // For RTS mode, handle specially
+    if (window.isRTSMode) {
+        // Left button: complete selection box
+        if (event.button === 0 && window.rtsSelectionBoxActive) {
+            window.rtsSelectionBoxActive = false;
+            
+            // Hide selection box
+            const selectionBox = document.getElementById('rts-selection-box');
+            if (selectionBox) {
+                selectionBox.style.display = 'none';
+            }
+            
+            // Get final selection area
+            window.rtsSelectionEndX = event.clientX;
+            window.rtsSelectionEndY = event.clientY;
+            
+            // If selection area is very small, treat as a single click
+            const selectionWidth = Math.abs(window.rtsSelectionEndX - window.rtsSelectionStartX);
+            const selectionHeight = Math.abs(window.rtsSelectionEndY - window.rtsSelectionStartY);
+            
+            if (selectionWidth < 5 && selectionHeight < 5) {
+                // Single click - select individual unit
+                selectUnitInRTSMode();
+            } else {
+                // Box selection - select all units in box
+                selectUnitsInBoxRTSMode();
+            }
+        }
+        
+        // Just ensure cursor is still visible
+        if (document.getElementById('rts-cursor')) {
+            document.getElementById('rts-cursor').style.display = 'block';
+            
+            // Update cursor position for consistency
+            updateRTSCursorPosition({
+                clientX: event.clientX,
+                clientY: event.clientY
+            });
+        }
+        return;
+    }
+    
+    // Standard handling for other modes
     if (event.button === 2) {
         window.rightMouseDown = false;
     } else if (event.button === 1) {
         window.middleMouseDown = false;
     }
+}
+
+// Mouse move event handler for RTS mode selection box
+function onMouseMove(event) {
+    // In RTS mode, handle selection box if active
+    if (window.isRTSMode) {
+        if (window.rtsSelectionBoxActive) {
+            window.rtsSelectionEndX = event.clientX;
+            window.rtsSelectionEndY = event.clientY;
+            updateSelectionBox();
+        }
+        
+        // Ensure pointer lock is off and just update our custom cursor
+        if (controls && controls.isLocked) {
+            controls.unlock();
+        }
+        
+        // Update our custom cursor position
+        if (document.getElementById('rts-cursor')) {
+            updateRTSCursorPosition(event);
+        }
+        return;
+    }
+    
+    if (!window.controls || !window.controls.isLocked) return;
+    
+    // Store mouse movement for input state
+    window.inputState.mouseDelta.x += event.movementX;
+    window.inputState.mouseDelta.y += event.movementY;
+    
+    if (window.isFreeCameraMode) {
+        // Initialize Euler angles if they don't exist
+        if (!window.freeCameraEuler) {
+            window.freeCameraEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+        }
+        
+        // Update rotation with mouse movement
+        const rotationSpeed = 0.002;
+        
+        // Update yaw (left/right) and pitch (up/down)
+        window.freeCameraEuler.y -= event.movementX * rotationSpeed;
+        window.freeCameraEuler.x = Math.max(
+            -Math.PI/2,
+            Math.min(Math.PI/2,
+                window.freeCameraEuler.x - event.movementY * rotationSpeed
+            )
+        );
+        
+        // Keep roll (z-axis) at 0 to prevent tilting
+        window.freeCameraEuler.z = 0;
+        
+        // Apply rotation to camera, maintaining upright orientation
+        camera.quaternion.setFromEuler(window.freeCameraEuler);
+    }
+    
+    // In RTS mode, camera rotation with mouse is disabled
+    // as the camera always looks straight down
+}
+
+// Perform unit selection in RTS mode using raycasting
+function selectUnitInRTSMode() {
+    if (!window.isRTSMode) return;
+    
+    // Ensure pointer is unlocked in RTS mode
+    if (controls && controls.isLocked) {
+        controls.unlock();
+    }
+    
+    // Get the current mouse position
+    const cursor = document.getElementById('rts-cursor');
+    if (!cursor) return;
+    
+    // Get cursor position and renderer bounds
+    const rect = renderer.domElement.getBoundingClientRect();
+    const cursorX = parseInt(cursor.style.left);
+    const cursorY = parseInt(cursor.style.top);
+    
+    // Create a raycaster for the cursor position
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    
+    // Calculate mouse position in normalized device coordinates
+    // Use the cursor's center point for more accurate picking
+    mouse.x = ((cursorX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((cursorY - rect.top) / rect.height) * 2 + 1;
+    
+    // Update the raycaster with the camera and mouse position
+    raycaster.setFromCamera(mouse, window.camera);
+    
+    // Get all objects that could be selected
+    const selectableObjects = [];
+    
+    // Add the player's mesh
+    if (window.playerEntity && window.playerEntity.mesh) {
+        selectableObjects.push(window.playerEntity.mesh);
+    }
+    
+    // Add other selectable units if any
+    // For future: Add enemy units, resources, buildings, etc.
+    
+    // Perform the raycast
+    const intersects = raycaster.intersectObjects(selectableObjects, true);
+    
+    // Clear previous selections
+    clearAllSelections();
+    
+    // If an object was hit, select it
+    if (intersects.length > 0) {
+        let selectedMesh = intersects[0].object;
+        
+        // Find the top-level mesh (for models with nested meshes)
+        while (selectedMesh.parent && selectedMesh.parent !== scene) {
+            selectedMesh = selectedMesh.parent;
+        }
+        
+        // Determine which entity this belongs to
+        let selectedEntity = null;
+        
+        // Check if it's the player
+        if (window.playerEntity && (window.playerEntity.mesh === selectedMesh || 
+            window.playerEntity.mesh.id === selectedMesh.id)) {
+            selectedEntity = window.playerEntity;
+        }
+        
+        // If we found a valid entity, select it
+        if (selectedEntity) {
+            // Add to the selected units array
+            window.rtsSelectedUnits.push(selectedEntity);
+            
+            // Also maintain backward compatibility with single-selection
+            window.rtsSelectedUnit = selectedEntity;
+            
+            // Apply visual highlight
+            highlightSelectedUnit(selectedEntity);
+            
+            console.log("[RTS] Selected unit:", selectedEntity);
+        }
+    } else {
+        console.log("[RTS] No unit selected");
+    }
+    
+    // Ensure cursor is up to date after selection
+    // This prevents cursor from "freezing" after clicking
+    requestAnimationFrame(() => {
+        updateRTSCursorPosition({
+            clientX: window.lastMouseX || window.innerWidth / 2,
+            clientY: window.lastMouseY || window.innerHeight / 2
+        });
+    });
+}
+
+// Create a selection ring for a specific unit
+function createSelectionRingForUnit(unit) {
+    if (!unit || !unit.mesh) return;
+    
+    // Create a ring geometry
+    const radius = 1.2; // Slightly larger than the unit
+    const innerRadius = radius * 0.8;
+    const segments = 32;
+    
+    const ringGeometry = new THREE.RingGeometry(innerRadius, radius, segments);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.7
+    });
+    
+    // Create the ring mesh
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    
+    // Position it flat on the ground but slightly above to avoid z-fighting
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    ring.position.x = unit.mesh.position.x;
+    ring.position.z = unit.mesh.position.z;
+    
+    // Add the ring to the scene
+    scene.add(ring);
+    
+    // Save reference to the unit this ring belongs to
+    ring.userData.unitId = unit.id || unit.mesh.id;
+    
+    // Add to the ring array for management
+    if (!window.rtsSelectionRings) {
+        window.rtsSelectionRings = [];
+    }
+    window.rtsSelectionRings.push(ring);
+    
+    // Register animation callback for the ring if it doesn't exist
+    if (!window.rtsRingAnimationAdded) {
+        window.registerAnimationCallback(animateSelectionRings);
+        window.rtsRingAnimationAdded = true;
+    }
+}
+
+// Animate all selection rings
+function animateSelectionRings(delta) {
+    // Skip if no rings
+    if (!window.rtsSelectionRings || window.rtsSelectionRings.length === 0) return;
+    
+    // Animation time
+    const time = performance.now() * 0.001;
+    
+    // Update all rings
+    window.rtsSelectionRings.forEach(ring => {
+        // Skip if ring was deleted
+        if (!ring || !ring.material) return;
+        
+        // Find the unit this ring belongs to
+        const unitId = ring.userData.unitId;
+        let unitMesh = null;
+        
+        // Check if it's player's
+        if (window.playerEntity && window.playerEntity.mesh && 
+            (window.playerEntity.id === unitId || window.playerEntity.mesh.id === unitId)) {
+            unitMesh = window.playerEntity.mesh;
+        }
+        
+        // Future: Check other units
+        
+        // Update ring position to follow unit
+        if (unitMesh) {
+            ring.position.x = unitMesh.position.x;
+            ring.position.z = unitMesh.position.z;
+        }
+        
+        // Rotate and pulse opacity for effect
+        ring.rotation.z += delta * 0.5;
+        ring.material.opacity = 0.5 + 0.3 * Math.sin(time * 2);
+    });
+}
+
+// Move selected units to clicked position in RTS mode
+function moveSelectedUnits() {
+    if (!window.isRTSMode) return;
+    
+    // Ensure pointer is unlocked in RTS mode
+    if (controls && controls.isLocked) {
+        controls.unlock();
+    }
+    
+    // Only proceed if we have selected units
+    if (!window.rtsSelectedUnits || window.rtsSelectedUnits.length === 0) {
+        console.log("[RTS] No units selected to move");
+        return;
+    }
+    
+    // Get the current mouse position
+    const cursor = document.getElementById('rts-cursor');
+    if (!cursor) return;
+    
+    // Get cursor position and renderer bounds
+    const rect = renderer.domElement.getBoundingClientRect();
+    const cursorX = parseInt(cursor.style.left);
+    const cursorY = parseInt(cursor.style.top);
+    
+    // Create a raycaster for the cursor position
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    
+    // Calculate mouse position in normalized device coordinates
+    mouse.x = ((cursorX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((cursorY - rect.top) / rect.height) * 2 + 1;
+    
+    // Update the raycaster
+    raycaster.setFromCamera(mouse, window.camera);
+    
+    // Get all objects we can move onto (usually just the floor)
+    const floor = scene.children.find(child => 
+        child instanceof THREE.Mesh && 
+        child.rotation.x === -Math.PI / 2
+    );
+    
+    const moveTargets = [floor];
+    
+    // Perform the raycast
+    const intersects = raycaster.intersectObjects(moveTargets, false);
+    
+    // If we hit the floor, move the selected units there
+    if (intersects.length > 0) {
+        const targetPosition = intersects[0].point;
+        
+        // Create a move command and send it to the server
+        if (window.room) {
+            // Send move command for each selected unit
+            window.rtsSelectedUnits.forEach(unit => {
+                window.room.send("moveCommand", {
+                    x: targetPosition.x,
+                    z: targetPosition.z,
+                    unitId: unit.id || unit.mesh.id // Include unit ID if we have multiple units
+                });
+            });
+            
+            // Visual feedback - create a temporary marker at the clicked position
+            createMoveMarker(targetPosition);
+            
+            console.log("[RTS] Moving units to:", targetPosition);
+        }
+    }
+    
+    // Ensure cursor is up to date after move command
+    requestAnimationFrame(() => {
+        updateRTSCursorPosition({
+            clientX: window.lastMouseX || window.innerWidth / 2,
+            clientY: window.lastMouseY || window.innerHeight / 2
+        });
+    });
+}
+
+// Create a visual marker for move commands
+function createMoveMarker(position) {
+    // Create a simple circular marker
+    const markerGeometry = new THREE.CircleGeometry(0.5, 16);
+    const markerMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x00ff00,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide
+    });
+    
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+    
+    // Position slightly above the ground to prevent z-fighting
+    marker.position.set(position.x, 0.01, position.z);
+    marker.rotation.x = -Math.PI / 2; // Rotate to be flat on the ground
+    
+    scene.add(marker);
+    
+    // Add a slight pulsing animation
+    let pulseTime = 0;
+    
+    function animateMarker(delta) {
+        pulseTime += delta;
+        
+        // Pulse the opacity
+        marker.material.opacity = 0.7 * (0.5 + 0.5 * Math.sin(pulseTime * 5));
+        
+        // Scale down over time
+        const scale = Math.max(0.1, 1 - pulseTime);
+        marker.scale.set(scale, scale, scale);
+        
+        // Remove when animation completes
+        if (pulseTime > 1) {
+            window.unregisterAnimationCallback(animateMarker);
+            scene.remove(marker);
+            marker.geometry.dispose();
+            marker.material.dispose();
+        }
+    }
+    
+    // Register the animation
+    window.registerAnimationCallback(animateMarker);
+}
+
+// Create a custom cursor for RTS mode
+function createRTSCursor() {
+    // Create a div element for our custom cursor
+    const cursor = document.createElement('div');
+    cursor.id = 'rts-cursor';
+    
+    // Set style for the cursor
+    cursor.style.position = 'fixed';
+    cursor.style.width = '32px';
+    cursor.style.height = '32px';
+    cursor.style.pointerEvents = 'none'; // Prevent the cursor from intercepting clicks
+    cursor.style.zIndex = '9999'; // Ensure cursor is on top of everything
+    // SVG with crosshair cursor design - exact center is the intersection point
+    cursor.style.backgroundImage = 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'32\' height=\'32\' viewBox=\'0 0 32 32\'><circle cx=\'16\' cy=\'16\' r=\'14\' fill=\'none\' stroke=\'white\' stroke-width=\'2\'/><circle cx=\'16\' cy=\'16\' r=\'2\' fill=\'white\'/><path d=\'M16 8 L16 2\' stroke=\'white\' stroke-width=\'2\'/><path d=\'M16 30 L16 24\' stroke=\'white\' stroke-width=\'2\'/><path d=\'M8 16 L2 16\' stroke=\'white\' stroke-width=\'2\'/><path d=\'M30 16 L24 16\' stroke=\'white\' stroke-width=\'2\'/></svg>")';
+    cursor.style.backgroundSize = 'contain';
+    cursor.style.display = 'none'; // Initially hidden
+    
+    // Position the cursor so its center is at the mouse position
+    cursor.style.left = '0';
+    cursor.style.top = '0';
+    cursor.style.transform = 'translate(-50%, -50%)';
+    
+    // Add cursor element to the document
+    document.body.appendChild(cursor);
+    
+    // Initialize cursor at center of screen
+    updateRTSCursorPosition({
+        clientX: window.innerWidth / 2,
+        clientY: window.innerHeight / 2
+    });
+    
+    // Add mousemove listener to update custom cursor position
+    document.addEventListener('mousemove', updateRTSCursorPosition);
+    
+    return cursor;
+}
+
+// Update the RTS cursor position
+function updateRTSCursorPosition(event) {
+    // Store last mouse position for reference
+    window.lastMouseX = event.clientX;
+    window.lastMouseY = event.clientY;
+    
+    const cursor = document.getElementById('rts-cursor');
+    if (!cursor) return;
+    
+    // Only update cursor position if it's visible (RTS mode)
+    if (cursor.style.display === 'none') return;
+    
+    // Update cursor position to follow mouse exactly
+    // Position is set so the center of the cursor is at the mouse position
+    cursor.style.left = event.clientX + 'px';
+    cursor.style.top = event.clientY + 'px';
+    
+    // Make sure transform is applied for centering
+    cursor.style.transform = 'translate(-50%, -50%)';
+    
+    // When in RTS mode, update ray cast for hover effects
+    if (window.isRTSMode) {
+        updateRTSHoverEffects(event);
+    }
+}
+
+// Update hover effects for RTS mode
+function updateRTSHoverEffects(event) {
+    // Create a raycaster for mouse position
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const rect = renderer.domElement.getBoundingClientRect();
+    
+    // Calculate mouse position in normalized device coordinates
+    // (-1 to +1) for both components
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    // Update the raycaster with the camera and mouse position
+    raycaster.setFromCamera(mouse, window.camera);
+    
+    // Get all selectable objects
+    const selectableObjects = [];
+    
+    // Add the player's mesh
+    if (window.playerEntity && window.playerEntity.mesh) {
+        selectableObjects.push(window.playerEntity.mesh);
+    }
+    
+    // For future: Add other selectable units, buildings, etc.
+    
+    // Perform the raycast
+    const intersects = raycaster.intersectObjects(selectableObjects, true);
+    
+    const cursor = document.getElementById('rts-cursor');
+    
+    // If hovering over a selectable object, change cursor
+    if (intersects.length > 0) {
+        // Change cursor to selection cursor (green highlight)
+        cursor.style.backgroundImage = 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'32\' height=\'32\' viewBox=\'0 0 32 32\'><circle cx=\'16\' cy=\'16\' r=\'14\' fill=\'none\' stroke=\'%2300ff00\' stroke-width=\'2\'/><circle cx=\'16\' cy=\'16\' r=\'2\' fill=\'%2300ff00\'/><path d=\'M16 8 L16 2\' stroke=\'%2300ff00\' stroke-width=\'2\'/><path d=\'M16 30 L16 24\' stroke=\'%2300ff00\' stroke-width=\'2\'/><path d=\'M8 16 L2 16\' stroke=\'%2300ff00\' stroke-width=\'2\'/><path d=\'M30 16 L24 16\' stroke=\'%2300ff00\' stroke-width=\'2\'/></svg>")';
+    } else {
+        // Reset to default cursor (white)
+        cursor.style.backgroundImage = 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'32\' height=\'32\' viewBox=\'0 0 32 32\'><circle cx=\'16\' cy=\'16\' r=\'14\' fill=\'none\' stroke=\'white\' stroke-width=\'2\'/><circle cx=\'16\' cy=\'16\' r=\'2\' fill=\'white\'/><path d=\'M16 8 L16 2\' stroke=\'white\' stroke-width=\'2\'/><path d=\'M16 30 L16 24\' stroke=\'white\' stroke-width=\'2\'/><path d=\'M8 16 L2 16\' stroke=\'white\' stroke-width=\'2\'/><path d=\'M30 16 L24 16\' stroke=\'white\' stroke-width=\'2\'/></svg>")';
+    }
+}
+
+// Update the display of the selection box
+function updateSelectionBox() {
+    const selectionBox = document.getElementById('rts-selection-box');
+    if (!selectionBox) return;
+    
+    // Calculate box coordinates
+    const left = Math.min(window.rtsSelectionStartX, window.rtsSelectionEndX);
+    const top = Math.min(window.rtsSelectionStartY, window.rtsSelectionEndY);
+    const width = Math.abs(window.rtsSelectionEndX - window.rtsSelectionStartX);
+    const height = Math.abs(window.rtsSelectionEndY - window.rtsSelectionStartY);
+    
+    // Update box position and size
+    selectionBox.style.left = left + 'px';
+    selectionBox.style.top = top + 'px';
+    selectionBox.style.width = width + 'px';
+    selectionBox.style.height = height + 'px';
+    
+    // Show the box
+    selectionBox.style.display = 'block';
+}
+
+// Select all units within the selection box
+function selectUnitsInBoxRTSMode() {
+    // Get the renderer bounds for coordinate conversion
+    const rect = renderer.domElement.getBoundingClientRect();
+    
+    // Convert box coordinates to normalized device coordinates (-1 to 1)
+    const left = Math.min(window.rtsSelectionStartX, window.rtsSelectionEndX);
+    const right = Math.max(window.rtsSelectionStartX, window.rtsSelectionEndX);
+    const top = Math.min(window.rtsSelectionStartY, window.rtsSelectionEndY);
+    const bottom = Math.max(window.rtsSelectionStartY, window.rtsSelectionEndY);
+    
+    // Get an array of all selectable units in the scene
+    const selectableUnits = [];
+    
+    // Add the player's unit
+    if (window.playerEntity && window.playerEntity.mesh) {
+        selectableUnits.push(window.playerEntity);
+    }
+    
+    // TODO: Add other selectable units (allied units) when they're implemented
+    
+    // Clear previous selections
+    clearAllSelections();
+    
+    // Check each unit to see if it's in the selection box
+    selectableUnits.forEach(unit => {
+        if (!unit.mesh) return;
+        
+        // Project unit position to screen coordinates
+        const position = new THREE.Vector3();
+        position.copy(unit.mesh.position);
+        
+        // Convert 3D position to screen position
+        position.project(window.camera);
+        
+        // Convert to pixel coordinates
+        const screenX = ((position.x + 1) / 2) * rect.width + rect.left;
+        const screenY = ((-position.y + 1) / 2) * rect.height + rect.top;
+        
+        // Check if the unit is inside the selection box
+        if (screenX >= left && screenX <= right && screenY >= top && screenY <= bottom) {
+            // Add to selection
+            window.rtsSelectedUnits.push(unit);
+            
+            // Apply visual selection to the unit
+            highlightSelectedUnit(unit);
+            
+            console.log("[RTS] Added unit to selection:", unit);
+        }
+    });
+    
+    console.log("[RTS] Total units selected:", window.rtsSelectedUnits.length);
+}
+
+// Clear all current selections
+function clearAllSelections() {
+    // Clear the single selected unit reference
+    window.rtsSelectedUnit = null;
+    
+    // Remove highlights from all previously selected units
+    if (window.rtsSelectedUnits && window.rtsSelectedUnits.length > 0) {
+        window.rtsSelectedUnits.forEach(unit => {
+            // Restore original material if saved
+            if (unit.rtsMaterial && unit.mesh) {
+                unit.mesh.material = unit.rtsMaterial;
+            }
+        });
+    }
+    
+    // Clear the selection array
+    window.rtsSelectedUnits = [];
+    
+    // Remove any selection rings
+    if (window.rtsSelectionRing) {
+        scene.remove(window.rtsSelectionRing);
+        if (window.rtsSelectionRing.geometry) window.rtsSelectionRing.geometry.dispose();
+        if (window.rtsSelectionRing.material) window.rtsSelectionRing.material.dispose();
+    }
+    
+    // Remove all selection rings from the ring array
+    if (window.rtsSelectionRings && window.rtsSelectionRings.length > 0) {
+        window.rtsSelectionRings.forEach(ring => {
+            scene.remove(ring);
+            if (ring.geometry) ring.geometry.dispose();
+            if (ring.material) ring.material.dispose();
+        });
+    }
+    
+    // Initialize the selection rings array if it doesn't exist
+    window.rtsSelectionRings = [];
+}
+
+// Apply visual highlight to a selected unit
+function highlightSelectedUnit(unit) {
+    if (!unit || !unit.mesh) return;
+    
+    // Save original material for later restoration
+    if (!unit.rtsMaterial) {
+        unit.rtsMaterial = unit.mesh.material.clone();
+    }
+    
+    // Create highlight material
+    const highlightMaterial = unit.mesh.material.clone();
+    highlightMaterial.emissive = new THREE.Color(0x333333);
+    highlightMaterial.emissiveIntensity = 0.5;
+    
+    // Apply highlight to indicate selection
+    unit.mesh.material = highlightMaterial;
+    
+    // Create a selection ring for this unit
+    createSelectionRingForUnit(unit);
 }

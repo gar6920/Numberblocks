@@ -1,6 +1,6 @@
 const { Room } = require("colyseus");
 const { GameState } = require("./schemas/GameState");
-const { Player } = require("./schemas/Player");
+const { Player, MoveTarget } = require("./schemas/Player");
 const { BaseEntity } = require("./schemas/BaseEntity");
 
 /**
@@ -41,6 +41,11 @@ class BaseRoom extends Room {
         // Listen for entity interaction messages
         this.onMessage("entityInteraction", (client, message) => {
             this.handleEntityInteraction(client, message);
+        });
+        
+        // Listen for RTS move commands
+        this.onMessage("moveCommand", (client, message) => {
+            this.handleMoveCommand(client, message);
         });
     }
     
@@ -120,6 +125,26 @@ class BaseRoom extends Room {
         
         // Call implementation-specific entity interaction handler
         this.onEntityInteraction(player, entity, message.interactionType);
+    }
+    
+    /**
+     * Handle move command from RTS view
+     * Sets target destination for player movement
+     * @param {Client} client The client that sent the message
+     * @param {Object} message The message containing x and z coordinates
+     */
+    handleMoveCommand(client, message) {
+        const player = this.state.players.get(client.sessionId);
+        if (!player) return;
+        
+        // Store target destination
+        player.moveTarget.x = message.x;
+        player.moveTarget.z = message.z;
+        
+        // Set a flag indicating the player is being controlled by RTS commands
+        player.isRTSControlled = true;
+        
+        console.log(`RTS move command: Player ${client.sessionId} moving to (${message.x}, ${message.z})`);
     }
     
     /**
@@ -265,6 +290,38 @@ class BaseRoom extends Room {
      * @param {number} delta Time since last update
      */
     updatePlayerFromInput(playerSessionId, player, input, delta) {
+        // Check if player is being controlled via RTS commands
+        if (player.isRTSControlled && player.moveTarget) {
+            // Calculate direction to target
+            const dx = player.moveTarget.x - player.x;
+            const dz = player.moveTarget.z - player.z;
+            
+            // Calculate distance to target
+            const distanceSquared = dx * dx + dz * dz;
+            
+            // If we're close enough to the target, stop moving
+            if (distanceSquared < 0.1) {
+                player.isRTSControlled = false;
+                return;
+            }
+            
+            // Calculate normalized direction vector
+            const distance = Math.sqrt(distanceSquared);
+            const normalizedDx = dx / distance;
+            const normalizedDz = dz / distance;
+            
+            // Move towards target at a fixed speed
+            const speed = 0.2;
+            player.x += normalizedDx * speed;
+            player.z += normalizedDz * speed;
+            
+            // Calculate rotation to face movement direction
+            player.rotationY = Math.atan2(normalizedDx, normalizedDz);
+            
+            return;
+        }
+        
+        // Standard input-based movement (from keyboard controls)
         // Increase speed to make movement more noticeable
         const speed = 0.2;
         
