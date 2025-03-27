@@ -238,12 +238,8 @@ Each game implementation extends the core platform with specific gameplay mechan
 │       │   ├── EntityFactory.js # Entity creation factory
 │       │   └── player-ui.js    # UI components
 │       └── implementations/ # Game-specific client implementations
-│           ├── default/     # Default box implementation
-│           │   └── DefaultPlayer.js # Simple box player
-│           └── numberblocks/  # Example implementation
-│               ├── entity-sync.js # Entity synchronization
-│               ├── operator.js    # Mathematical operators
-│               └── index.js       # Implementation entry point
+│           └── default/     # Default implementation
+│               └── DefaultPlayer.js # Simple box player
 ├── server/                 # Server-side code
 │   ├── core/               # Core server components
 │   │   ├── server.js       # Main server entry point
@@ -257,12 +253,8 @@ Each game implementation extends the core platform with specific gameplay mechan
 │   │       ├── InputState.js # Input state schema
 │   │       └── GameConfigSchema.js # Game configuration schema
 │   └── implementations/    # Server-side implementations
-│       ├── default/        # Default implementation
-│       │   └── index.js    # Default implementation entry point
-│       └── numberblocks/   # Example implementation
-│           ├── index.js    # Implementation entry point
-│           ├── schemas.js  # Implementation-specific schemas
-│           └── NumberblocksRoom.js # Implementation room
+│       └── default/        # Default implementation
+│           └── index.js    # Default implementation entry point
 ├── four_player_setup.html  # HTML for 4-player split-screen setup
 ├── open_4player_direct.bat # Batch script to launch 4-player mode
 └── memory bank/            # Documentation and reference materials
@@ -393,39 +385,24 @@ The platform supports flexible local multiplayer configurations through a dynami
 - **Seamless Integration:** Works with all game implementations
 
 ## Implementation Selection System
-The platform supports multiple game implementations that can be selected at runtime:
+The platform is designed to support multiple game implementations, but currently only has the default implementation:
 
 1. **Selection Process:**
-   - User selects implementation through the startup batch file
-   - Selection is passed to the server via environment variables (GAME_IMPLEMENTATION)
-   - Server dynamically loads the appropriate implementation based on this selection
+   - Server loads the default implementation
    - Implementation identifier is displayed in the game UI
 
 2. **Technical Components:**
    ```javascript
    // server/core/index.js
    const serverConfig = {
-     // Read implementation from command line args or environment variable
-     activeImplementation: process.env.GAME_IMPLEMENTATION || process.argv[2] || "default",
+     // Use default implementation
+     activeImplementation: "default",
      port: process.env.PORT || 3000
    };
    ```
 
-   ```batch
-   # start_game.bat
-   # Maps user selection to implementation name and sets environment variable
-   if !IMPL_CHOICE!==1 (
-     set IMPLEMENTATION=default
-   ) else if !IMPL_CHOICE!==2 (
-     set IMPLEMENTATION=numberblocks
-   )
-   # Passes the selection to the server
-   set GAME_IMPLEMENTATION=!IMPLEMENTATION! && start_server.bat
-   ```
-
 3. **Available Implementations:**
    - **default:** Simple box-based characters and environment
-   - **numberblocks:** Mathematical block-based gameplay
 
 4. **Implementation Registry:**
    - Central registry in server/core/index.js maps implementation names to their module exports

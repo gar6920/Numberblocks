@@ -64,12 +64,12 @@ The platform follows a modular architecture that separates core functionality fr
 
 ## Current Implementations
 
-### Numberblocks
+### Default Implementation
 
-The first implementation is a mathematical building blocks game inspired by the Numberblocks educational show. Players control Numberblock characters and interact with operators (+, -) in a fun mathematical environment.
+The default implementation provides a simple 3D environment with basic player movement and interaction capabilities.
 
-- **Features**: Dynamic number blocks, mathematical operators, player interaction
-- **Objectives**: Various game modes including target number challenges and elimination
+- **Features**: Basic player models, 3D world interaction, multiplayer support
+- **Objectives**: Exploration and player interaction
 
 ## Tech Stack
 
@@ -87,7 +87,7 @@ To create a new game implementation:
 4. Create implementation-specific schemas on the server
 5. Register your implementation with the entity factories
 
-See the Numberblocks implementation for an example.
+See the default implementation for an example.
 
 ## Camera Controls
 

@@ -1,6 +1,6 @@
 # 3D AI Game Platform
 ## Introduction
-The 3D AI Game platform is a modular, web-based 3D game environment built with Three.js and Colyseus, utilizing a client-server architecture for multiplayer functionality. Players control customizable characters and interact with a colorful 3D environment. The platform is designed to support various game implementations, with Numberblocks being the first example.
+The 3D AI Game platform is a modular, web-based 3D game environment built with Three.js and Colyseus, utilizing a client-server architecture for multiplayer functionality. Players control customizable characters and interact with a colorful 3D environment. The platform is designed to support various game implementations.
 
 ## Platform Overview
 This game platform allows players to navigate a 3D world with customizable characters, interact with other players and objects, and participate in various game modes. The platform's modular design enables developers to implement different themes and gameplay mechanics while maintaining the core 3D multiplayer functionality.
@@ -27,23 +27,21 @@ This game platform allows players to navigate a 3D world with customizable chara
 - Room-Based Gameplay: Players join game rooms with unique session IDs
 - Cross-Platform Support: Play on various devices and browsers
 
-## Implementation: Numberblocks
+## Default Implementation
 
 ### Character Design
-- Players are represented as Numberblocks, with a block count matching their current number
-- The model dynamically adjusts as the number changes (e.g., growing from 1 block to 10 blocks)
-- Size can optionally affect movement speed (larger numbers move slower)
+- Players are represented as simple cubes with customizable colors
+- Models can be extended by other implementations for more complex designs
+- Size and appearance can be modified based on game mechanics
 
 ### Game Mechanics
-- **Operators**: Plus (+) and minus (-) operators spawn throughout the map
-- **Collection**: Players collect operators by touching them
-- **Interaction**: Operators activate upon bumping into another player
-- **Number Changes**: Players' numbers change based on the operator used
+- **Exploration**: Navigate the 3D environment
+- **Interaction**: Basic interactions with the environment and other players
+- **Building**: Create and modify structures in the game world
 
 ### Game Modes
-1. **Target Number Mode**: Reach a specific number (e.g., 100) by adding to your value
-2. **Elimination Mode**: Reduce other players to zero using the minus operator
-3. **Score-Based Mode**: Earn points for each operation performed
+1. **Free Play**: Explore the environment and interact with other players
+2. **Custom Modes**: Framework supports implementation of various game modes
 
 ## Multiplayer Features
 
@@ -99,9 +97,6 @@ This game platform allows players to navigate a 3D world with customizable chara
 - Browser-based, using WebGL for 3D rendering
 - Real-time multiplayer with server-side state management
 - Optimized for performance across devices
-
-
-
 
 ## Conclusion
 The 3D AI Game platform provides a flexible foundation for creating multiplayer 3D web games with different themes and mechanics. By separating core functionality from specific implementations, developers can create new games while leveraging the existing multiplayer infrastructure, 3D rendering capabilities, and entity management system.

@@ -1,49 +1,2 @@
 Starting 3D AI Game Server
 Server starting - press Ctrl+C to stop
-
-> 3d-ai-game-platform@1.0.0 start
-> node server/core/server.js
-
-DEPRECATION WARNING: 'pingInterval', 'pingMaxRetries', 'server', and 'verifyClient' Server options will be permanently moved to WebSocketTransport on v0.15
-new Server({
-  transport: new WebSocketTransport({
-    pingInterval: ...,
-    pingMaxRetries: ...,
-    server: ...,
-    verifyClient: ...
-  })
-})
-👉 Documentation: https://docs.colyseus.io/server/transport/
-Specified implementation "default " not found. Using "default" instead.
-
-===== 3D AI Game Platform =====
-Available implementations:
-1. default
-2. numberblocks
-
-Current implementation: default 
-
-Press 1 or 2 to select an implementation
-Starting with current implementation in 10 seconds...
-3D Game Platform server running on http://localhost:3000
-Available implementations: default, numberblocks
-Active implementation: default 
-Starting with current implementation in 9 seconds...Starting with current implementation in 8 seconds...Starting with current implementation in 7 seconds...Starting with current implementation in 6 seconds...Starting with current implementation in 5 seconds...Starting with current implementation in 4 seconds...Starting with current implementation in 3 seconds...Starting with current implementation in 2 seconds...Starting with current implementation in 1 seconds...BaseRoom created! { name: 'Player_468', color: '#5144D7' }
-Default room implementation initialized
-Client joined: Pg3Z57EVT
-
-Using current implementation: default 
-Server running on http://localhost:3000
-RTS move command: Player Pg3Z57EVT moving to (11.208773588936872, -11.242691076258454)
-Handling structure placement from Pg3Z57EVT: { structureType: 'building', x: 15, y: 0, z: -18, rotation: 0 }
-Structure structure_1743088242450_2392 placed at (15, 0, -18)
-Handling structure placement from Pg3Z57EVT: { structureType: 'building', x: 9, y: 0, z: -19, rotation: 0 }
-Structure structure_1743088244150_461 placed at (9, 0, -19)
-Handling structure placement from Pg3Z57EVT: { structureType: 'building', x: 3, y: 0, z: -15, rotation: 0 }
-Structure structure_1743088245865_8816 placed at (3, 0, -15)
-Handling structure placement from Pg3Z57EVT: { structureType: 'building', x: 10, y: 0, z: -8, rotation: 0 }
-Structure structure_1743088247329_311 placed at (10, 0, -8)
-Client joined: jRdokbYcO
-RTS move command: Player jRdokbYcO moving to (25.559478432599256, -16.690865615708134)
-Client left: Pg3Z57EVT
-Client left: jRdokbYcO
