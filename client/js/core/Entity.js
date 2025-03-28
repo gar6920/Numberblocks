@@ -12,10 +12,14 @@ class Entity {
         this.z = z || 0;
         this.rotationY = rotationY || 0;
         
+        // Initialize THREE.Vector3 position *before* calling createMesh
+        this.position = new THREE.Vector3(this.x, this.y, this.z);
+
         // Create the mesh - this should be implemented by subclasses
         this.mesh = this.createMesh();
         if (this.mesh) {
-            this.mesh.position.set(this.x, this.y, this.z);
+            // Set mesh position using the Vector3
+            this.mesh.position.copy(this.position);
             this.mesh.rotation.y = this.rotationY;
             
             // Store a reference to this entity in the mesh's userData
@@ -41,14 +45,17 @@ class Entity {
     
         if (x !== undefined) {
             this.x = x;
+            this.position.x = x; // Update Vector3 as well
             this.mesh.position.x = x;
         }
         if (y !== undefined) {
             this.y = y;
+            this.position.y = y;
             this.mesh.position.y = y;
         }
         if (z !== undefined) {
             this.z = z;
+            this.position.z = z;
             this.mesh.position.z = z;
         }
         if (rotationY !== undefined) {

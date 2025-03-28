@@ -41,8 +41,8 @@ const gameConfig = {
         viewMode: 'firstPerson',   // 'firstPerson', 'thirdPerson', or 'freeRoam'
         // Use custom player name if provided in URL, otherwise generate random name
         playerName: urlParams.playerName || `Player_${Math.floor(Math.random() * 1000)}`,
-        // Use custom player color if provided in URL
-        playerColor: urlParams.playerColor || 0xFFFF00 // Default to yellow
+        playerColor: urlParams.playerColor || 0xCCCCCC, // Default to grey
+        playerModelPath: 'models/fbx/Idle.fbx' // Path to the player model
     },
     networkSettings: {
         serverUrl: window.location.hostname.includes('localhost') 
@@ -95,12 +95,25 @@ function loadCoreModules() {
                 'controls.js'
             ];
             
+            // Add implementation-specific modules (currently just DefaultPlayer)
+            const implementationPath = 'js/implementations/default/';
+            const implementationModules = [
+                'DefaultPlayer.js'
+            ];
+            
             // Load each module in sequence
             let loadPromise = Promise.resolve();
             
             coreModules.forEach(module => {
                 loadPromise = loadPromise.then(() => {
                     return loadScript(corePath + module);
+                });
+            });
+            
+            // Load each implementation module after core modules
+            implementationModules.forEach(module => {
+                loadPromise = loadPromise.then(() => {
+                    return loadScript(implementationPath + module);
                 });
             });
             
@@ -123,12 +136,26 @@ function initGameEngine() {
     
     // Initialize default player factory first
     window.createPlayerEntity = function(scene, value = 1) {
+        // Dynamically select Player class based on availability
+        const PlayerClass = window.DefaultPlayer || window.Player; // Use DefaultPlayer if loaded
+        console.log(`[createPlayerEntity] Using Player class: ${PlayerClass.name}`);
+        
         // Create a player with color from gameConfig
-        const player = new window.Player({
+        const player = new PlayerClass({
             id: 'player',
             isLocalPlayer: true,
-            color: gameConfig.playerSettings.playerColor
+            color: gameConfig.playerSettings.playerColor,
+            scene: scene // Pass the scene object
         });
+        
+        // Register the local player's update method to be called in the animation loop
+        if (typeof player.update === 'function' && typeof registerAnimationCallback === 'function') {
+            // Bind the update function to the player instance to ensure 'this' is correct
+            registerAnimationCallback(player.update.bind(player));
+            console.log(`[createPlayerEntity] Registered update callback for local player: ${player.id}`);
+        } else {
+            console.warn(`[createPlayerEntity] Could not register update callback for local player. Missing player.update or registerAnimationCallback.`);
+        }
         
         if (scene && player.mesh) {
             scene.add(player.mesh);
@@ -137,12 +164,8 @@ function initGameEngine() {
         return player;
     };
     
-    // Load default implementation
-    loadScript('js/implementations/default/DefaultPlayer.js')
-        .then(() => {
-            // Load the game engine
-            return loadScript('js/core/game-engine.js');
-        })
+    // Load the game engine
+    loadScript('js/core/game-engine.js')
         .then(() => {
             console.log('Game engine loaded');
             // Remove the loading screen once everything is loaded

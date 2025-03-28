@@ -443,15 +443,13 @@ function createRemotePlayerObject(player) {
             id: player.sessionId,  // Use the sessionId as the id
             isLocalPlayer: false,
             color: player.color || 0x3366CC,
-            value: player.value || 1
+            value: player.value || 1,
+            x: player.x || 0,
+            y: player.y || 0, 
+            z: player.z || 0,
+            rotationY: player.rotationY || 0,
+            scene: window.scene 
         });
-        
-        // Set position and rotation
-        remotePlayer.mesh.position.set(player.x || 0, player.y || 0, player.z || 0);
-        remotePlayer.mesh.rotation.y = player.rotationY || 0;
-        
-        // Add to scene
-        window.scene.add(remotePlayer.mesh);
         
         // Store in global collections - use otherPlayers as the single source of truth
         window.otherPlayers = window.otherPlayers || {};
@@ -554,7 +552,7 @@ window.updatePlayerListUI = function() {
 };
 
 // Update remote players in the scene - this runs in the animation loop
-window.updateRemotePlayers = function() {
+window.updateRemotePlayers = function(deltaTime) { // Added deltaTime parameter
     if (!window.room || !window.room.state || !window.scene) {
         return;
     }
@@ -614,8 +612,18 @@ window.updateRemotePlayers = function() {
             );
             
             // Update rotation
-            remotePlayer.mesh.rotation.y = player.rotationY;
+            remotePlayer.rotationY = player.rotationY;
             
+            // Explicitly call the player's update method with deltaTime
+            if (typeof remotePlayer.update === 'function') {
+                remotePlayer.update(deltaTime);
+            } else {
+                // Fallback for older structure or entities without an update method
+                // Update mesh rotation directly if no update method exists
+                if (remotePlayer.mesh) {
+                    remotePlayer.mesh.rotation.y = player.rotationY;
+                }
+            }
             
             if (remotePlayer.value !== player.value) {
                 try {

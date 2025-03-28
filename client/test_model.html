@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DIRECT MODEL TEST</title>
+    <style>
+        body { margin: 0; background: #111; color: white; font-family: monospace; }
+        #info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; z-index: 100; max-height: 40vh; overflow: auto; max-width: 30%; white-space: pre-wrap; font-size: 12px; }
+        #info-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        #info-content { overflow: auto; }
+        #minimize-btn { cursor: pointer; background: none; border: none; color: white; font-weight: bold; }
+        #buttons { position: absolute; bottom: 10px; left: 10px; }
+        button { margin: 5px; padding: 8px 15px; background: #336; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #558; }
+        button.active { background: #77f; }
+        button.green { background: #252; }
+        button.green:hover { background: #3a3; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <div id="info-header">
+            <span>Model Info</span>
+            <button id="minimize-btn" title="Minimize/Maximize">[-]</button>
+        </div>
+        <div id="info-content">DIRECT MODEL LOADER
+Click the green button to select human_man.glb from your Downloads folder.</div>
+    </div>
+    
+    <div id="buttons">
+        <button id="idle">Idle</button>
+        <button id="walk">Walk</button>
+        <button id="run">Run</button>
+        <button id="jump">Jump</button>
+        <button id="strafeLeft">Strafe Left</button>
+        <button id="strafeRight">Strafe Right</button>
+        <button id="resetView" style="margin-left: 20px; background: #722;">Reset View</button>
+        <div style="margin-top: 10px;">
+            <label for="modelScale">Model Scale: <span id="scaleValue">1.0</span></label>
+            <input type="range" id="modelScale" min="0.1" max="3" step="0.1" value="1.0" style="width: 200px;">
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+    
+    <script>
+        // === BASIC SETUP ===
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111111);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 10); // Moved much further back and centered
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+        
+        // Add grid
+        const grid = new THREE.GridHelper(10, 10, 0x555555, 0x333333);
+        scene.add(grid);
+        
+        // Add center marker
+        const centerMarker = new THREE.Mesh(
+            new THREE.SphereGeometry(0.1, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
+        centerMarker.position.set(0, 0.1, 0); // Slightly above ground
+        scene.add(centerMarker);
+        
+        // Camera controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 1, 0);
+        controls.update();
+        
+        // Animation variables
+        let mixer, model, clock = new THREE.Clock();
+        let actions = {};
+        let currentAction = null;
+        
+        // File input for user selection
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.id = 'fileInput';
+        fileInput.accept = '.glb,.gltf';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+        
+        // Handle file selection
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            log(`Loading file: ${file.name} (${formatFileSize(file.size)})`);
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                parseModel(arrayBuffer, file.name);
+            };
+            reader.onerror = function() {
+                log(`❌ Error reading file`);
+            };
+            
+            reader.readAsArrayBuffer(file);
+        });
+        
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Log message to info panel
+        function log(message) {
+            const infoContent = document.getElementById('info-content');
+            infoContent.textContent += '\n' + message;
+            infoContent.scrollTop = infoContent.scrollHeight;
+            console.log(message);
+        }
+        
+        // Parse model from buffer
+        function parseModel(buffer, filename) {
+            if (model) {
+                // Remove previous model
+                scene.remove(model);
+                
+                // Dispose resources
+                if (mixer) {
+                    mixer.stopAllAction();
+                    mixer.uncacheRoot(model);
+                }
+                
+                // Reset animation state
+                actions = {};
+                currentAction = null;
+            }
+            
+            const loader = new THREE.GLTFLoader();
+            
+            try {
+                log(`Parsing model data...`);
+                
+                loader.parse(buffer, '', function (gltf) {
+                    model = gltf.scene;
+                    scene.add(model);
+                    
+                    log(`✅ Model loaded successfully: ${filename}`);
+                    
+                    // Apply default scale if model is too big or too small
+                    // Starting with a reasonable default
+                    const defaultScale = 1.0;
+                    model.scale.set(defaultScale, defaultScale, defaultScale);
+                    
+                    // Log model structure
+                    log(`\nModel structure:`);
+                    logModelStructure(model, 0);
+                    
+                    // Set up animations
+                    setupAnimations(gltf.animations);
+                }, function(error) {
+                    log(`❌ Error loading model: ${error.message}`);
+                });
+            } catch(e) {
+                log(`❌ Exception during parsing: ${e.message}`);
+            }
+        }
+        
+        // Setup animations
+        function setupAnimations(animations) {
+            if (!animations || animations.length === 0) {
+                log(`⚠️ No animations found in model`);
+                return;
+            }
+            
+            log(`\nFound ${animations.length} animations:`);
+            animations.forEach((anim, i) => {
+                log(`${i+1}. ${anim.name} (${anim.duration.toFixed(2)}s)`);
+            });
+            
+            // Create animation mixer
+            mixer = new THREE.AnimationMixer(model);
+            
+            // Store all animations
+            animations.forEach(clip => {
+                actions[clip.name] = mixer.clipAction(clip);
+            });
+            
+            // Try to map standard animation names
+            const standardNames = {
+                'Idle': ['idle', 'Idle', 'IDLE', 'idle_loop', 'T-Pose', 'TPose'],
+                'Walk': ['walk', 'Walk', 'WALK', 'walking', 'Walking'],
+                'Run': ['run', 'Run', 'RUN', 'running', 'Running'],
+                'Jump': ['jump', 'Jump', 'JUMP', 'jumping', 'Jumping'],
+                'StrafeLeft': ['strafeleft', 'StrafeLeft', 'STRAFELEFT', 'Left Strafe', 'strafe_left'],
+                'StrafeRight': ['straferight', 'StrafeRight', 'STRAFERIGHT', 'Right Strafe', 'strafe_right']
+            };
+            
+            // Check for Mixamo animations specifically
+            if (animations.some(anim => anim.name.includes('mixamo.com'))) {
+                log(`✅ Detected Mixamo animations, using index-based mapping`);
+                
+                // Index-based mapping (more reliable than name-based)
+                // Assuming the animations are in a specific order
+                const indexMapping = {
+                    'idle': 5,       // Typically the main/idle animation
+                    'walk': 0,       // First animation after idle
+                    'run': 1,        // Second animation
+                    'jump': 4,       // Was incorrectly mapped to 2
+                    'strafeLeft': 3, // Fourth animation
+                    'strafeRight': 2 // Was incorrectly mapped to 4
+                };
+                
+                // Apply the mapping
+                Object.entries(indexMapping).forEach(([buttonId, index]) => {
+                    if (animations[index]) {
+                        const animName = animations[index].name;
+                        log(`✅ Mapped ${buttonId} to animation index ${index}: ${animName}`);
+                        document.getElementById(buttonId).dataset.animName = animName;
+                    }
+                });
+            } else {
+                // Map buttons to animations using the standard naming patterns
+                for (const [standardName, patterns] of Object.entries(standardNames)) {
+                    // Find matching animation
+                    const match = animations.find(anim => 
+                        patterns.some(pattern => 
+                            anim.name.toLowerCase().includes(pattern.toLowerCase())
+                        )
+                    );
+                    
+                    if (match) {
+                        log(`✅ Mapped ${standardName} to animation: ${match.name}`);
+                        document.getElementById(standardName.toLowerCase()).dataset.animName = match.name;
+                    }
+                }
+            }
+            
+            // Play the first animation by default
+            if (animations.length > 0) {
+                playAnimation(animations[0].name);
+            }
+            
+            // Setup animation buttons
+            setupAnimationButtons();
+        }
+        
+        // Setup animation button click handlers
+        function setupAnimationButtons() {
+            const buttons = document.querySelectorAll('#buttons button');
+            buttons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Clear active state from all buttons
+                    buttons.forEach(b => b.classList.remove('active'));
+                    
+                    // Set active state on clicked button
+                    button.classList.add('active');
+                    
+                    // Get animation name from button
+                    const animName = button.dataset.animName;
+                    console.log(`Button clicked: ${button.id}, Animation mapping: ${animName}`);
+                    
+                    if (animName && actions[animName]) {
+                        playAnimation(animName);
+                    } else {
+                        log(`⚠️ No animation mapping found for ${button.id}`);
+                    }
+                });
+            });
+        }
+        
+        // Play animation with crossfade
+        function playAnimation(name, duration = 0.5) {
+            if (!actions[name]) {
+                log(`❌ Animation not found: ${name}`);
+                return;
+            }
+            
+            log(`▶️ Playing animation: ${name}`);
+            
+            const action = actions[name];
+            
+            // Stop current animation with crossfade
+            if (currentAction && currentAction !== action) {
+                currentAction.fadeOut(duration);
+            }
+            
+            // Play new animation
+            action.reset().fadeIn(duration).play();
+            currentAction = action;
+        }
+        
+        // Log model structure
+        function logModelStructure(object, level) {
+            const indent = '  '.repeat(level);
+            const type = object.type;
+            const name = object.name || '(unnamed)';
+            
+            log(`${indent}${type}: ${name}`);
+            
+            if (object.children && object.children.length > 0) {
+                object.children.forEach(child => {
+                    logModelStructure(child, level + 1);
+                });
+            }
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update mixer
+            if (mixer) {
+                mixer.update(clock.getDelta());
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Add model load button
+        const loadButton = document.createElement('button');
+        loadButton.textContent = 'LOAD MODEL';
+        loadButton.className = 'green';
+        loadButton.style.position = 'absolute';
+        loadButton.style.top = '10px';
+        loadButton.style.right = '10px';
+        loadButton.style.fontSize = '16px';
+        loadButton.style.padding = '15px 20px';
+        loadButton.addEventListener('click', function() {
+            fileInput.click();
+        });
+        document.body.appendChild(loadButton);
+        
+        // Setup minimize button functionality
+        const minimizeBtn = document.getElementById('minimize-btn');
+        const infoContent = document.getElementById('info-content');
+        minimizeBtn.addEventListener('click', function() {
+            if (infoContent.style.display === 'none') {
+                infoContent.style.display = 'block';
+                minimizeBtn.textContent = '[-]';
+            } else {
+                infoContent.style.display = 'none';
+                minimizeBtn.textContent = '[+]';
+            }
+        });
+        
+        // Setup reset view button
+        const resetViewBtn = document.getElementById('resetView');
+        resetViewBtn.addEventListener('click', function() {
+            camera.position.set(0, 2, 10);
+            controls.target.set(0, 1, 0);
+            controls.update();
+        });
+        
+        // Setup scale slider
+        const scaleSlider = document.getElementById('modelScale');
+        const scaleValue = document.getElementById('scaleValue');
+        scaleSlider.addEventListener('input', function() {
+            const scale = parseFloat(this.value);
+            scaleValue.textContent = scale.toFixed(1);
+            
+            // Apply scale to model if loaded
+            if (model) {
+                model.scale.set(scale, scale, scale);
+            }
+        });
+        
+        // Start animation loop
+        animate();
+    </script>
+</body>
+</html> 

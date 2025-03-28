@@ -1136,7 +1136,7 @@ function animate(currentTime) {
     
     // Explicitly call updateRemotePlayers to ensure other players are always rendered
     if (typeof window.updateRemotePlayers === 'function') {
-        window.updateRemotePlayers();
+        window.updateRemotePlayers(delta); // Pass delta time
     }
     
     renderer.render(scene, camera);
@@ -1540,9 +1540,6 @@ function selectUnitInRTSMode() {
     // Perform the raycast
     const intersects = raycaster.intersectObjects(selectableObjects, true);
     
-    // Clear previous selections
-    clearAllSelections();
-    
     // If an object was hit, select it
     if (intersects.length > 0) {
         let selectedMesh = intersects[0].object;
@@ -1556,7 +1553,8 @@ function selectUnitInRTSMode() {
         let selectedEntity = null;
         
         // Check if it's the player
-        if (window.playerEntity && (window.playerEntity.mesh === selectedMesh || 
+        if (window.playerEntity && window.playerEntity.mesh && 
+            (window.playerEntity.mesh === selectedMesh || 
             window.playerEntity.mesh.id === selectedMesh.id)) {
             selectedEntity = window.playerEntity;
         }
@@ -1650,7 +1648,7 @@ function animateSelectionRings(delta) {
         const unitId = ring.userData.unitId;
         let unitMesh = null;
         
-        // Check if it's player's
+        // Check if it's the player
         if (window.playerEntity && window.playerEntity.mesh && 
             (window.playerEntity.id === unitId || window.playerEntity.mesh.id === unitId)) {
             unitMesh = window.playerEntity.mesh;
@@ -1702,7 +1700,7 @@ function moveSelectedUnits() {
     mouse.x = ((cursorX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((cursorY - rect.top) / rect.height) * 2 + 1;
     
-    // Update the raycaster
+    // Update the raycaster with the camera and mouse position
     raycaster.setFromCamera(mouse, window.camera);
     
     // Get all objects we can move onto (usually just the floor)

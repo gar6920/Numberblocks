@@ -1,2 +1,25 @@
 Starting 3D AI Game Server
 Server starting - press Ctrl+C to stop
+
+> 3d-ai-game-platform@1.0.0 start
+> node server/core/server.js
+
+DEPRECATION WARNING: 'pingInterval', 'pingMaxRetries', 'server', and 'verifyClient' Server options will be permanently moved to WebSocketTransport on v0.15
+new Server({
+  transport: new WebSocketTransport({
+    pingInterval: ...,
+    pingMaxRetries: ...,
+    server: ...,
+    verifyClient: ...
+  })
+})
+👉 Documentation: https://docs.colyseus.io/server/transport/
+
+===== 3D AI Game Platform =====
+Server running on http://localhost:3000
+Implementation: default
+3D Game Platform server running on http://localhost:3000
+Active implementation: default
+BaseRoom created! { name: 'Player_147', color: '#CE28E4' }
+Default room implementation initialized
+Client joined: l1T1l6mdf

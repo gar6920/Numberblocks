@@ -183,12 +183,15 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/renderers/CSS2DRenderer.js"></script>
+    <!-- Add FBXLoader and dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.min.js" defer></script> <!-- Dependency for FBXLoader -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/FBXLoader.js" defer></script>
     
     <!-- Colyseus client library -->
-    <script src="https://unpkg.com/colyseus.js@^0.14.13/dist/colyseus.js"></script>
+    <script src="https://unpkg.com/colyseus.js@^0.14.13/dist/colyseus.js" defer></script>
     
     <!-- Main loader script -->
-    <script src="js/core/main.js"></script>
+    <script src="js/core/main.js" defer></script>
     
     <!-- Simple Building Mode Script -->
     <script>
@@ -1117,7 +1120,7 @@
                     if (state.structures && state.structures.size > 0) {
                         console.log("Current structures:");
                         state.structures.forEach((structure, key) => {
-                            console.log(`- ${key}: ${structure.structureType} at (${structure.x}, ${structure.y}, ${structure.z})`);
+                            console.log(`- ${key}: ${structure.structureType} at (${structure.x}, ${structure.z})`);
                         });
                     }
                 });

@@ -13,24 +13,6 @@ class Player extends Entity {
         this.isColliding = false;
         this.controls = null;
         
-        // Create the player mesh if not already created
-        if (!this.mesh && window.createPlayerEntity && window.scene) {
-            this.value = params.value || 1;
-            this.color = params.color || "#FFFF00";
-            
-            // Use createPlayerEntity function if available
-            const playerEntity = window.createPlayerEntity(window.scene, this.value);
-            if (playerEntity) {
-                this.mesh = playerEntity.mesh;
-                this.group = playerEntity.group;
-            }
-            
-            // Apply color if specified
-            if (playerEntity && playerEntity.updateColor && this.color) {
-                playerEntity.updateColor(this.color);
-            }
-        }
-        
         // This will be overridden in implementation-specific player classes
         if (this.isLocalPlayer && this.initLocalPlayer) {
             this.initLocalPlayer();
@@ -60,32 +42,13 @@ class Player extends Entity {
         }
     }
     
-    // Base createMesh method - should be overridden by implementation-specific player classes
-    createMesh() {
-        // Create a simple box player
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshStandardMaterial({ 
-            color: this.color || 0xFFFF00,
-            roughness: 0.7,
-            metalness: 0.2
-        });
-        
-        const mesh = new THREE.Mesh(geometry, material);
-        // Add shadow casting
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        
-        return mesh;
-    }
-
-    // Base methods for updating value and color - to be overridden by implementations
+    // Base methods for updating value 
     updateValue(newValue) {
         super.updateValue(newValue);
     }
 
-    updateColor(newColor) {
-        super.updateColor(newColor);
-    }
+    // Base method for initializing local player controls - may be overridden
+    initLocalPlayer() { }
 }
 
 // Make available globally
@@ -94,4 +57,4 @@ window.Player = Player;
 // Export for use in other modules
 if (typeof module !== 'undefined') {
     module.exports = { Player };
-} 
+}
