@@ -14,7 +14,11 @@ This game platform allows players to navigate a 3D world with customizable chara
 
 ### 2. Player System
 - Customizable player characters based on game implementation
-- Support for various movement modes and camera perspectives
+- Support for various movement modes and camera perspectives, including:
+    - **First-Person:** Immersive view from the player's perspective.
+    - **Third-Person:** Over-the-shoulder view, following the player.
+    - **Free Camera:** Detached camera for spectating or level exploration.
+    - **Real-Time Strategy (RTS) View:** Top-down perspective for strategic overview and unit control.
 - Collision detection and interaction systems
 
 ### 3. Game World
@@ -42,6 +46,7 @@ This game platform allows players to navigate a 3D world with customizable chara
 ### Game Modes
 1. **Free Play**: Explore the environment and interact with other players
 2. **Custom Modes**: Framework supports implementation of various game modes
+3. **Real-Time Strategy (RTS) Mode:** An optional game mode or view perspective allowing for top-down strategic control of player characters or units, including selection and movement commands.
 
 ## Multiplayer Features
 
@@ -87,6 +92,11 @@ This game platform allows players to navigate a 3D world with customizable chara
 - Heads-Up Display (HUD): Shows player information and game status
 - Menus: Main menu, lobby, settings
 - Controls: Configurable keyboard/mouse controls
+- **RTS Controls (in RTS View):**
+    - Camera Panning: WASD keys.
+    - Camera Height: Q/E keys.
+    - Unit Selection: Left-click (single unit) or Click-and-drag (box selection).
+    - Movement Commands: Right-click on the terrain to issue move orders to selected units.
 
 ## Audio
 - Background Music: Theme-appropriate music

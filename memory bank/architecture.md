@@ -14,7 +14,7 @@
 - Processes player inputs (e.g., movement, collisions)
 - Broadcasts state updates to all connected clients
 - Handles entity spawning and lifecycle management
-- Supports dynamic implementation selection via command-line arguments or environment variables
+- Currently loads the 'default' implementation statically (dynamic loading not implemented).
 - Validates and manages structure placement in the building system
 
 **Key Features:**
@@ -22,7 +22,7 @@
 - State synchronization using Colyseus schema
 - Server-authoritative position tracking
 - Dynamic entity spawning system
-- Runtime implementation switching based on user selection
+- Statically loads the 'default' implementation.
 - Server-validated building placement system
 
 ### 2. Client Core Platform (/client/js/core)
@@ -32,10 +32,10 @@ The core platform provides foundational functionality that all game implementati
 - **main.js:**
   - Entry point for client-side code
   - Loads core modules and initializes the game engine
-  - Sets up default player factory
+  - Sets up default player factory and loads the 'default' implementation.
 
 - **controls.js:**
-  - Handles player movement and camera controls
+  - Handles player input (keyboard/mouse), manages different camera control schemes (PointerLock, Orbit, FreeCam, RTS panning/zoom).
   - Supports first-person, third person, and free roam view modes
   - Manages input handling for keyboard and mouse
   - Implements quaternion-based rotation for smooth camera movement
@@ -45,9 +45,9 @@ The core platform provides foundational functionality that all game implementati
   - Sets up player controls and world objects
   - Manages the animation loop for continuous rendering
   - Implements four distinct camera systems:
-    - First-person view: Camera attached to player's head position
-    - Third-person view: Camera follows behind player with intelligent rotation alignment
-    - Free camera mode: Independent camera with WASD/QE movement and mouse look functionality
+    - First-person view: Camera attached to player's head position (using PointerLockControls)
+    - Third-person view: Camera follows behind player with intelligent rotation alignment and orbiting controls.
+    - Free camera mode: Independent camera with WASD/QE movement and mouse look functionality.
     - RTS view mode: Top-down strategic view with:
       - WASD for camera panning
       - Q/E for camera height adjustment
@@ -69,6 +69,7 @@ The core platform provides foundational functionality that all game implementati
   - Sends player actions to the server
   - Processes state updates from the server
   - Handles player joining/leaving events
+  - Manages Colyseus connection, state synchronization, player join/leave, entity creation/updates based on server state. Handles remote player interpolation.
 
 - **Entity.js:**
   - Base class for all game entities
@@ -78,8 +79,8 @@ The core platform provides foundational functionality that all game implementati
 
 - **Player.js:**
   - Extends Entity for player-specific functionality
-  - Manages player state and input handling
-  - Provides interface for implementation-specific player behaviors
+  - Manages player state and input handling (primarily for remote players, local player uses controls.js)
+  - Provides interface for implementation-specific player behaviors (e.g., DefaultPlayer loading FBX model)
 
 - **NPC.js:**
   - Extends Entity for non-player characters
@@ -94,6 +95,7 @@ The core platform provides foundational functionality that all game implementati
 - **collision.js:**
   - Handles collision detection and resolution
   - Provides interfaces for implementation-specific collision behaviors
+  - Basic AABB collision detection system (primarily client-side checks for immediate feedback, server is authoritative).
 
 - **player-ui.js:**
   - Manages common UI elements for player information
@@ -103,20 +105,20 @@ The core platform provides foundational functionality that all game implementati
 Each game implementation extends the core platform with specific gameplay mechanics and visuals.
 
 **Implementation Structure:**
-- Client-side implementation code in /client/js/implementations/
-- Server-side implementation code in /server/implementations/
-- Each implementation folder contains its own set of entities, rooms, and behaviors
+- Client-side implementation code in /client/js/implementations/default/ (currently only 'default' exists)
+- Server-side implementation code in /server/implementations/default/ (currently only 'default' exists)
+- The 'default' implementation uses an FBX model for the player character (`DefaultPlayer.js`) and includes functionality for RTS and Building modes.
 
 **Future Implementations:**
-- Will follow similar patterns, extending the core components
+- Would follow similar patterns, extending the core components
 - Each implementation will be contained in its own directory
 - Will register custom entity factories and behaviors
 
 ### 4. Main Engine (game-engine.js)
 - Initializes the Three.js scene, renderer, and camera
 - Sets up player controls and world objects
-- Loads the appropriate game implementation based on configuration
-- Manages view modes (first-person, third person, free roam)
+- Loads the 'default' game implementation.
+- Manages view modes (first-person, third-person, free roam, RTS view)
 - Updates visual components based on server state
 
 ### 5. Networking Architecture
@@ -206,204 +208,53 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Interactive preview system with structural rotation
 - Grid-based placement with customizable sizing
 
-**File Components:**
-```
-├── server/
-│   ├── core/
-│   │   ├── BaseRoom.js      # Structure placement handling
-│   │   └── schemas/
-│   │       ├── Structure.js # Structure schema definition
-│   │       └── GameState.js # Structure collection
-├── client/
-│   └── index.html           # Building UI and client logic
-```
+## Project Structure (Simplified View)
 
-## File Structure
 ```
 /
-├── package.json            # Node.js dependencies
 ├── client/                 # Client-side code
-│   ├── index.html          # Main HTML file
-│   ├── css/                # Stylesheets
-│   └── js/                 # JavaScript files
-│       ├── core/           # Core platform code
-│       │   ├── main.js     # Entry point and module loader
-│       │   ├── game-engine.js # Main game engine and rendering
-│       │   ├── Entity.js   # Base entity class
-│       │   ├── Player.js   # Base player class
-│       │   ├── NPC.js      # Base NPC class
-│       │   ├── controls.js # Camera and movement controls
-│       │   ├── network-core.js # Networking functionality
-│       │   ├── collision.js    # Collision detection
-│       │   ├── EntityFactory.js # Entity creation factory
-│       │   └── player-ui.js    # UI components
-│       └── implementations/ # Game-specific client implementations
-│           └── default/     # Default implementation
-│               └── DefaultPlayer.js # Simple box player
+│   ├── css/
+│   ├── js/
+│   │   ├── core/           # Core client platform components (game-engine, controls, network, etc.)
+│   │   ├── implementations/
+│   │   │   └── default/    # Default game implementation (e.g., DefaultPlayer.js)
+│   │   └── vendor/         # Third-party libraries (Three.js, etc.)
+│   └── index.html
 ├── server/                 # Server-side code
-│   ├── core/               # Core server components
-│   │   ├── server.js       # Main server entry point
-│   │   ├── index.js        # Core server initialization
-│   │   ├── BaseRoom.js     # Base room implementation
-│   │   └── schemas/        # All schema definitions
-│   │       ├── BaseEntity.js # Base entity schema
-│   │       ├── DefaultRoom.js # Default room implementation
-│   │       ├── GameState.js  # Game state schema
-│   │       ├── Player.js     # Player schema
-│   │       ├── InputState.js # Input state schema
-│   │       └── GameConfigSchema.js # Game configuration schema
-│   └── implementations/    # Server-side implementations
-│       └── default/        # Default implementation
-│           └── index.js    # Default implementation entry point
-├── four_player_setup.html  # HTML for 4-player split-screen setup
-├── open_4player_direct.bat # Batch script to launch 4-player mode
-└── memory bank/            # Documentation and reference materials
+│   ├── core/               # Core server platform components (BaseRoom, schemas, etc.)
+│   │   ├── index.js        # Server setup and Colyseus integration
+│   │   ├── server.js       # Basic server runner script
+│   │   └── schemas/        # Colyseus schemas (GameState, Player, etc.)
+│   └── implementations/
+│       └── default/        # Default server implementation (DefaultRoom.js)
+├── models/                 # 3D models (e.g., FBX files)
+├── node_modules/           # npm dependencies
+├── memory bank/            # Documentation (like this file)
+├── package.json
+└── README.md
 ```
 
-## Communication Flow
-1. **Initialization:**
-   - Server starts and creates a game room
-   - Client connects to server and joins the room
-   - Server assigns a session ID and initializes player state
-   - Client loads the appropriate game implementation
+## Data Flow
 
-2. **Gameplay Loop:**
-   - Client captures user inputs and sends movements that affect player character to server (movements, actions, etc.)
-   - Server validates and processes inputs
-   - Server updates game state
-   - Server broadcasts updated state to all clients
-   - Each client renders the updated game state based on its implementation
+1.  **Connection**: Client connects to Server via WebSocket (Colyseus `network-core.js`).
+2.  **Join Room**: Client joins the 'active' room (`DefaultRoom.js`).
+3.  **State Sync**: Server sends initial `GameState` to Client. Player entities are created client-side (`network-core.js` using `EntityFactory`).
+4.  **Input**: Client sends input state (keys pressed, mouse movement) to Server (`controls.js` -> `network-core.js` -> `BaseRoom.js`).
+5.  **Server Processing**: Server updates player state based on input, performs physics/collision checks (`BaseRoom.js` or `DefaultRoom.js`).
+6.  **State Broadcast**: Server broadcasts delta updates of the `GameState` to all clients.
+7.  **Client Update**: Client receives state updates, interpolates remote player positions, updates local visuals (`network-core.js`).
+8.  **Building**:
+    *   Client enters build mode, sends placement request (`game-engine.js` -> `network-core.js`).
+    *   Server validates, updates `GameState.structures`, broadcasts change (`BaseRoom.js`).
+    *   Clients render the new structure (`network-core.js`).
+9.  **RTS Commands**:
+    *   Client selects units, issues move command (`game-engine.js`/`rts-view.js` -> `network-core.js`).
+    *   Server receives command, updates target position for player entities (`BaseRoom.js`).
+    *   Server state updates cause units to move on all clients.
 
-3. **Interactions:**
-   - Client detects local collisions and sends interaction events to server
-   - Server validates interaction and updates game state accordingly
-   - Server broadcasts the updated state to all clients
-   - Each client renders the interaction effects based on its implementation
+## Notes & Discrepancies from Code Review (Commit abdc192)
 
-## Modular Design Approach
-The platform is designed with modularity in mind, allowing for different game implementations to share core functionality:
-
-1. **Base Classes:**
-   - Core Entity, Player, and NPC classes define common behavior
-   - Implementation-specific classes extend these base classes
-
-2. **Factory Pattern:**
-   - EntityFactory creates appropriate entity instances based on entity type
-   - New implementations register their entity types with the factory
-
-3. **Dependency Injection:**
-   - Core components are injected into implementation-specific classes
-   - Allows implementations to focus on behavior rather than infrastructure
-
-4. **Interface-Based Design:**
-   - Clear interfaces define what implementations must provide
-   - Core platform handles common functionality and lifecycle management
-
-## Key Features
-- **Triple View Modes:** 
-  - First-person view with player model hidden
-  - Third-person view with camera following player and aligning with player's facing direction
-  - Free roam camera with independent movement and rotation, maintaining proper orientation
-- **Camera Controls:**
-  - Mouse wheel zoom for third-person view
-  - Mouse-based rotation with proper Euler angle handling to prevent camera roll
-  - View-specific movement and interaction behaviors
-  - Seamless transitions between camera modes
-- **Multiplayer Support:** Multiple players can join the same game world
-- **Multi-Player Setup:** Supports a 4-player split-screen mode for local multiplayer gameplay
-- **Persistence:** Session reconnection support
-- **Browser Tab Synchronization:** Automatically updates game state when inactive tabs become active
-- **Entity Component System:** Flexible architecture for game entity management
-- **Modular Implementation System:** Support for various game types and mechanics
-- **RTS View Mode:** Top-down strategic view with:
-  - WASD for camera panning
-  - Q/E for camera height adjustment
-  - Click-and-drag box selection
-  - Right-click movement commands
-  - Visual selection rings and move markers
-  - Custom cursor system
-- **Advanced Unit Selection:** Single-click and box selection
-- **Unit Movement Commands:** WASD for panning
-- **Visual Feedback:** Selection rings, move markers
-- **Custom Cursor:** Custom cursor system
-- **Mode-Specific Input Handling:** View-specific input handling and UI elements
-
-## Multi-Player Local Setup
-The platform supports flexible local multiplayer configurations through a dynamic split-screen system:
-
-### Screen Layout Configurations
-1. **Single Player:**
-   - Full screen display
-   - Utilizes entire window space
-
-2. **Two Players:**
-   - Vertical split (top-bottom)
-   - Equal screen space allocation
-   - Clean separation with minimal gap
-
-3. **Three Players:**
-   - Top row split horizontally (left and right)
-   - Bottom row left occupied, right empty
-   - Maintains visual balance with empty fourth quadrant
-
-4. **Four Players:**
-   - 2x2 grid layout
-   - Equal quadrants for all players
-   - Minimal gaps between screens
-
-### Implementation Details
-- **Dynamic Layout System:**
-  - CSS Grid-based layout management
-  - Responsive to window resizing
-  - Automatic adjustment based on player count
-  - Clean separation between viewports
-
-- **Technical Components:**
-  ```html
-  four_player_setup.html   # Handles multi-player screen layouts
-  ```
-  - Dynamically creates required number of game instances
-  - Manages viewport organization
-  - Handles implementation selection display
-  - Maintains proper aspect ratios
-
-- **Launch System:**
-  ```batch
-  start_game.bat          # Unified game launcher
-  ```
-  - Manages server startup
-  - Handles implementation selection
-  - Controls player count configuration
-  - Launches appropriate screen layout
-
-### Key Features
-- **Flexible Configuration:** Supports 1-4 players
-- **Clean Interface:** Minimal gaps between viewports
-- **Implementation Awareness:** Displays current game implementation
-- **Dynamic Resizing:** Maintains proper ratios on window resize
-- **Efficient Resource Usage:** Only creates needed game instances
-- **Seamless Integration:** Works with all game implementations
-
-## Implementation Selection System
-The platform is designed to support multiple game implementations, but currently only has the default implementation:
-
-1. **Selection Process:**
-   - Server loads the default implementation
-   - Implementation identifier is displayed in the game UI
-
-2. **Technical Components:**
-   ```javascript
-   // server/core/index.js
-   const serverConfig = {
-     // Use default implementation
-     activeImplementation: "default",
-     port: process.env.PORT || 3000
-   };
-   ```
-
-3. **Available Implementations:**
-   - **default:** Simple box-based characters and environment
-
-4. **Implementation Registry:**
-   - Central registry in server/core/index.js maps implementation names to their module exports
-   - New implementations can be added by extending this registry
+- The actual default player implementation uses an FBX model (`DefaultPlayer.js`), not simple cubes as described in the Game Design Document.
+- The RTS view mode and Building system are implemented (`game-engine.js`, `BaseRoom.js`, schemas) but might not be fully documented outside this architecture file.
+- Dynamic server-side implementation loading (based on arguments/env vars) is mentioned in previous versions of this doc but is *not* currently implemented in `server/core/index.js`. It statically loads the 'default' implementation.
+- The specific "Numberblocks" game features described in project memories are *not* part of this codebase version; this version contains the core platform and a generic 'default' implementation.
