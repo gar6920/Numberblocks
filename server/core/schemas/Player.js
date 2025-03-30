@@ -32,6 +32,9 @@ class Player extends BaseEntity {
         this.moveTarget = new MoveTarget(); // Target position for RTS movement
         this.isRTSControlled = false; // Whether the player is currently being controlled by RTS commands
         
+        // >>> NEW: Current animation state
+        this.currentAnimation = "Idle.002"; // Default animation
+
         // Implementation-specific properties can be added by subclasses
         this.implementationType = ""; // Type of implementation
         this.implementationData = new ImplementationDataSchema(); // Implementation-specific data
@@ -45,6 +48,7 @@ type("number")(Player.prototype, "velocityY");
 type(InputState)(Player.prototype, "input");
 type(MoveTarget)(Player.prototype, "moveTarget");
 type("boolean")(Player.prototype, "isRTSControlled");
+type("string")(Player.prototype, "currentAnimation");
 type("string")(Player.prototype, "implementationType");
 type(ImplementationDataSchema)(Player.prototype, "implementationData");
 

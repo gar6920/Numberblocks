@@ -329,8 +329,26 @@ class BaseRoom extends Room {
             // Calculate rotation to face movement direction
             player.rotationY = Math.atan2(normalizedDx, normalizedDz);
             
+            // <<< ADDED: Ensure Idle animation during RTS control >>>
+            player.currentAnimation = 'Idle.002';
             return;
         }
+        
+        // <<< ADDED: Check for non-player movement view modes >>>
+        const isCameraMode = input.viewMode === 'freeCamera' || input.viewMode === 'rtsView';
+        if (isCameraMode) {
+            // Force idle animation and skip movement updates in camera modes
+            player.currentAnimation = 'Idle.002';
+            // Apply gravity only, no input-based movement or rotation
+            player.velocityY -= 0.01; // gravity
+            player.y += player.velocityY;
+            if (player.y < 1) {
+                player.y = 1;
+                player.velocityY = 0;
+            }
+            return; // Skip the rest of the input processing
+        }
+        // <<< END ADDED >>>
         
         // Standard input-based movement (from keyboard controls)
         // Increase speed to make movement more noticeable
@@ -419,6 +437,36 @@ class BaseRoom extends Room {
         if (input.keys && input.keys.space && player.y <= 1) {
             player.velocityY = 0.2; // Jump velocity
         }
+
+        // <<< NEW: Update currentAnimation based on input >>>
+        let desiredAnimation = 'Idle.002';
+        const moving = input.keys.w || input.keys.a || input.keys.s || input.keys.d;
+        const jumping = input.keys.space && player.y <= 1; // Only jumping if on ground and space pressed
+        const falling = player.velocityY < -0.1; // Add a check for falling
+        // <<< MODIFIED: Invert running logic >>>
+        const running = !input.keys.shift; // Run by default, walk if shift is pressed
+
+        if (jumping) {
+            desiredAnimation = 'Jumping.006';
+        } else if (falling) {
+            // Optional: Add a falling animation if you have one
+            // desiredAnimation = 'Falling.001'; 
+            desiredAnimation = 'Jumping.006'; // Use jumping as fallback for falling
+        } else if (moving) {
+            if (input.keys.a && !input.keys.d) {
+                desiredAnimation = 'Left_Strafe.006';
+            } else if (input.keys.d && !input.keys.a) {
+                desiredAnimation = 'Right_Strafe.006';
+            } else if (running) {
+                 desiredAnimation = 'Running.006';
+            } else {
+                desiredAnimation = 'Walking.006';
+            }
+        } else {
+            desiredAnimation = 'Idle.002';
+        }
+        player.currentAnimation = desiredAnimation;
+        // <<< END NEW >>>
         
         // Handle mouse movement (rotation) for players not sending direct rotation
         if (input.mouseDelta && input.mouseDelta.x !== 0 && input.mouseDelta.y !== 0) {

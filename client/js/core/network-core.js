@@ -624,7 +624,21 @@ window.updateRemotePlayers = function(deltaTime) { // Added deltaTime parameter
                     remotePlayer.mesh.rotation.y = player.rotationY;
                 }
             }
-            
+
+            // Update animation based on server state
+            if (typeof remotePlayer.playAnimation === 'function' && player.currentAnimation) {
+                // Only play if the animation name is different from the currently active one
+                if (remotePlayer.activeAction?.getClip().name !== player.currentAnimation) {
+                     if (remotePlayer.animations.has(player.currentAnimation)) {
+                        remotePlayer.playAnimation(player.currentAnimation);
+                    } else {
+                        // Optional: Log a warning if the animation is missing
+                        // console.warn(`[updateRemotePlayers] Remote player ${sessionId} missing animation: ${player.currentAnimation}`);
+                        remotePlayer.playAnimation('Idle.002'); // Fallback to idle
+                    }
+                }
+            }
+
             if (remotePlayer.value !== player.value) {
                 try {
                     // Remove old mesh

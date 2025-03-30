@@ -10,17 +10,20 @@
 
 **Responsibilities:**
 - Manages game rooms and player connections/disconnections
-- Maintains the authoritative game state
-- Processes player inputs (e.g., movement, collisions)
+- Maintains the authoritative game state (including position, rotation, and current animation)
+- Processes player inputs (e.g., movement keys, mouse look for rotation)
 - Broadcasts state updates to all connected clients
 - Handles entity spawning and lifecycle management
-- Currently loads the 'default' implementation statically (dynamic loading not implemented).
+- Statically loads the 'default' implementation.
 - Validates and manages structure placement in the building system
+- Handles RTS movement commands by setting target positions
+- Determines appropriate animation state based on player input/status
 
 **Key Features:**
 - Room-based multiplayer with session persistence
 - State synchronization using Colyseus schema
-- Server-authoritative position tracking
+- Server-authoritative position and rotation tracking
+- Server-determined animation state synchronization
 - Dynamic entity spawning system
 - Statically loads the 'default' implementation.
 - Server-validated building placement system
@@ -36,38 +39,32 @@ The core platform provides foundational functionality that all game implementati
 
 - **controls.js:**
   - Handles player input (keyboard/mouse), manages different camera control schemes (PointerLock, Orbit, FreeCam, RTS panning/zoom).
-  - Supports first-person, third person, and free roam view modes
+  - Supports first-person, third person, free roam, and RTS view modes
   - Manages input handling for keyboard and mouse
-  - Implements quaternion-based rotation for smooth camera movement
+  - Sends calculated target yaw (`targetYaw`) to the server for first-person rotation.
+  - Implements quaternion-based rotation for smooth local camera movement.
+  - Run is default movement, Shift activates walking.
 
 - **game-engine.js:**
   - Initializes the Three.js scene, renderer, and camera
   - Sets up player controls and world objects
   - Manages the animation loop for continuous rendering
   - Implements four distinct camera systems:
-    - First-person view: Camera attached to player's head position (using PointerLockControls)
-    - Third-person view: Camera follows behind player with intelligent rotation alignment and orbiting controls.
+    - First-person view: Camera attached to player's head position, local rotation responds immediately to mouse.
+    - Third-person view: Camera follows behind player with orbiting controls.
     - Free camera mode: Independent camera with WASD/QE movement and mouse look functionality.
-    - RTS view mode: Top-down strategic view with:
-      - WASD for camera panning
-      - Q/E for camera height adjustment
-      - Click-and-drag box selection
-      - Right-click movement commands
-      - Visual selection rings and move markers
-      - Custom cursor system
+    - RTS view mode: Top-down strategic view with panning, zoom, selection, and move commands.
   - Handles smooth camera transitions between view modes
-  - Maintains proper camera orientation with Euler angles to prevent unwanted roll
-  - Implements RTS-specific features:
-    - Selection system with single-click and box selection
-    - Unit movement commands
-    - Visual feedback (selection rings, move markers)
-    - Custom cursor management
-    - View-specific input handling
+  - Applies server-authoritative position and rotation to player meshes.
+  - Calls player animation update logic.
+  - Suppresses player movement/animation logic when in Free Camera or RTS modes.
 
 - **network-core.js:**
   - Establishes and maintains WebSocket connection to the server via Colyseus
-  - Sends player actions to the server
+  - Sends player input state (keys, targetYaw, viewMode) to the server
   - Processes state updates from the server
+  - Creates/updates/removes visual representations of remote players based on server state.
+  - Applies server-sent animation state (`currentAnimation`) to remote player models.
   - Handles player joining/leaving events
   - Manages Colyseus connection, state synchronization, player join/leave, entity creation/updates based on server state. Handles remote player interpolation.
 
@@ -126,11 +123,11 @@ Each game implementation extends the core platform with specific gameplay mechan
 
 **Implementation:**
 - Server maintains authoritative game state using Colyseus Schema
-- Client sends player actions to the server at regular intervals
-- Server validates actions, updates game state, and broadcasts to all clients
-- Efficient state synchronization with delta updates
-- Robust player synchronization with proper sessionId handling
-- Smooth interpolation of remote player movements using lerping
+- Player state includes position, velocity, pitch, rotationY, input state, currentAnimation.
+- Client sends input state (including `targetYaw` for rotation) via `updateInput` message.
+- Server calculates movement, rotation, and animation state based on input.
+- Server broadcasts delta updates.
+- Client interpolates remote player positions and applies server rotation/animation state.
 
 **Key Features:**
 - Session persistence with reconnection support
@@ -145,11 +142,9 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Automatic cleanup of stale player instances
 
 **Schema Implementation:**
-- Proper MapSchema collections for players, operators, and static objects
-- Type annotations for all schema properties
-- Structured synchronization patterns for consistent state updates
-- Robust sessionId tracking for player identification
-- Proper player state management with value updates
+- `GameState`: Holds maps for `players`, `entities`, `structures`.
+- `Player`: Extends `BaseEntity`, includes `input` (InputState), `currentAnimation`, `pitch`, `rotationY`, `velocityY` etc.
+- `InputState`: Holds `keys`, `mouseDelta.y`, `targetYaw`, `viewMode`.
 
 **Player Synchronization:**
 - Automatic creation of remote player instances with proper sessionId tracking
@@ -231,6 +226,7 @@ Each game implementation extends the core platform with specific gameplay mechan
 ├── node_modules/           # npm dependencies
 ├── memory bank/            # Documentation (like this file)
 ├── package.json
+├── start_game.bat          # Startup script with dependency check
 └── README.md
 ```
 
@@ -258,3 +254,12 @@ Each game implementation extends the core platform with specific gameplay mechan
 - The RTS view mode and Building system are implemented (`game-engine.js`, `BaseRoom.js`, schemas) but might not be fully documented outside this architecture file.
 - Dynamic server-side implementation loading (based on arguments/env vars) is mentioned in previous versions of this doc but is *not* currently implemented in `server/core/index.js`. It statically loads the 'default' implementation.
 - The specific "Numberblocks" game features described in project memories are *not* part of this codebase version; this version contains the core platform and a generic 'default' implementation.
+
+## Notes & Outstanding Issues (Current State)
+
+- Player model (`human_man.glb`) loading and basic movement animations (Idle, Walk, Run, Jump, Strafe) are functional.
+- Animation state is synchronized between server and clients.
+- Run/Walk inversion (Run default, Shift=Walk) is implemented.
+- View modes (FPS, TPS, FreeCam, RTS) function, and player input/animations are correctly suppressed in non-player-control modes.
+- Startup script (`start_game.bat`) includes dependency checking (`npm ci`).
+- **Outstanding Issue:** Player model rotation is not visually updating correctly based on server state, despite state synchronization appearing functional in logs. First-person mouse look rotates the camera but not the underlying model visually for other clients.

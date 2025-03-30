@@ -1139,6 +1139,15 @@ function animate(currentTime) {
         window.updateRemotePlayers(delta); // Pass delta time
     }
     
+    // <<< ADDED: Update local player animations & mixer >>>
+    if (window.playerEntity && typeof window.playerEntity.update === 'function') {
+        window.playerEntity.update(delta); // Update mixer
+    }
+    if (window.playerEntity && typeof window.playerEntity.updateAnimationBasedOnState === 'function') {
+        window.playerEntity.updateAnimationBasedOnState(); // Update animation based on input
+    }
+    // <<< END ADDED >>>
+    
     renderer.render(scene, camera);
 }
 

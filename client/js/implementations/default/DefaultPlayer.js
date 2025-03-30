@@ -193,6 +193,61 @@ class DefaultPlayer extends Player {
         console.log(`[DefaultPlayer ${this.id}] Started playing animation: ${name}`);
     }
 
+    // NEW METHOD: Update animation based on player state
+    updateAnimationBasedOnState() {
+        if (!this.modelLoaded || this.animations.size === 0) return; // Ensure model and animations are loaded
+
+        // <<< ADDED: Check for non-player movement view modes >>>
+        if (window.viewMode === 'freeCamera' || window.viewMode === 'rtsView') {
+            // If in a camera-only mode, force Idle and don't process inputs
+            if (this.activeAction?.getClip().name !== 'Idle.002') {
+                this.playAnimation('Idle.002');
+            }
+            return; // Exit early
+        }
+        // <<< END ADDED >>>
+
+        let desiredAnimation = 'Idle.002'; // Default
+
+        // Determine desired animation based on inputState
+        // Note: Accessing window.inputState directly here. Consider passing it as a parameter if needed.
+        const input = window.inputState;
+        const moving = input.keys.w || input.keys.a || input.keys.s || input.keys.d;
+        const jumping = input.keys.space; // Assuming space means jump is active
+        // <<< MODIFIED: Invert running logic >>>
+        const running = !input.keys.shift; // Run by default, walk if shift is pressed
+
+        if (jumping) {
+            desiredAnimation = 'Jumping.006';
+        } else if (moving) {
+            if (input.keys.a && !input.keys.d) { // Primarily strafing left
+                desiredAnimation = 'Left_Strafe.006';
+            } else if (input.keys.d && !input.keys.a) { // Primarily strafing right
+                desiredAnimation = 'Right_Strafe.006';
+            } else if (running) { // Forward/Backward Run
+                 desiredAnimation = 'Running.006';
+            } else { // Forward/Backward Walk
+                desiredAnimation = 'Walking.006';
+            }
+        } else {
+            desiredAnimation = 'Idle.002';
+        }
+
+        // Play the desired animation if it's different from the current one
+        if (this.activeAction?.getClip().name !== desiredAnimation) {
+             if (this.animations.has(desiredAnimation)) {
+                this.playAnimation(desiredAnimation);
+            } else {
+                // Fallback if specific animation is missing (e.g., no strafe)
+                if (moving) {
+                    this.playAnimation(running ? 'Running.006' : 'Walking.006');
+                } else {
+                    this.playAnimation('Idle.002');
+                }
+            }
+        }
+    }
+
     // Override update to include mixer update
     update(deltaTime) {
         super.update(deltaTime); // Call base update if needed
