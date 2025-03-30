@@ -1318,10 +1318,11 @@
         
         console.log("Structure listeners setup complete");
     }
-    
-    // Start the listener setup when the page loads
-    window.addEventListener('DOMContentLoaded', function() {
-        setTimeout(setupStructureListeners, 1000);
+
+    // Start the listener setup *after* the avatar/network is ready (NEW METHOD)
+    window.addEventListener('avatarReady', function() {
+        console.log("'avatarReady' event received, setting up structure listeners.");
+        setupStructureListeners(); 
     });
     </script>
     

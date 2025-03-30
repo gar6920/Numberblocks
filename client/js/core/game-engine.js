@@ -2009,20 +2009,25 @@ function clearAllSelections() {
 // Apply visual highlight to a selected unit
 function highlightSelectedUnit(unit) {
     if (!unit || !unit.mesh) return;
-    
-    // Save original material for later restoration
-    if (!unit.rtsMaterial) {
-        unit.rtsMaterial = unit.mesh.material.clone();
+
+    // Ensure the material exists before cloning
+    if (unit.mesh.material) {
+        // Save original material for later restoration only if it hasn't been saved yet
+        if (!unit.rtsMaterial) {
+            unit.rtsMaterial = unit.mesh.material.clone();
+        }
+
+        // Create highlight material only if the original exists
+        const highlightMaterial = unit.mesh.material.clone();
+        highlightMaterial.emissive = new THREE.Color(0x333333);
+        highlightMaterial.emissiveIntensity = 0.5;
+
+        // Apply highlight to indicate selection
+        unit.mesh.material = highlightMaterial;
+    } else {
+        console.warn("[highlightSelectedUnit] Unit mesh has no material:", unit);
     }
-    
-    // Create highlight material
-    const highlightMaterial = unit.mesh.material.clone();
-    highlightMaterial.emissive = new THREE.Color(0x333333);
-    highlightMaterial.emissiveIntensity = 0.5;
-    
-    // Apply highlight to indicate selection
-    unit.mesh.material = highlightMaterial;
-    
+
     // Create a selection ring for this unit
     createSelectionRingForUnit(unit);
 }

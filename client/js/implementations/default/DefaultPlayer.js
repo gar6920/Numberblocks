@@ -115,7 +115,7 @@ class DefaultPlayer extends Player {
 
                 // Attempt to play a default animation (e.g., 'Idle')
                 // Make sure your GLB export has an animation named 'Idle' or adjust this
-                const defaultAnimationName = 'Idle'; // Or 'idle', check the GLB export
+                const defaultAnimationName = 'Idle.002'; // Adjusted based on GLB file
                 console.log(`[DefaultPlayer ${this.id}] Attempting to play default animation: ${defaultAnimationName}`); 
                 if (this.animations.has(defaultAnimationName)) {
                     this.playAnimation(defaultAnimationName);
