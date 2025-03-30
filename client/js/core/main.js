@@ -42,7 +42,7 @@ const gameConfig = {
         // Use custom player name if provided in URL, otherwise generate random name
         playerName: urlParams.playerName || `Player_${Math.floor(Math.random() * 1000)}`,
         playerColor: urlParams.playerColor || 0xCCCCCC, // Default to grey
-        playerModelPath: 'models/fbx/Idle.fbx' // Path to the player model
+        playerModelPath: 'assets/models/human_man.glb', // Path to the player model
     },
     networkSettings: {
         serverUrl: window.location.hostname.includes('localhost') 

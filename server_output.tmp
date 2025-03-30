@@ -20,7 +20,7 @@ Server running on http://localhost:3000
 Implementation: default
 3D Game Platform server running on http://localhost:3000
 Active implementation: default
-BaseRoom created! { name: 'Player_589', color: '#93F58C' }
+BaseRoom created! { name: 'Player_234', color: '#D7F5D5' }
 Default room implementation initialized
-Client joined: 6aqvds4iN
-Client left: 6aqvds4iN
+Client joined: f6S-wvHRh
+RTS move command: Player f6S-wvHRh moving to (19.37403301645882, -3.273604182883325)

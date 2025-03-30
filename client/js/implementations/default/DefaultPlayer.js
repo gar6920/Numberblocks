@@ -1,5 +1,5 @@
 // Default Implementation - Player class
-// Loads a static FBX model
+// Loads a static GLB model
 
 class DefaultPlayer extends Player {
     constructor(params = {}) {
@@ -46,16 +46,16 @@ class DefaultPlayer extends Player {
         return placeholder;
     }
 
-    // Asynchronously load the FBX model and replace the placeholder
+    // Asynchronously load the GLB model and replace the placeholder
     async loadModelAsync() {
         if (this.modelLoaded) return; // Don't load if already loaded
 
         console.log(`[DefaultPlayer ${this.id}] Loading model for player: ${this.id}...`);
         console.log(`[DefaultPlayer ${this.id}] Calling loadModelAsync...`);
 
-        // Ensure FBXLoader is available
-        if (!THREE.FBXLoader) {
-            console.error("[DefaultPlayer] THREE.FBXLoader is not loaded. Make sure it's included in index.html.");
+        // Ensure GLTFLoader is available
+        if (!THREE.GLTFLoader) {
+            console.error("[DefaultPlayer] THREE.GLTFLoader is not loaded. Make sure it's included in index.html.");
             return;
         }
 
@@ -64,7 +64,7 @@ class DefaultPlayer extends Player {
             return;
         }
         
-        const loader = new THREE.FBXLoader();
+        const loader = new THREE.GLTFLoader(); // Use GLTFLoader
         const modelPath = window.gameConfig?.playerSettings?.playerModelPath;
         
         if (!modelPath) {
@@ -75,17 +75,17 @@ class DefaultPlayer extends Player {
         }
 
         try {
-            console.log(`[DefaultPlayer ${this.id}] Attempting to load model via FBXLoader...`);
-            const object = await loader.loadAsync(modelPath);
-            console.log(`[DefaultPlayer ${this.id}] FBXLoader.loadAsync successful. Loaded object:`, object);
+            console.log(`[DefaultPlayer ${this.id}] Attempting to load model via GLTFLoader...`);
+            const gltf = await loader.loadAsync(modelPath);
+            console.log(`[DefaultPlayer ${this.id}] GLTFLoader.loadAsync successful. Loaded GLTF object:`, gltf);
 
-            // Assign the loaded object as the new mesh
-            const newMesh = object;
+            // The main mesh/model is in gltf.scene
+            const newMesh = gltf.scene;
             newMesh.userData.entity = this; // Link entity back
 
             // Configure the loaded model (scale, shadows, etc.)
-            // ** Adjust scale as needed **
-            newMesh.scale.set(0.01, 0.01, 0.01); 
+            // ** Adjust scale as needed ** - GLB might need different scaling
+            newMesh.scale.set(1.0, 1.0, 1.0); // Adjust scale if needed for GLB
             newMesh.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -100,31 +100,36 @@ class DefaultPlayer extends Player {
 
             // --- Animation Setup ---
             console.log(`[DefaultPlayer ${this.id}] --- Entering Animation Setup ---`); 
-            if (newMesh.animations && newMesh.animations.length > 0) {
-                console.log(`[DefaultPlayer ${this.id}] Animation array exists and has length: ${newMesh.animations.length}`); 
-                console.log(`[DefaultPlayer ${this.id}] Found ${newMesh.animations.length} animations. Names:`); 
-                this.mixer = new THREE.AnimationMixer(newMesh);
+            // Animations are directly available in gltf.animations
+            if (gltf.animations && gltf.animations.length > 0) {
+                console.log(`[DefaultPlayer ${this.id}] Animation array exists and has length: ${gltf.animations.length}`); 
+                console.log(`[DefaultPlayer ${this.id}] Found ${gltf.animations.length} animations. Names:`); 
+                this.mixer = new THREE.AnimationMixer(newMesh); // Mixer uses the scene graph root
 
-                newMesh.animations.forEach(clip => {
+                gltf.animations.forEach(clip => {
                     console.log(`  - Name: ${clip.name}`); 
                     const action = this.mixer.clipAction(clip);
                     this.animations.set(clip.name, action); 
                     console.log(`[DefaultPlayer ${this.id}] Storing animation clip: ${clip.name}`);
                 });
 
-                // Attempt to play the first animation as default (assuming it's idle)
-                // TODO: Get idle animation name from config or determine more robustly
-                console.log(`[DefaultPlayer ${this.id}] Attempting to get first clip name...`); 
-                const firstClipName = newMesh.animations[0].name;
-                console.log(`[DefaultPlayer ${this.id}] First clip name: ${firstClipName}`); 
-                if (firstClipName) {
-                    this.playAnimation(firstClipName);
+                // Attempt to play a default animation (e.g., 'Idle')
+                // Make sure your GLB export has an animation named 'Idle' or adjust this
+                const defaultAnimationName = 'Idle'; // Or 'idle', check the GLB export
+                console.log(`[DefaultPlayer ${this.id}] Attempting to play default animation: ${defaultAnimationName}`); 
+                if (this.animations.has(defaultAnimationName)) {
+                    this.playAnimation(defaultAnimationName);
+                } else if (gltf.animations.length > 0) {
+                    // Fallback to the first animation if 'Idle' is not found
+                    const fallbackAnimName = gltf.animations[0].name;
+                    console.warn(`[DefaultPlayer ${this.id}] Default animation '${defaultAnimationName}' not found. Falling back to first animation: '${fallbackAnimName}'`);
+                    this.playAnimation(fallbackAnimName);
                 } else {
-                    console.warn(`[DefaultPlayer ${this.id}] Could not determine default animation name.`);
+                    console.warn(`[DefaultPlayer ${this.id}] Could not determine default animation name and no animations found.`);
                 }
 
             } else {
-                console.log(`[DefaultPlayer ${this.id}] Animation array condition failed. Animations:`, newMesh.animations); 
+                console.log(`[DefaultPlayer ${this.id}] Animation array condition failed. Animations:`, gltf.animations); 
                 console.log(`[DefaultPlayer ${this.id}] No animations found in the loaded model.`);
             }
             console.log(`[DefaultPlayer ${this.id}] --- Exiting Animation Setup ---`); 
@@ -156,7 +161,7 @@ class DefaultPlayer extends Player {
             console.log(`[DefaultPlayer ${this.id}] Model setup complete for player: ${this.id}`);
 
         } catch (error) {
-            console.error(`[DefaultPlayer ${this.id}] Error during FBXLoader.loadAsync or processing:`, error);
+            console.error(`[DefaultPlayer ${this.id}] Error during GLTFLoader.loadAsync or processing:`, error);
             // Ensure placeholder is still added if loading fails, but keep it invisible
             if (this.mesh && this.scene && !this.scene.getObjectById(this.mesh.id)) {
                 this.scene.add(this.mesh); // Add the invisible placeholder
